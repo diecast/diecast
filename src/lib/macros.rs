@@ -1,13 +1,5 @@
 #![macro_escape]
 
-/*
- * TODO: when this is made a library,
- * use absolute path in use statement
- * use ::mycratename::pattern::dsl::*;
- * and in the crate root (lib.rs?)
- * pub use pattern;
- */
-
 /// This macro simply brings the dsl module's contents
 /// within the scope of the expression passed to it.
 ///
