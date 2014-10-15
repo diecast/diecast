@@ -1,0 +1,30 @@
+# http://crates.io/manifest.html
+
+[package]
+name = "diecast"
+version = "0.0.1"
+authors = ["Jorge Israel Peña <jorge.israel.p@gmail.com>"]
+
+[lib]
+name = "diecast"
+path = "src/lib/diecast.rs"
+plugin = true
+
+[[bin]]
+name = "diecast"
+doc = false
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[dependencies.glob]
+# version = "0.5.0" # optional
+git = "https://github.com/rust-lang/glob"
+
+[dependencies.anymap]
+git = "https://github.com/chris-morgan/anymap"
+
+[dependencies.stainless]
+git = "https://github.com/reem/stainless"
+
