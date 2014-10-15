@@ -6,7 +6,8 @@ use anymap::AnyMap;
 ///
 /// This represents a file that can be compiled.
 /// It consists of the `Path` to the file, as well
-/// as an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html), which is a map indexed by a unique type.
+/// as an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html),
+/// which is a map indexed by a unique type.
 pub struct Item {
   /// Path to the file
   pub path: Path,
