@@ -19,12 +19,13 @@
 extern crate glob;
 extern crate anymap;
 extern crate regex;
+extern crate graphviz;
 
 #[phase(plugin)]
 extern crate regex_macros;
 
-#[phase(plugin, link)]
-extern crate stainless;
+// #[phase(plugin, link)]
+// extern crate stainless;
 
 pub use pattern::Pattern;
 pub use generator::Generator;

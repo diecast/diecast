@@ -2,9 +2,8 @@
 name = "diecast"
 version = "0.0.1"
 dependencies = [
- "anymap 0.9.0 (git+https://github.com/chris-morgan/anymap#512885e502985a30a5b64e881f6f3af5a901d301)",
- "glob 0.0.1 (git+https://github.com/rust-lang/glob#469a6bc1a0fc289ab220170e691cffbc01dcf1e6)",
- "stainless 0.0.1 (git+https://github.com/reem/stainless#0fa1d5c2eda00f7454913aaef06a16e552aff5bf)",
+ "anymap 0.9.0 (git+https://github.com/chris-morgan/anymap)",
+ "glob 0.0.1 (git+https://github.com/rust-lang/glob)",
 ]
 
 [[package]]
@@ -16,9 +15,4 @@ source = "git+https://github.com/chris-morgan/anymap#512885e502985a30a5b64e881f6
 name = "glob"
 version = "0.0.1"
 source = "git+https://github.com/rust-lang/glob#469a6bc1a0fc289ab220170e691cffbc01dcf1e6"
-
-[[package]]
-name = "stainless"
-version = "0.0.1"
-source = "git+https://github.com/reem/stainless#0fa1d5c2eda00f7454913aaef06a16e552aff5bf"
 

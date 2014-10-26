@@ -1,6 +1,5 @@
 //! Site generation.
 
-use glob::glob;
 use pattern::Pattern;
 use compile::Compile;
 use item::Item;

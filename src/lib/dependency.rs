@@ -1,213 +1,337 @@
 //! Dependency tracking.
 
-use std::collections::HashMap;
-use std::collections::hashmap::{Vacant, Occupied};
-use std::collections::hashmap::SetItems;
+use std::collections::{HashMap, HashSet, Deque};
 
+use std::collections::hashmap::{Vacant, Occupied, SetItems, Keys};
 use std::collections::ringbuf::RingBuf;
-use std::collections::Deque;
 
-use std::collections::HashSet;
+use graphviz as dot;
+use graphviz::maybe_owned_vec::IntoMaybeOwnedVector;
 
 use std::fmt::{mod, Show};
+use std::hash::{hash, Hash};
 
-use item::Item;
+use std::str;
 
-/// 1. x. build graph
-/// 2. x. detect cycles
-/// 3. x. separate connected components
-/// 4. topological sort
-pub struct Graph<'a> {
-  /// Represents the graph itself
-  edges: HashMap<&'a Item, HashSet<&'a Item>>,
+pub struct Graph<'a, T: 'a> {
+  /// Edges in the graph; implicitly stores nodes.
+  ///
+  /// There's a key for every node in the graph, even if
+  /// if it doesn't have any edges going out.
+  edges: HashMap<&'a T, HashSet<&'a T>>,
 }
 
-impl<'a> Graph<'a> {
-  fn new() -> Graph<'a> {
+impl<'a, T> Graph<'a, T>
+  where T: Eq + Show + Hash {
+  pub fn new() -> Graph<'a, T> {
     Graph {
       edges: HashMap::new(),
     }
   }
 
-  fn add_node(&mut self, item: &'a Item) {
-    if let Vacant(entry) = self.edges.entry(item) {
-      entry.set(HashSet::new());
+  pub fn add_edge(&mut self, a: &'a T, b: &'a T) {
+    match self.edges.entry(a) {
+      Vacant(entry) => {
+        let mut hs = HashSet::new();
+        hs.insert(b);
+        entry.set(hs);
+      },
+      Occupied(mut entry) => { entry.get_mut().insert(b); },
+    };
+
+    // store the other node as well
+    match self.edges.entry(b) {
+      Vacant(entry) => { entry.set(HashSet::new()); },
+      Occupied(_) => (),
     }
   }
 
-  fn add_edge(&mut self, a: &'a Item, b: &'a Item) {
-    if let Some(node) = self.edges.find_mut(&a) {
-      node.insert(b);
-    }
+  pub fn nodes(&self) -> Keys<'a, &T, HashSet<&T>> {
+    self.edges.keys()
   }
 
-  fn get_neighbors(&self, item: &'a Item) -> Option<SetItems<'a, &Item>> {
-    self.edges.find(&item).map(|s| s.iter())
-  }
-
-  // decomposes into graph components
-  // or returns a cycle on error
-  fn decompose(&'a self) -> Result<Vec<Graph<'a>>, Vec<&'a Item>> {
-    // represent the nodes to be considered
-    let mut stack = Vec::new();
-
-    // mark the visited nodes
-    let mut visited = HashSet::new();
-
-    // path to the current node
-    let mut cycle_found = false;
-    let mut path: Vec<&'a Item> = Vec::new();
-
-    // the nodes in the graph
-    let mut nodes = self.edges.keys().map(|k| *k);
-
-    // map of node to component id
-    let mut components = Vec::new();
-    let mut component_id = 0;
-
-    // perform DFS for every node, to ensure
-    // that it is run for every component
-    'detection: while let Some(root) = nodes.next() {
-      // the node may have already been visited if it was part of a
-      // component that was already DFSed
-      if visited.contains(&root) {
-        continue;
+  pub fn neighbors_of(&self, node: &'a T) -> Option<SetItems<'a, &T>> {
+    self.edges.find(&node).and_then(|s| {
+      if !s.is_empty() {
+        Some(s.iter())
+      } else {
+        None
       }
+    })
+  }
 
-      // add the node as the starting point for DFS
-      stack.push(root);
+  // this node plus the ones that depend on this one
+  pub fn resolve_only(&'a self, node: &'a T)
+     -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
+    let dfs = DFS::new(self);
 
-      // create a new component
-      components.push(Vec::new());
+    // topological order from the given node
+    // (recompile its dependencies and then the node)
+    dfs.topological_from(node)
+  }
 
-      // perform DFS
-      while let Some(node) = stack.pop() {
-        // cycle; the current node is already in the path
-        if path.contains(&node) {
-          cycle_found = true;
-          break 'detection;
-        }
+  pub fn resolve_all(&'a self) -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
+    let dfs = DFS::new(self);
+    dfs.topological()
+  }
 
-        // add a breadcrumb to the path
-        path.push(node);
-
-        // set the node's component id
-        components[component_id].push(node);
-
-        // if it hasn't been visited, mark it as visited
-        // then add all neighbors to be visited
-        if !visited.contains(&node) {
-          visited.insert(node);
-
-          // add the neighbors to the DFS stack
-          if let Some(neighbors) = self.get_neighbors(node) {
-            stack.extend(neighbors.map(|n| *n));
-          }
-
-          // backtrack the path
-          else {
-            path.pop();
-          }
-        }
-      }
-
-      // starting on a new component, clear the path
-      path.clear();
-
-      // finished all nodes in this component
-      component_id += 1;
-    }
-
-    // return the path if there was one
-    if cycle_found {
-      Err(path)
-    }
-
-    else {
-      // TODO: Graph::new(self.edges.filter(|c| set.contains(c)))
-      let graphs =
-        components.iter().map(|c| {
-          let mut g = Graph::new();
-
-          for &node in c.iter() {
-            g.add_node(node);
-
-            if let Some(ref mut neighbors) = self.get_neighbors(node) {
-              for &edge in neighbors {
-                g.add_edge(node, edge);
-              }
-            }
-          }
-
-          return g;
-        }).collect::<Vec<Graph>>();
-
-      Ok(graphs)
-    }
+  /// $ dot -Tpng < deps.dot > deps.png && open deps.png
+  pub fn render_dot<W>(&self, output: &mut W)
+    where W: Writer {
+    dot::render(self, output).unwrap()
   }
 }
 
-impl<'a> Show for Graph<'a> {
+impl<'a, T> Show for Graph<'a, T>
+  where T: Eq + Show + Hash {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     try!(self.edges.fmt(f));
     Ok(())
   }
 }
 
+pub type Edge<'a, T> = (&'a T, &'a T);
+
+impl<'a, T> dot::Labeller<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
+  where T: Eq + Hash + Show {
+  fn graph_id(&'a self) -> dot::Id<'a> {
+    dot::Id::new("dependencies")
+  }
+
+  fn node_id(&'a self, n: &&'a T) -> dot::Id<'a> {
+    dot::Id::new(format!("N{}", hash(n)))
+  }
+
+  fn node_label(&'a self, n: &&'a T) -> dot::LabelText<'a> {
+    dot::LabelStr(str::Owned(n.to_string()))
+  }
+}
+
+impl<'a, T> dot::GraphWalk<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
+  where T: Eq + Hash + Show {
+  fn nodes(&self) -> dot::Nodes<'a, &T> {
+    self
+      .nodes()
+      .map(|n| *n)
+      .collect::<Vec<&T>>()
+      .into_maybe_owned()
+  }
+
+  fn edges(&'a self) -> dot::Edges<'a, Edge<T>> {
+    let mut edges = Vec::new();
+
+    for (&source, targets) in self.edges.iter() {
+      for &target in targets.iter() {
+        edges.push((source, target));
+      }
+    }
+
+    edges.into_maybe_owned()
+  }
+
+  fn source(&self, e: &Edge<T>) -> &T {
+    let &(s, _) = e;
+    return s;
+  }
+
+  fn target(&self, e: &Edge<T>) -> &T {
+    let &(_, t) = e;
+    return t;
+  }
+}
+
+struct DFS<'b, T: 'b> {
+  /// The graph to traverse.
+  graph: &'b Graph<'b, T>,
+
+  /// The nodes that have been visited so far
+  visited: HashSet<&'b T>,
+
+  /// Nodes that are on the path to the current node.
+  on_stack: HashSet<&'b T>,
+
+  /// Trace back a path in the case of a cycle.
+  edge_to: HashMap<&'b T, &'b T>,
+
+  /// Nodes in an order which respects dependencies.
+  topological: RingBuf<&'b T>,
+
+  /// Either an ordering or the path of a cycle.
+  result: Result<RingBuf<&'b T>, RingBuf<&'b T>>,
+}
+
+impl<'b, T> DFS<'b, T>
+  where T: Eq + Show + Hash {
+  fn new(graph: &'b Graph<T>) -> DFS<'b, T> {
+    DFS {
+      graph: graph,
+      visited: HashSet::new(),
+      on_stack: HashSet::new(),
+      edge_to: HashMap::new(),
+      topological: RingBuf::new(),
+      result: Ok(RingBuf::new()),
+    }
+  }
+
+  fn dfs(&mut self, node: &'b T) {
+    self.on_stack.insert(node);
+    self.visited.insert(node);
+
+    if let Some(mut neighbors) = self.graph.neighbors_of(node) {
+      for &neighbor in neighbors {
+        if self.result.is_err() {
+          return;
+        }
+
+        else if !self.visited.contains(&neighbor) {
+          self.edge_to.insert(neighbor, node);
+          self.dfs(neighbor);
+        }
+
+        // cycle detected
+        else if self.on_stack.contains(&neighbor) {
+          let mut path: RingBuf<&T> = RingBuf::new();
+          path.push_front(neighbor);
+          path.push_front(node);
+
+          let mut previous = self.edge_to.find(&node);
+
+          while let Some(&found) = previous {
+            path.push_front(found);
+            previous = self.edge_to.find(&found);
+          }
+
+          self.result = Err(path);
+        }
+      }
+    }
+
+    self.on_stack.remove(&node);
+    self.topological.push_front(node);
+  }
+
+  /// recompile the dependencies of `node` and then `node` itself
+  fn topological_from(mut self, node: &'b T)
+     -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
+    self.dfs(node);
+
+    self.result.and(Ok(self.topological))
+  }
+
+  /// the typical resolution algorithm, returns a topological ordering
+  /// of the nodes which honors the dependencies
+  fn topological(mut self) -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
+    for &node in self.graph.nodes() {
+      if !self.visited.contains(&node) {
+        self.dfs(node);
+      }
+    }
+
+    self.result.and(Ok(self.topological))
+  }
+}
+
 #[cfg(test)]
 mod test {
-  pub use item::Item;
-  pub use super::Graph;
+  use item::Item;
+  use super::Graph;
+  use std::io::File;
 
-  describe! dependency_graph {
-    it "should detect cycles" {
-      let a = &Item::new(Path::new("a"));
-      let b = &Item::new(Path::new("b"));
-      let c = &Item::new(Path::new("c"));
+  #[test]
+  fn detect_cycles() {
+    let a = &Item::new(Path::new("a"));
+    let b = &Item::new(Path::new("b"));
+    let c = &Item::new(Path::new("c"));
 
-      let mut graph = Graph::new();
-      graph.add_node(a);
-      graph.add_node(b);
-      graph.add_node(c);
+    let mut graph = Graph::new();
+    graph.add_edge(a, b);
+    graph.add_edge(b, c);
+    graph.add_edge(c, a);
 
-      graph.add_edge(a, b);
-      graph.add_edge(b, c);
-      graph.add_edge(c, a);
+    let cycle = graph.resolve_all();
 
-      let cycle = graph.decompose();
+    println!("{}", cycle);
 
-      println!("{}", cycle);
+    assert!(cycle.is_err());
+  }
 
-      assert!(cycle.is_err());
-    }
+  #[test]
+  fn decompose_graph() {
+    let a = &Item::new(Path::new("a"));
+    let b = &Item::new(Path::new("b"));
+    let c = &Item::new(Path::new("c"));
 
-    it "should decompose the graph" {
-      let a = &Item::new(Path::new("a"));
-      let b = &Item::new(Path::new("b"));
-      let c = &Item::new(Path::new("c"));
+    let d = &Item::new(Path::new("d"));
+    let e = &Item::new(Path::new("e"));
 
-      let d = &Item::new(Path::new("d"));
-      let e = &Item::new(Path::new("e"));
+    let mut graph = Graph::new();
 
-      let mut graph = Graph::new();
-      graph.add_node(a);
-      graph.add_node(b);
-      graph.add_node(c);
-      graph.add_node(d);
-      graph.add_node(e);
+    // a -> b -> c
+    graph.add_edge(a, b);
+    graph.add_edge(b, c);
 
-      // a -> b -> c
-      graph.add_edge(a, b);
-      graph.add_edge(b, c);
+    // d -> e
+    graph.add_edge(d, e);
 
-      // d -> e
-      graph.add_edge(d, e);
+    let decomposed = graph.resolve_all();
 
-      let decomposed = graph.decompose();
+    println!("{}", decomposed);
 
-      println!("{}", decomposed);
+    assert!(decomposed.is_ok());
+  }
 
-      assert!(decomposed.is_ok());
-    }
+  #[test]
+  fn topological_sort() {
+    let item0 = &Item::new(Path::new("0"));
+    let item1 = &Item::new(Path::new("1"));
+    let item2 = &Item::new(Path::new("2"));
+    let item3 = &Item::new(Path::new("3"));
+    let item4 = &Item::new(Path::new("4"));
+    let item5 = &Item::new(Path::new("5"));
+    let item6 = &Item::new(Path::new("6"));
+    let item7 = &Item::new(Path::new("7"));
+    let item8 = &Item::new(Path::new("8"));
+    let item9 = &Item::new(Path::new("9"));
+    let item10 = &Item::new(Path::new("10"));
+    let item11 = &Item::new(Path::new("11"));
+    let item12 = &Item::new(Path::new("12"));
+
+    let mut graph = Graph::new();
+
+    graph.add_edge(item8, item7);
+    graph.add_edge(item7, item6);
+
+    graph.add_edge(item6, item9);
+    graph.add_edge(item9, item10);
+    graph.add_edge(item9, item12);
+
+    graph.add_edge(item9, item11);
+    graph.add_edge(item11, item12);
+
+    graph.add_edge(item6, item4);
+
+    graph.add_edge(item0, item6);
+    graph.add_edge(item0, item1);
+    graph.add_edge(item0, item5);
+
+    graph.add_edge(item5, item4);
+
+    graph.add_edge(item2, item0);
+    graph.add_edge(item2, item3);
+    graph.add_edge(item3, item5);
+
+    graph.render_dot(&mut File::create(&Path::new("deps.dot")));
+
+    let decomposed = graph.resolve_all();
+
+    println!("{}", decomposed);
+
+    assert!(decomposed.is_ok());
+
+    let resolve_single = graph.resolve_only(item6);
+
+    println!("{}", resolve_single);
+
+    assert!(resolve_single.is_ok());
   }
 }

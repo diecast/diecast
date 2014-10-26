@@ -26,6 +26,6 @@ git = "https://github.com/rust-lang/glob"
 [dependencies.anymap]
 git = "https://github.com/chris-morgan/anymap"
 
-[dependencies.stainless]
-git = "https://github.com/reem/stainless"
+# [dependencies.stainless]
+# git = "https://github.com/reem/stainless"
 
