@@ -4,6 +4,7 @@ use glob::glob;
 use pattern::Pattern;
 use compile::Compile;
 use item::Item;
+use dependency::Graph;
 
 /// A generator scans the input path to find
 /// files that match the given pattern. It then

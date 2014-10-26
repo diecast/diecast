@@ -1,6 +1,9 @@
 //! Compilation unit for the `Generator`.
 
+use std::hash::{Hash, Writer};
 use anymap::AnyMap;
+
+use std::fmt::{mod, Show};
 
 /// Compilable file.
 ///
@@ -23,6 +26,32 @@ impl Item {
       path: path,
       data: AnyMap::new()
     }
+  }
+}
+
+impl Show for Item {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    try!(self.path.display().fmt(f));
+    Ok(())
+  }
+}
+
+impl PartialEq for Item {
+  fn eq(&self, other: &Item) -> bool {
+    self.path == other.path
+  }
+
+  fn ne(&self, other: &Item) -> bool {
+    self.path != other.path
+  }
+}
+
+impl Eq for Item {}
+
+impl<S> Hash<S> for Item
+  where S: Writer {
+  fn hash(&self, state: &mut S) {
+    self.path.hash(state);
   }
 }
 
