@@ -63,16 +63,11 @@ impl<'a, T> Graph<'a, T>
   // this node plus the ones that depend on this one
   pub fn resolve_only(&'a self, node: &'a T)
      -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
-    let dfs = DFS::new(self);
-
-    // topological order from the given node
-    // (recompile its dependencies and then the node)
-    dfs.topological_from(node)
+    Topological::new(self).from(node)
   }
 
   pub fn resolve_all(&'a self) -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
-    let dfs = DFS::new(self);
-    dfs.topological()
+    Topological::new(self).all()
   }
 
   /// $ dot -Tpng < deps.dot > deps.png && open deps.png
@@ -140,7 +135,7 @@ impl<'a, T> dot::GraphWalk<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
   }
 }
 
-struct DFS<'b, T: 'b> {
+struct Topological<'b, T: 'b> {
   /// The graph to traverse.
   graph: &'b Graph<'b, T>,
 
@@ -160,10 +155,10 @@ struct DFS<'b, T: 'b> {
   result: Result<RingBuf<&'b T>, RingBuf<&'b T>>,
 }
 
-impl<'b, T> DFS<'b, T>
+impl<'b, T> Topological<'b, T>
   where T: Eq + Show + Hash {
-  fn new(graph: &'b Graph<T>) -> DFS<'b, T> {
-    DFS {
+  fn new(graph: &'b Graph<T>) -> Topological<'b, T> {
+    Topological {
       graph: graph,
       visited: HashSet::new(),
       on_stack: HashSet::new(),
@@ -211,7 +206,7 @@ impl<'b, T> DFS<'b, T>
   }
 
   /// recompile the dependencies of `node` and then `node` itself
-  fn topological_from(mut self, node: &'b T)
+  fn from(mut self, node: &'b T)
      -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
     self.dfs(node);
 
@@ -220,7 +215,7 @@ impl<'b, T> DFS<'b, T>
 
   /// the typical resolution algorithm, returns a topological ordering
   /// of the nodes which honors the dependencies
-  fn topological(mut self) -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
+  fn all(mut self) -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
     for &node in self.graph.nodes() {
       if !self.visited.contains(&node) {
         self.dfs(node);
