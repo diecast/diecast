@@ -13,6 +13,10 @@ use std::hash::{hash, Hash};
 
 use std::str;
 
+/// Represents a dependency graph.
+///
+/// This graph tracks items and is able to produce an ordering
+/// of the items that respects dependency constraints.
 pub struct Graph<'a, T: 'a> {
   /// Edges in the graph; implicitly stores nodes.
   ///
@@ -29,6 +33,7 @@ impl<'a, T> Graph<'a, T>
     }
   }
 
+  /// Register a dependency constraint.
   pub fn add_edge(&mut self, a: &'a T, b: &'a T) {
     match self.edges.entry(a) {
       Vacant(entry) => {
@@ -46,10 +51,12 @@ impl<'a, T> Graph<'a, T>
     }
   }
 
+  /// The nodes in the graph.
   pub fn nodes(&self) -> Keys<'a, &T, HashSet<&T>> {
     self.edges.keys()
   }
 
+  /// The neighbors of a given node.
   pub fn neighbors_of(&self, node: &'a T) -> Option<SetItems<'a, &T>> {
     self.edges.find(&node).and_then(|s| {
       if !s.is_empty() {
@@ -60,17 +67,25 @@ impl<'a, T> Graph<'a, T>
     })
   }
 
-  // this node plus the ones that depend on this one
+  /// Topological ordering starting at the provided node.
+  ///
+  /// This essentially means: the given node plus all nodes
+  /// that depend on it.
   pub fn resolve_only(&'a self, node: &'a T)
      -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
     Topological::new(self).from(node)
   }
 
-  pub fn resolve_all(&'a self) -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
+  /// Topological ordering of the entire graph.
+  pub fn resolve(&'a self) -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
     Topological::new(self).all()
   }
 
+  /// Render the dependency graph with graphviz. Visualize it with:
+  ///
+  /// ```bash
   /// $ dot -Tpng < deps.dot > deps.png && open deps.png
+  /// ```
   pub fn render_dot<W>(&self, output: &mut W)
     where W: Writer {
     dot::render(self, output).unwrap()
@@ -85,6 +100,7 @@ impl<'a, T> Show for Graph<'a, T>
   }
 }
 
+/// A graph edge for graphviz
 pub type Edge<'a, T> = (&'a T, &'a T);
 
 impl<'a, T> dot::Labeller<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
@@ -135,6 +151,11 @@ impl<'a, T> dot::GraphWalk<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
   }
 }
 
+/// Encapsulates a topological sorting algorithm.
+///
+/// Performs a topological sorting of the provided graph
+/// via a depth-first search. This ordering is such that
+/// every node comes before the node(s) that depends on it.
 struct Topological<'b, T: 'b> {
   /// The graph to traverse.
   graph: &'b Graph<'b, T>,
@@ -157,6 +178,7 @@ struct Topological<'b, T: 'b> {
 
 impl<'b, T> Topological<'b, T>
   where T: Eq + Show + Hash {
+  /// Construct the initial algorithm state.
   fn new(graph: &'b Graph<T>) -> Topological<'b, T> {
     Topological {
       graph: graph,
@@ -168,6 +190,10 @@ impl<'b, T> Topological<'b, T>
     }
   }
 
+  /// Generate the topological ordering from a given node.
+  ///
+  /// This uses a recursive depth-first search, as it facilitates
+  /// keeping track of a cycle, if any is present.
   fn dfs(&mut self, node: &'b T) {
     self.on_stack.insert(node);
     self.visited.insert(node);
@@ -178,12 +204,16 @@ impl<'b, T> Topological<'b, T>
           return;
         }
 
+        // node isn't visited yet, so visit it
+        // make sure to add a breadcrumb to trace our path
+        // backwards in case there's a cycle
         else if !self.visited.contains(&neighbor) {
           self.edge_to.insert(neighbor, node);
           self.dfs(neighbor);
         }
 
         // cycle detected
+        // trace back breadcrumbs to reconstruct the cycle's path
         else if self.on_stack.contains(&neighbor) {
           let mut path = RingBuf::new();
           path.push_front(neighbor);
@@ -206,7 +236,7 @@ impl<'b, T> Topological<'b, T>
   }
 
   /// recompile the dependencies of `node` and then `node` itself
-  fn from(mut self, node: &'b T)
+  pub fn from(mut self, node: &'b T)
      -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
     self.dfs(node);
 
@@ -215,7 +245,7 @@ impl<'b, T> Topological<'b, T>
 
   /// the typical resolution algorithm, returns a topological ordering
   /// of the nodes which honors the dependencies
-  fn all(mut self) -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
+  pub fn all(mut self) -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
     for &node in self.graph.nodes() {
       if !self.visited.contains(&node) {
         self.dfs(node);
@@ -243,7 +273,7 @@ mod test {
     graph.add_edge(b, c);
     graph.add_edge(c, a);
 
-    let cycle = graph.resolve_all();
+    let cycle = graph.resolve();
 
     println!("{}", cycle);
 
@@ -268,7 +298,7 @@ mod test {
     // d -> e
     graph.add_edge(d, e);
 
-    let decomposed = graph.resolve_all();
+    let decomposed = graph.resolve();
 
     println!("{}", decomposed);
 
@@ -317,7 +347,7 @@ mod test {
 
     graph.render_dot(&mut File::create(&Path::new("deps.dot")));
 
-    let decomposed = graph.resolve_all();
+    let decomposed = graph.resolve();
 
     println!("{}", decomposed);
 
