@@ -190,7 +190,7 @@ impl<'b, T> DFS<'b, T>
 
         // cycle detected
         else if self.on_stack.contains(&neighbor) {
-          let mut path: RingBuf<&T> = RingBuf::new();
+          let mut path = RingBuf::new();
           path.push_front(neighbor);
           path.push_front(node);
 
