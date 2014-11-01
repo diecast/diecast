@@ -410,9 +410,9 @@ mod test {
     graph.add_edge(item2, item3);
     graph.add_edge(item3, item5);
 
-    graph.render_dot(&mut File::create(&Path::new("deps.dot")));
-
     let dot = Path::new("deps.dot");
+
+    graph.render_dot(&mut File::create(&dot));
 
     assert!(dot.exists());
 
