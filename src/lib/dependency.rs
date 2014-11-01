@@ -279,29 +279,6 @@ mod test {
   }
 
   #[test]
-  fn decompose_graph() {
-    let a = &Item::new(Path::new("a"));
-    let b = &Item::new(Path::new("b"));
-    let c = &Item::new(Path::new("c"));
-
-    let d = &Item::new(Path::new("d"));
-    let e = &Item::new(Path::new("e"));
-
-    let mut graph = Graph::new();
-
-    // a -> b -> c
-    graph.add_edge(a, b);
-    graph.add_edge(b, c);
-
-    // d -> e
-    graph.add_edge(d, e);
-
-    let decomposed = graph.resolve();
-
-    assert!(decomposed.is_ok());
-  }
-
-  #[test]
   fn resolve_all() {
     let item0 = &Item::new(Path::new("0"));
     let item1 = &Item::new(Path::new("1"));
