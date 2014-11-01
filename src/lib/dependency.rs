@@ -275,8 +275,6 @@ mod test {
 
     let cycle = graph.resolve();
 
-    println!("{}", cycle);
-
     assert!(cycle.is_err());
   }
 
@@ -300,13 +298,103 @@ mod test {
 
     let decomposed = graph.resolve();
 
-    println!("{}", decomposed);
+    assert!(decomposed.is_ok());
+  }
+
+  #[test]
+  fn resolve_all() {
+    let item0 = &Item::new(Path::new("0"));
+    let item1 = &Item::new(Path::new("1"));
+    let item2 = &Item::new(Path::new("2"));
+    let item3 = &Item::new(Path::new("3"));
+    let item4 = &Item::new(Path::new("4"));
+    let item5 = &Item::new(Path::new("5"));
+    let item6 = &Item::new(Path::new("6"));
+    let item7 = &Item::new(Path::new("7"));
+    let item8 = &Item::new(Path::new("8"));
+    let item9 = &Item::new(Path::new("9"));
+    let item10 = &Item::new(Path::new("10"));
+    let item11 = &Item::new(Path::new("11"));
+    let item12 = &Item::new(Path::new("12"));
+
+    let mut graph = Graph::new();
+
+    graph.add_edge(item8, item7);
+    graph.add_edge(item7, item6);
+
+    graph.add_edge(item6, item9);
+    graph.add_edge(item9, item10);
+    graph.add_edge(item9, item12);
+
+    graph.add_edge(item9, item11);
+    graph.add_edge(item11, item12);
+
+    graph.add_edge(item6, item4);
+
+    graph.add_edge(item0, item6);
+    graph.add_edge(item0, item1);
+    graph.add_edge(item0, item5);
+
+    graph.add_edge(item5, item4);
+
+    graph.add_edge(item2, item0);
+    graph.add_edge(item2, item3);
+    graph.add_edge(item3, item5);
+
+    let decomposed = graph.resolve();
 
     assert!(decomposed.is_ok());
   }
 
   #[test]
-  fn topological_sort() {
+  fn resolve_only() {
+    let item0 = &Item::new(Path::new("0"));
+    let item1 = &Item::new(Path::new("1"));
+    let item2 = &Item::new(Path::new("2"));
+    let item3 = &Item::new(Path::new("3"));
+    let item4 = &Item::new(Path::new("4"));
+    let item5 = &Item::new(Path::new("5"));
+    let item6 = &Item::new(Path::new("6"));
+    let item7 = &Item::new(Path::new("7"));
+    let item8 = &Item::new(Path::new("8"));
+    let item9 = &Item::new(Path::new("9"));
+    let item10 = &Item::new(Path::new("10"));
+    let item11 = &Item::new(Path::new("11"));
+    let item12 = &Item::new(Path::new("12"));
+
+    let mut graph = Graph::new();
+
+    graph.add_edge(item8, item7);
+    graph.add_edge(item7, item6);
+
+    graph.add_edge(item6, item9);
+    graph.add_edge(item9, item10);
+    graph.add_edge(item9, item12);
+
+    graph.add_edge(item9, item11);
+    graph.add_edge(item11, item12);
+
+    graph.add_edge(item6, item4);
+
+    graph.add_edge(item0, item6);
+    graph.add_edge(item0, item1);
+    graph.add_edge(item0, item5);
+
+    graph.add_edge(item5, item4);
+
+    graph.add_edge(item2, item0);
+    graph.add_edge(item2, item3);
+    graph.add_edge(item3, item5);
+
+    let resolve_single = graph.resolve_only(item6);
+
+    assert!(resolve_single.is_ok());
+  }
+
+  #[test]
+  fn render_dot() {
+    use std::io::fs::{PathExtensions, unlink};
+
     let item0 = &Item::new(Path::new("0"));
     let item1 = &Item::new(Path::new("1"));
     let item2 = &Item::new(Path::new("2"));
@@ -347,16 +435,10 @@ mod test {
 
     graph.render_dot(&mut File::create(&Path::new("deps.dot")));
 
-    let decomposed = graph.resolve();
+    let dot = Path::new("deps.dot");
 
-    println!("{}", decomposed);
+    assert!(dot.exists());
 
-    assert!(decomposed.is_ok());
-
-    let resolve_single = graph.resolve_only(item6);
-
-    println!("{}", resolve_single);
-
-    assert!(resolve_single.is_ok());
+    let _ = unlink(&dot);
   }
 }
