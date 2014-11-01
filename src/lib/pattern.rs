@@ -128,82 +128,107 @@ pub mod dsl {
   }
 }
 
-// #[cfg(test)]
-// mod test {
-//   pub use super::{Pattern, Everything};
+#[cfg(test)]
+mod test {
+  use super::{Pattern, Everything};
 
-//   pub fn matches<T>(pattern: T, p: &Path) -> bool
-//     where T: Pattern {
-//     pattern.matches(p)
-//   }
+  fn matches<T>(pattern: T, p: &Path) -> bool
+    where T: Pattern {
+    pattern.matches(p)
+  }
 
-//   describe! dsl {
-//     before_each {
-//       let posts = "posts/**.md";
+  #[test]
+  fn match_everything() {
+    let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
 
-//       let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
-//       let this_week_in_rust = Path::new("posts/short/this-week-in-rust.md");
-//       let about_page = Path::new("pages/about.md");
-//     }
+    assert!(pattern!(Everything).matches(&intro_to_rust));
+  }
 
-//     it "should match everything" {
-//       assert!(pattern!(Everything).matches(&intro_to_rust));
-//     }
+  #[test]
+  fn match_globs() {
+    let posts = "posts/**.md";
+    let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
+    let about_page = Path::new("pages/about.md");
 
-//     it "should match globs" {
-//       assert!(matches(posts.as_slice(), &intro_to_rust));
-//       assert!(!matches(posts.as_slice(), &about_page));
-//     }
+    assert!(matches(posts.as_slice(), &intro_to_rust));
+    assert!(!matches(posts.as_slice(), &about_page));
+  }
 
-//     it "should match regular expressions" {
-//       assert!(regex!(r"introduction").matches(&intro_to_rust));
-//       assert!(!regex!(r"introduction").matches(&this_week_in_rust));
-//     }
+  #[test]
+  fn match_regex() {
+    let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
+    let this_week_in_rust = Path::new("posts/short/this-week-in-rust.md");
 
-//     it "should match conjunctions" {
-//       assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
-//               .matches(&this_week_in_rust));
-//       assert!(and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
-//               .matches(&intro_to_rust));
-//       assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
-//               .matches(&about_page));
-//     }
+    assert!(regex!(r"introduction").matches(&intro_to_rust));
+    assert!(!regex!(r"introduction").matches(&this_week_in_rust));
+  }
 
-//     it "should match disjunctions" {
-//       assert!(or!("pages/about.md", "second.md").matches(&about_page));
-//       assert!(!or!("pages/about.md", "second.md").matches(&intro_to_rust));
-//     }
+  #[test]
+  fn match_conjunctions() {
+    let posts = "posts/**.md";
+    let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
+    let this_week_in_rust = Path::new("posts/short/this-week-in-rust.md");
+    let about_page = Path::new("pages/about.md");
 
-//     it "should not match negations" {
-//       assert!(!not!("pages/about.md", "pages/lately.md").matches(&about_page));
-//       assert!(not!("pages/about.md", "pages/lately.md").matches(&intro_to_rust));
-//     }
+    assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+            .matches(&this_week_in_rust));
+    assert!(and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+            .matches(&intro_to_rust));
+    assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+            .matches(&about_page));
+  }
 
-//     it "should match single files" {
-//       assert!("pages/about.md".matches(&about_page));
-//     }
+  #[test]
+  fn match_disjunctions() {
+    let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
+    let about_page = Path::new("pages/about.md");
 
-//     it "should work with the macros" {
-//       assert!(or!("pages/about.md", "pages/lately.md").matches(&about_page));
-//       assert!(and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
-//               .matches(&intro_to_rust));
-//       assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
-//               .matches(&this_week_in_rust));
+    assert!(or!("pages/about.md", "second.md").matches(&about_page));
+    assert!(!or!("pages/about.md", "second.md").matches(&intro_to_rust));
+  }
 
-//       assert!(or!("pages/about.md",
-//                   and!("posts/**",
-//                        not!("posts/short/this-week-in-rust.md")))
-//              .matches(&intro_to_rust));
+  #[test]
+  fn not_match_negations() {
+    let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
+    let about_page = Path::new("pages/about.md");
 
-//       assert!(or!("pages/about.md",
-//                   and!("posts/**",
-//                        not!("posts/short/this-week-in-rust.md")))
-//              .matches(&about_page));
+    assert!(!not!("pages/about.md", "pages/lately.md").matches(&about_page));
+    assert!(not!("pages/about.md", "pages/lately.md").matches(&intro_to_rust));
+  }
 
-//       assert!(!or!("pages/about.md",
-//                    and!("posts/**",
-//                         not!("posts/short/this-week-in-rust.md")))
-//              .matches(&this_week_in_rust));
-//     }
-//   }
-// }
+  #[test]
+  fn match_single_files() {
+    let about_page = Path::new("pages/about.md");
+
+    assert!("pages/about.md".matches(&about_page));
+  }
+
+  #[test]
+  fn use_macros() {
+    let posts = "posts/**.md";
+    let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
+    let this_week_in_rust = Path::new("posts/short/this-week-in-rust.md");
+    let about_page = Path::new("pages/about.md");
+
+    assert!(or!("pages/about.md", "pages/lately.md").matches(&about_page));
+    assert!(and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+            .matches(&intro_to_rust));
+    assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+            .matches(&this_week_in_rust));
+
+    assert!(or!("pages/about.md",
+                and!("posts/**",
+                     not!("posts/short/this-week-in-rust.md")))
+           .matches(&intro_to_rust));
+
+    assert!(or!("pages/about.md",
+                and!("posts/**",
+                     not!("posts/short/this-week-in-rust.md")))
+           .matches(&about_page));
+
+    assert!(!or!("pages/about.md",
+                 and!("posts/**",
+                      not!("posts/short/this-week-in-rust.md")))
+           .matches(&this_week_in_rust));
+  }
+}
