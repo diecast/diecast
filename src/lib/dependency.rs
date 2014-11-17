@@ -1,9 +1,9 @@
 //! Dependency tracking.
 
-use std::collections::{HashMap, HashSet, Deque};
+use std::collections::{HashMap, HashSet, RingBuf};
 
-use std::collections::hashmap::{Vacant, Occupied, SetItems, Keys};
-use std::collections::ringbuf::RingBuf;
+use std::collections::hash_map::{Vacant, Occupied, Keys};
+use std::collections::hash_set::SetItems;
 
 use graphviz as dot;
 use graphviz::maybe_owned_vec::IntoMaybeOwnedVector;
@@ -12,6 +12,54 @@ use std::fmt::{mod, Show};
 use std::hash::{hash, Hash};
 
 use std::str;
+
+/*
+ * there should be support for dynamic dependencies.
+ * dependencies shouldn't have to be registered beforehand.
+ * instead, as items are retrieved they should be added to the
+ * dependency graph, which should then be checked for consistency
+ * to ensure that it doesn't conflict with the existing constraints:
+ *
+ *   * doesn't create a cycle
+ *     assuming it didn't already have cycles, can this be optimized
+ *     by running DFS from the new node? this would avoid having to
+ *     re-run DFS on the entire graph
+ *   * doesn't create a new dependency for something that was already built
+ *     e.g. a new posts/post-blah.md when index.html, depending on
+ *          posts/post-*.md, has already been built
+ *     this means creating an edge to a node whose reference count is
+ *     already 0
+ *
+ * dependent: has dependencies
+ * dependencies: nodes required in order to build a dependent
+ *
+ * graph maintains two queues:
+ *
+ *   * `ready` queue of nodes that are ready to process
+ *   * `waiting` queue of nodes whose dependencies aren't satisfied
+ *     perhaps this should be a priority queue instead ordered
+ *     by reference count, but then it doesn't handle updates of
+ *     reference count easily
+ *
+ * these things need to occur given `A depends on B`:
+ *
+ *   * worker deques and processes `B` from `ready` queue
+ *   * notify the graph that `B` finished, which decrements
+ *     the reference count of `A` (and all neighbors of `B`)
+ *   * `A`'s reference count reaches 0
+ *   * graph moves the node from the `waiting` queue to the `ready` queue
+ *   * repeat
+ *
+ * problems:
+ *
+ *   * how can the graph retain references to the nodes while
+ *     also handing them off to workers to mutate? not possible afaik
+ *
+ *     maybe the graph should consist of Bindings and not Items?
+ *     the graph would own Rc<Binding> and edges would be
+ *     HashMap<Rc<Binding>, Weak<Binding>>.
+ *
+ */
 
 /// Represents a dependency graph.
 ///
@@ -33,6 +81,12 @@ impl<'a, T> Graph<'a, T>
     }
   }
 
+  pub fn add_node(&mut self, node: &'a T) {
+    if let Vacant(entry) = self.edges.entry(node) {
+      entry.set(HashSet::new());
+    }
+  }
+
   /// Register a dependency constraint.
   pub fn add_edge(&mut self, a: &'a T, b: &'a T) {
     match self.edges.entry(a) {
@@ -44,11 +98,7 @@ impl<'a, T> Graph<'a, T>
       Occupied(mut entry) => { entry.get_mut().insert(b); },
     };
 
-    // store the other node as well
-    match self.edges.entry(b) {
-      Vacant(entry) => { entry.set(HashSet::new()); },
-      Occupied(_) => (),
-    }
+    self.add_node(b);
   }
 
   /// The nodes in the graph.
@@ -86,7 +136,7 @@ impl<'a, T> Graph<'a, T>
   /// ```bash
   /// $ dot -Tpng < deps.dot > deps.png && open deps.png
   /// ```
-  pub fn render_dot<W>(&self, output: &mut W)
+  pub fn render<W>(&self, output: &mut W)
     where W: Writer {
     dot::render(self, output).unwrap()
   }
@@ -369,7 +419,7 @@ mod test {
   }
 
   #[test]
-  fn render_dot() {
+  fn render() {
     use std::io::fs::{PathExtensions, unlink};
 
     let item0 = &Item::new(Path::new("0"));
@@ -412,10 +462,10 @@ mod test {
 
     let dot = Path::new("deps.dot");
 
-    graph.render_dot(&mut File::create(&dot));
+    graph.render(&mut File::create(&dot));
 
     assert!(dot.exists());
 
-    let _ = unlink(&dot);
+    unlink(&dot).ok().expect("couldn't remove dot file");
   }
 }

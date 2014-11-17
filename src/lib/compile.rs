@@ -1,5 +1,8 @@
 //! Compiler behavior.
 
+// use std::collections::ringbuf::RingBuf;
+// use std::collections::Deque;
+
 use item::{Item, Body};
 use std::io::File;
 
@@ -24,7 +27,9 @@ impl Compile for Box<Compile + Send + Sync> {
 /// Maintains a list of compilers and executes them
 /// in the order they were added.
 pub struct CompilerChain {
-  compilers: Vec<Box<Compile + Send + Sync>>
+  compilers: Vec<Box<Compile + Send + Sync>>,
+  // maintain current progress as an iterator
+  // pass: Items<'a, Box<Compile + Send + Sync>>,
 }
 
 impl CompilerChain {

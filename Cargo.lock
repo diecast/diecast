@@ -9,7 +9,7 @@ dependencies = [
 [[package]]
 name = "anymap"
 version = "0.9.0"
-source = "git+https://github.com/chris-morgan/anymap#512885e502985a30a5b64e881f6f3af5a901d301"
+source = "git+https://github.com/chris-morgan/anymap#c29e78c5634f9e6741287e9cfb281a73d4eddcc6"
 
 [[package]]
 name = "glob"

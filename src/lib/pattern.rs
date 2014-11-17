@@ -90,6 +90,10 @@ impl Pattern for regex::Regex {
   }
 }
 
+// TODO: should this be for glob::Pattern?
+//       would avoid recreating the Pattern
+//       for each match check
+
 /// Treat string slices as globs.
 impl<'a> Pattern for &'a str {
   fn matches(&self, p: &Path) -> bool {
