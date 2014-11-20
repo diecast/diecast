@@ -12,19 +12,10 @@ use std::fmt::{mod, Show};
 /// as an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html),
 /// which is a map indexed by a unique type.
 pub struct Item {
-  /// The backing file of the Item.
-  ///
-  /// It's optional in case there isn't one, such as
-  /// when creating a file.
-  pub from: Option<Path>,
-
-  /// The Path of the target file.
-  ///
-  /// It's optional in case one isn't being created.
-  pub to: Option<Path>,
+  relation: Relation,
 
   /// The Item's body which will fill the target file.
-  pub body: Option<String>,
+  body: Option<String>,
 
   /// Any additional data (post metadata)
   ///
@@ -33,23 +24,43 @@ pub struct Item {
   /// * Comments
   /// * TOC
   /// * Tags
-  pub data: AnyMap,
+  data: AnyMap,
 }
 
 // TODO: ensure is_file()
 impl Item {
-  pub fn new(from: Option<Path>, to: Option<Path>) -> Item {
+  pub fn new(relation: Relation) -> Item {
     Item {
-      from: from,
-      to: to,
+      relation: relation,
       data: AnyMap::new()
+    }
+  }
+
+  pub fn relation(&self) -> &Relation {
+    &self.relation
+  }
+
+  pub fn route_to(mut self, to: Path) {
+    if let Reading(from) = self.relation {
+      self.relation = Mapping(from, to);
     }
   }
 }
 
+pub enum Relation {
+  Reading(Path),
+  Writing(Path),
+  Mapping(Path, Path),
+}
+
 impl Show for Item {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{} → {}", self.from.display(), self.to.display());
+    match self.relation {
+      Mapping(from, to) => write!(f, "{} → {}", from.display(), to.display()),
+      Reading(from)     => write!(f, "reading {}", from.display()),
+      Writing(to)       => write!(f, "writing {}", to.display()),
+    }
+
     Ok(())
   }
 }
