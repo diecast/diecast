@@ -108,11 +108,11 @@ pub type Edge<'a, T> = (&'a T, &'a T);
 impl<'a, T> dot::Labeller<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
   where T: Eq + Hash + Show {
   fn graph_id(&'a self) -> dot::Id<'a> {
-    dot::Id::new("dependencies")
+    dot::Id::new("dependencies").unwrap()
   }
 
   fn node_id(&'a self, n: &&'a T) -> dot::Id<'a> {
-    dot::Id::new(format!("N{}", hash(n)))
+    dot::Id::new(format!("N{}", hash(n))).unwrap()
   }
 
   fn node_label(&'a self, n: &&'a T) -> dot::LabelText<'a> {
