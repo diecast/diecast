@@ -62,7 +62,7 @@ impl Compile for CompilerChain {
 
 /// Compiler that reads the `Item`'s body.
 ///
-/// Reads the `Item` into its data using the `Body` type.
+/// Reads the file at the `Item`'s path into its data using the `Body` type.
 pub struct ReadBody;
 
 impl Compile for ReadBody {
@@ -73,6 +73,22 @@ impl Compile for ReadBody {
   }
 }
 
+/// Compiler that reads the `Item`'s body.
+///
+/// Writes the `Item`'s body to the file at its path.
+pub struct WriteBody;
+
+impl Compile for WriteBody {
+  fn compile(&self, item: &mut Item) {
+    if let Some(&Body(ref body)) = item.data.get::<Body>() {
+      let mut file =
+        File::create(&item.path)
+          .write_str(body.as_slice())
+          .unwrap();
+    }
+  }
+}
+
 /// Compiler that prints the `Item`'s body.
 ///
 /// Prints the `Body` value in the given `Item`, if found.
@@ -80,7 +96,7 @@ pub struct PrintBody;
 
 impl Compile for PrintBody {
   fn compile(&self, item: &mut Item) {
-    match item.data.find::<Body>() {
+    match item.data.get::<Body>() {
       Some(&Body(ref body)) => {
         println!("printing body");
         println!("{}", body);
