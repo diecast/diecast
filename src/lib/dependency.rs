@@ -159,11 +159,11 @@ impl<'a, T> Show for Graph<'a, T>
 //   }
 
 //   fn node_id(&self, n: i32) -> dot::Id<'a> {
-//     dot::Id::new(format!("N{}", hash(n)))
+//     dot::Id::new(format!("N{}", hash(n))).unwrap()
 //   }
 
 //   fn node_label(&self, n: i32) -> dot::LabelText<'a> {
-//     dot::LabelStr(str::Owned(n.to_string()))
+//     dot::LabelStr(str::Owned(n.to_string())).unwrap()
 //   }
 // }
 
