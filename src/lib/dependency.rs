@@ -13,54 +13,6 @@ use std::hash::{hash, Hash};
 
 use std::str;
 
-/*
- * there should be support for dynamic dependencies.
- * dependencies shouldn't have to be registered beforehand.
- * instead, as items are retrieved they should be added to the
- * dependency graph, which should then be checked for consistency
- * to ensure that it doesn't conflict with the existing constraints:
- *
- *   * doesn't create a cycle
- *     assuming it didn't already have cycles, can this be optimized
- *     by running DFS from the new node? this would avoid having to
- *     re-run DFS on the entire graph
- *   * doesn't create a new dependency for something that was already built
- *     e.g. a new posts/post-blah.md when index.html, depending on
- *          posts/post-*.md, has already been built
- *     this means creating an edge to a node whose reference count is
- *     already 0
- *
- * dependent: has dependencies
- * dependencies: nodes required in order to build a dependent
- *
- * graph maintains two queues:
- *
- *   * `ready` queue of nodes that are ready to process
- *   * `waiting` queue of nodes whose dependencies aren't satisfied
- *     perhaps this should be a priority queue instead ordered
- *     by reference count, but then it doesn't handle updates of
- *     reference count easily
- *
- * these things need to occur given `A depends on B`:
- *
- *   * worker deques and processes `B` from `ready` queue
- *   * notify the graph that `B` finished, which decrements
- *     the reference count of `A` (and all neighbors of `B`)
- *   * `A`'s reference count reaches 0
- *   * graph moves the node from the `waiting` queue to the `ready` queue
- *   * repeat
- *
- * problems:
- *
- *   * how can the graph retain references to the nodes while
- *     also handing them off to workers to mutate? not possible afaik
- *
- *     maybe the graph should consist of Bindings and not Items?
- *     the graph would own Rc<Binding> and edges would be
- *     HashMap<Rc<Binding>, Weak<Binding>>.
- *
- */
-
 /// Represents a dependency graph.
 ///
 /// This graph tracks items and is able to produce an ordering

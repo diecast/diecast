@@ -19,10 +19,7 @@ opt-level = 0
 debug = true
 rpath = true
 
-[dependencies.glob]
-# version = "0.5.0" # optional
-git = "https://github.com/rust-lang/glob"
-
-[dependencies.anymap]
-git = "https://github.com/chris-morgan/anymap"
+[dependencies]
+glob = "*"
+anymap = "*"
 

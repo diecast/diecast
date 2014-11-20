@@ -53,11 +53,6 @@ impl Generator {
     }
   }
 
-  // pub fn create<C>(mut self, path: Path, compiler: C) -> Generator
-  //   where C: Compile + Send + Sync {
-  //   self
-  // }
-
   pub fn bind<P, C>(mut self, pattern: P, compiler: C) -> Generator
     where P: Pattern + Send + Sync, C: Compile + Send + Sync {
       self.bindings.push(
