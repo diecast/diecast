@@ -68,6 +68,15 @@ impl Compile for Read {
   }
 }
 
+/// Compiler that writes the `Item`'s body.
+pub struct Write;
+
+impl Compile for Write {
+  fn compile(&self, item: &mut Item) {
+    item.write();
+  }
+}
+
 /// Compiler that prints the `Item`'s body.
 pub struct Print;
 

@@ -58,6 +58,10 @@ impl Item {
     &self.body
   }
 
+  pub fn set_body(&mut self, body: Option<String>) {
+    self.body = body;
+  }
+
   pub fn read(&mut self) {
     match self.relation {
       Reading(ref from) | Mapping(ref from, _) => {
@@ -67,12 +71,14 @@ impl Item {
     }
   }
 
-  pub fn write(&mut self, body: String) {
+  pub fn write(&mut self) {
     match self.relation {
       Writing(ref to) | Mapping(_, ref to) => {
-        File::create(to)
-          .write_str(body.as_slice())
-          .unwrap();
+        if let Some(ref body) = self.body {
+          File::create(to)
+            .write_str(body.as_slice())
+            .unwrap();
+        }
       },
       _ => (),
     }
