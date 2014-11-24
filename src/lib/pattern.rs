@@ -19,18 +19,12 @@
 //! ```
 
 use glob;
-use regex;
+use regex::Regex;
 
 /// A kind of pattern that can be used for
 /// filtering the files in the input directory.
 pub trait Pattern {
   fn matches(&self, &Path) -> bool;
-}
-
-impl Pattern for Box<Pattern + Send + Sync> {
-  fn matches(&self, p: &Path) -> bool {
-    (**self).matches(p)
-  }
 }
 
 /// The negation of a pattern.
@@ -84,7 +78,7 @@ impl Pattern for Everything {
 }
 
 /// Allow regular expression patterns.
-impl Pattern for regex::Regex {
+impl Pattern for Regex {
   fn matches(&self, p: &Path) -> bool {
     self.is_match(p.as_str().unwrap())
   }

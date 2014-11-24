@@ -1,32 +1,34 @@
 #![feature(phase)]
+#![feature(globs)]
 
 #[phase(plugin, link)]
 extern crate diecast;
 
 use diecast::Generator;
 use diecast::generator::Binding;
-use diecast::compile::{CompilerChain, ReadBody, PrintBody};
+use diecast::compile::{CompilerChain, Read, Print};
 
 fn main() {
-  let posts_compiler =
-    CompilerChain::new()
-      .link(ReadBody)
-      .link(PrintBody);
+  let posts =
+    Binding::new("posts") // TODO: impl Pattern for Binding?
+      .compiler(
+        CompilerChain::new()
+          .link(Read)
+          .link(Print));
+      // .router(posts_router);
 
-  let mut posts =
-    Binding::new("posts", Match("posts/*.md")) // TODO: impl Pattern for Binding?
-      .compiler(posts_compiler)
-      .router(posts_router);
+  let post_index =
+    Binding::new("post index")
+      .compiler(
+        CompilerChain::new()
+          .link(Read)
+          .link(Print))
+      .dependencies(vec!["posts"]); // TODO: make possible to just do dependencies(posts)?
 
-  let mut post_index =
-    Binding::new("post index", Create("index.html"))
-      .compiler(index_compiler)
-      .dependencies(&["posts"]); // TODO: make possible to just do dependencies(posts)?
-
-  let mut gen =
+  let gen =
     Generator::new(Path::new("tests/fixtures/input"), Path::new("output"))
-      .bind(posts)
-      .bind(post_index);
+      .matching("posts/*.md", posts)
+      .creating(Path::new("index.html"), post_index);
 
   println!("generating");
 
