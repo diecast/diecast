@@ -15,7 +15,9 @@
 #![feature(default_type_params)]
 #![feature(if_let)]
 #![feature(while_let)]
+#![feature(globs)]
 
+extern crate sync;
 extern crate glob;
 extern crate anymap;
 extern crate regex;
@@ -36,6 +38,7 @@ pub mod macros;
 pub mod deploy;
 pub mod pattern;
 pub mod item;
+pub mod route;
 pub mod compile;
 pub mod generator;
 pub mod dependency;

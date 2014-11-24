@@ -1,0 +1,18 @@
+[root]
+name = "diecast"
+version = "0.0.1"
+dependencies = [
+ "anymap 0.9.1 (git+https://github.com/chris-morgan/anymap)",
+ "glob 0.0.3 (git+https://github.com/rust-lang/glob)",
+]
+
+[[package]]
+name = "anymap"
+version = "0.9.1"
+source = "git+https://github.com/chris-morgan/anymap#901b94ef25284a1441093b62e90319404b1b545f"
+
+[[package]]
+name = "glob"
+version = "0.0.3"
+source = "git+https://github.com/rust-lang/glob#9efe98bd82ad4932819888a94eb933ac618312f0"
+

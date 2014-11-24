@@ -3,8 +3,7 @@
 // use std::collections::ringbuf::RingBuf;
 // use std::collections::Deque;
 
-use item::{Item, Body};
-use std::io::File;
+use item::Item;
 
 /// Behavior of a compiler.
 ///
@@ -12,14 +11,6 @@ use std::io::File;
 /// reference to the `Item` being compiled.
 pub trait Compile: Send + Sync {
   fn compile(&self, item: &mut Item);
-}
-
-/// Convenience, pass-through implementation to
-/// enable trait objects.
-impl Compile for Box<Compile + Send + Sync> {
-  fn compile(&self, item: &mut Item) {
-    (**self).compile(item)
-  }
 }
 
 /// Chain of compilers.
@@ -60,32 +51,33 @@ impl Compile for CompilerChain {
   }
 }
 
-/// Compiler that reads the `Item`'s body.
-///
-/// Reads the `Item` into its data using the `Body` type.
-pub struct ReadBody;
+pub struct Stub;
 
-impl Compile for ReadBody {
+impl Compile for Stub {
   fn compile(&self, item: &mut Item) {
-    let contents = File::open(&item.path).read_to_string().unwrap();
+    println!("no compiler established for: {}", item);
+  }
+}
 
-    item.data.insert(Body(contents));
+/// Compiler that reads the `Item`'s body.
+pub struct Read;
+
+impl Compile for Read {
+  fn compile(&self, item: &mut Item) {
+    item.read();
   }
 }
 
 /// Compiler that prints the `Item`'s body.
-///
-/// Prints the `Body` value in the given `Item`, if found.
-pub struct PrintBody;
+pub struct Print;
 
-impl Compile for PrintBody {
+impl Compile for Print {
   fn compile(&self, item: &mut Item) {
-    match item.data.find::<Body>() {
-      Some(&Body(ref body)) => {
-        println!("printing body");
-        println!("{}", body);
-      },
-      None => println!("no body!"),
+    if let &Some(ref body) = item.body() {
+      println!("printing body");
+      println!("{}", body);
+    } else {
+      println!("no body!");
     }
   }
 }

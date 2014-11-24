@@ -9,7 +9,6 @@ use graphviz as dot;
 use graphviz::maybe_owned_vec::IntoMaybeOwnedVector;
 
 use std::fmt::{mod, Show};
-use std::hash::{hash, Hash};
 
 use std::str;
 
@@ -17,30 +16,29 @@ use std::str;
 ///
 /// This graph tracks items and is able to produce an ordering
 /// of the items that respects dependency constraints.
-pub struct Graph<'a, T: 'a> {
+pub struct Graph {
   /// Edges in the graph; implicitly stores nodes.
   ///
   /// There's a key for every node in the graph, even if
   /// if it doesn't have any edges going out.
-  edges: HashMap<&'a T, HashSet<&'a T>>,
+  edges: HashMap<u32, HashSet<u32>>,
 }
 
-impl<'a, T> Graph<'a, T>
-  where T: Eq + Show + Hash {
-  pub fn new() -> Graph<'a, T> {
+impl Graph {
+  pub fn new() -> Graph {
     Graph {
       edges: HashMap::new(),
     }
   }
 
-  pub fn add_node(&mut self, node: &'a T) {
+  pub fn add_node(&mut self, node: u32) {
     if let Vacant(entry) = self.edges.entry(node) {
       entry.set(HashSet::new());
     }
   }
 
   /// Register a dependency constraint.
-  pub fn add_edge(&mut self, a: &'a T, b: &'a T) {
+  pub fn add_edge(&mut self, a: u32, b: u32) {
     match self.edges.entry(a) {
       Vacant(entry) => {
         let mut hs = HashSet::new();
@@ -54,13 +52,13 @@ impl<'a, T> Graph<'a, T>
   }
 
   /// The nodes in the graph.
-  pub fn nodes(&self) -> Keys<'a, &T, HashSet<&T>> {
+  pub fn nodes(&self) -> Keys<u32, HashSet<u32>> {
     self.edges.keys()
   }
 
   /// The neighbors of a given node.
-  pub fn neighbors_of(&self, node: &'a T) -> Option<SetItems<'a, &T>> {
-    self.edges.find(&node).and_then(|s| {
+  pub fn neighbors_of(&self, node: u32) -> Option<SetItems<u32>> {
+    self.edges.get(&node).and_then(|s| {
       if !s.is_empty() {
         Some(s.iter())
       } else {
@@ -73,13 +71,12 @@ impl<'a, T> Graph<'a, T>
   ///
   /// This essentially means: the given node plus all nodes
   /// that depend on it.
-  pub fn resolve_only(&'a self, node: &'a T)
-     -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
+  pub fn resolve_only(&self, node: u32) -> Result<RingBuf<u32>, RingBuf<u32>> {
     Topological::new(self).from(node)
   }
 
   /// Topological ordering of the entire graph.
-  pub fn resolve(&'a self) -> Result<RingBuf<&'a T>, RingBuf<&'a T>> {
+  pub fn resolve(&self) -> Result<RingBuf<u32>, RingBuf<u32>> {
     Topological::new(self).all()
   }
 
@@ -94,8 +91,7 @@ impl<'a, T> Graph<'a, T>
   }
 }
 
-impl<'a, T> Show for Graph<'a, T>
-  where T: Eq + Show + Hash {
+impl Show for Graph {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     try!(self.edges.fmt(f));
     Ok(())
@@ -103,34 +99,33 @@ impl<'a, T> Show for Graph<'a, T>
 }
 
 /// A graph edge for graphviz
-pub type Edge<'a, T> = (&'a T, &'a T);
+pub type Node = u32;
+pub type Edge = (u32, u32);
 
-impl<'a, T> dot::Labeller<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
-  where T: Eq + Hash + Show {
-  fn graph_id(&'a self) -> dot::Id<'a> {
+impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
+  fn graph_id(&self) -> dot::Id<'a> {
     dot::Id::new("dependencies").unwrap()
   }
 
-  fn node_id(&'a self, n: &&'a T) -> dot::Id<'a> {
-    dot::Id::new(format!("N{}", hash(n))).unwrap()
+  fn node_id(&self, n: &Node) -> dot::Id<'a> {
+    dot::Id::new(format!("N{}", *n)).unwrap()
   }
 
-  fn node_label(&'a self, n: &&'a T) -> dot::LabelText<'a> {
+  fn node_label(&self, n: &Node) -> dot::LabelText {
     dot::LabelStr(str::Owned(n.to_string()))
   }
 }
 
-impl<'a, T> dot::GraphWalk<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
-  where T: Eq + Hash + Show {
-  fn nodes(&self) -> dot::Nodes<'a, &T> {
+impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
+  fn nodes(&self) -> dot::Nodes<'a, Node> {
     self
       .nodes()
       .map(|n| *n)
-      .collect::<Vec<&T>>()
+      .collect::<Vec<Node>>()
       .into_maybe_owned()
   }
 
-  fn edges(&'a self) -> dot::Edges<'a, Edge<T>> {
+  fn edges(&self) -> dot::Edges<'a, Edge> {
     let mut edges = Vec::new();
 
     for (&source, targets) in self.edges.iter() {
@@ -142,12 +137,12 @@ impl<'a, T> dot::GraphWalk<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
     edges.into_maybe_owned()
   }
 
-  fn source(&self, e: &Edge<T>) -> &T {
+  fn source(&self, e: &Edge) -> Node {
     let &(s, _) = e;
     return s;
   }
 
-  fn target(&self, e: &Edge<T>) -> &T {
+  fn target(&self, e: &Edge) -> Node {
     let &(_, t) = e;
     return t;
   }
@@ -158,30 +153,29 @@ impl<'a, T> dot::GraphWalk<'a, &'a T, Edge<'a, T>> for Graph<'a, T>
 /// Performs a topological sorting of the provided graph
 /// via a depth-first search. This ordering is such that
 /// every node comes before the node(s) that depends on it.
-struct Topological<'b, T: 'b> {
+struct Topological<'a> {
   /// The graph to traverse.
-  graph: &'b Graph<'b, T>,
+  graph: &'a Graph,
 
   /// The nodes that have been visited so far
-  visited: HashSet<&'b T>,
+  visited: HashSet<u32>,
 
   /// Nodes that are on the path to the current node.
-  on_stack: HashSet<&'b T>,
+  on_stack: HashSet<u32>,
 
   /// Trace back a path in the case of a cycle.
-  edge_to: HashMap<&'b T, &'b T>,
+  edge_to: HashMap<u32, u32>,
 
   /// Nodes in an order which respects dependencies.
-  topological: RingBuf<&'b T>,
+  topological: RingBuf<u32>,
 
   /// Either an ordering or the path of a cycle.
-  result: Result<RingBuf<&'b T>, RingBuf<&'b T>>,
+  result: Result<RingBuf<u32>, RingBuf<u32>>,
 }
 
-impl<'b, T> Topological<'b, T>
-  where T: Eq + Show + Hash {
+impl<'a> Topological<'a> {
   /// Construct the initial algorithm state.
-  fn new(graph: &'b Graph<T>) -> Topological<'b, T> {
+  fn new(graph: &'a Graph) -> Topological<'a> {
     Topological {
       graph: graph,
       visited: HashSet::new(),
@@ -196,7 +190,7 @@ impl<'b, T> Topological<'b, T>
   ///
   /// This uses a recursive depth-first search, as it facilitates
   /// keeping track of a cycle, if any is present.
-  fn dfs(&mut self, node: &'b T) {
+  fn dfs(&mut self, node: u32) {
     self.on_stack.insert(node);
     self.visited.insert(node);
 
@@ -221,11 +215,11 @@ impl<'b, T> Topological<'b, T>
           path.push_front(neighbor);
           path.push_front(node);
 
-          let mut previous = self.edge_to.find(&node);
+          let mut previous = self.edge_to.get(&node);
 
           while let Some(&found) = previous {
             path.push_front(found);
-            previous = self.edge_to.find(&found);
+            previous = self.edge_to.get(&found);
           }
 
           self.result = Err(path);
@@ -238,8 +232,8 @@ impl<'b, T> Topological<'b, T>
   }
 
   /// recompile the dependencies of `node` and then `node` itself
-  pub fn from(mut self, node: &'b T)
-     -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
+  pub fn from(mut self, node: u32)
+     -> Result<RingBuf<u32>, RingBuf<u32>> {
     self.dfs(node);
 
     self.result.and(Ok(self.topological))
@@ -247,7 +241,7 @@ impl<'b, T> Topological<'b, T>
 
   /// the typical resolution algorithm, returns a topological ordering
   /// of the nodes which honors the dependencies
-  pub fn all(mut self) -> Result<RingBuf<&'b T>, RingBuf<&'b T>> {
+  pub fn all(mut self) -> Result<RingBuf<u32>, RingBuf<u32>> {
     for &node in self.graph.nodes() {
       if !self.visited.contains(&node) {
         self.dfs(node);
@@ -266,9 +260,9 @@ mod test {
 
   #[test]
   fn detect_cycles() {
-    let a = &Item::new(Path::new("a"));
-    let b = &Item::new(Path::new("b"));
-    let c = &Item::new(Path::new("c"));
+    let a = 1;
+    let b = 2;
+    let c = 3;
 
     let mut graph = Graph::new();
     graph.add_edge(a, b);
@@ -282,19 +276,19 @@ mod test {
 
   #[test]
   fn resolve_all() {
-    let item0 = &Item::new(Path::new("0"));
-    let item1 = &Item::new(Path::new("1"));
-    let item2 = &Item::new(Path::new("2"));
-    let item3 = &Item::new(Path::new("3"));
-    let item4 = &Item::new(Path::new("4"));
-    let item5 = &Item::new(Path::new("5"));
-    let item6 = &Item::new(Path::new("6"));
-    let item7 = &Item::new(Path::new("7"));
-    let item8 = &Item::new(Path::new("8"));
-    let item9 = &Item::new(Path::new("9"));
-    let item10 = &Item::new(Path::new("10"));
-    let item11 = &Item::new(Path::new("11"));
-    let item12 = &Item::new(Path::new("12"));
+    let item0 = 0;
+    let item1 = 1;
+    let item2 = 2;
+    let item3 = 3;
+    let item4 = 4;
+    let item5 = 5;
+    let item6 = 6;
+    let item7 = 7;
+    let item8 = 8;
+    let item9 = 9;
+    let item10 = 10;
+    let item11 = 11;
+    let item12 = 12;
 
     let mut graph = Graph::new();
 
@@ -327,19 +321,19 @@ mod test {
 
   #[test]
   fn resolve_only() {
-    let item0 = &Item::new(Path::new("0"));
-    let item1 = &Item::new(Path::new("1"));
-    let item2 = &Item::new(Path::new("2"));
-    let item3 = &Item::new(Path::new("3"));
-    let item4 = &Item::new(Path::new("4"));
-    let item5 = &Item::new(Path::new("5"));
-    let item6 = &Item::new(Path::new("6"));
-    let item7 = &Item::new(Path::new("7"));
-    let item8 = &Item::new(Path::new("8"));
-    let item9 = &Item::new(Path::new("9"));
-    let item10 = &Item::new(Path::new("10"));
-    let item11 = &Item::new(Path::new("11"));
-    let item12 = &Item::new(Path::new("12"));
+    let item0 = 0;
+    let item1 = 1;
+    let item2 = 2;
+    let item3 = 3;
+    let item4 = 4;
+    let item5 = 5;
+    let item6 = 6;
+    let item7 = 7;
+    let item8 = 8;
+    let item9 = 9;
+    let item10 = 10;
+    let item11 = 11;
+    let item12 = 12;
 
     let mut graph = Graph::new();
 
@@ -374,19 +368,19 @@ mod test {
   fn render() {
     use std::io::fs::{PathExtensions, unlink};
 
-    let item0 = &Item::new(Path::new("0"));
-    let item1 = &Item::new(Path::new("1"));
-    let item2 = &Item::new(Path::new("2"));
-    let item3 = &Item::new(Path::new("3"));
-    let item4 = &Item::new(Path::new("4"));
-    let item5 = &Item::new(Path::new("5"));
-    let item6 = &Item::new(Path::new("6"));
-    let item7 = &Item::new(Path::new("7"));
-    let item8 = &Item::new(Path::new("8"));
-    let item9 = &Item::new(Path::new("9"));
-    let item10 = &Item::new(Path::new("10"));
-    let item11 = &Item::new(Path::new("11"));
-    let item12 = &Item::new(Path::new("12"));
+    let item0 = 0;
+    let item1 = 1;
+    let item2 = 2;
+    let item3 = 3;
+    let item4 = 4;
+    let item5 = 5;
+    let item6 = 6;
+    let item7 = 7;
+    let item8 = 8;
+    let item9 = 9;
+    let item10 = 10;
+    let item11 = 11;
+    let item12 = 12;
 
     let mut graph = Graph::new();
 
