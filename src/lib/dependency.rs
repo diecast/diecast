@@ -69,7 +69,7 @@ pub struct Graph {
   ///
   /// There's a key for every node in the graph, even if
   /// if it doesn't have any edges going out.
-  edges: HashMap<i32, HashSet<i32>>,
+  edges: HashMap<u32, HashSet<u32>>,
 }
 
 impl Graph {
@@ -79,14 +79,14 @@ impl Graph {
     }
   }
 
-  pub fn add_node(&mut self, node: i32) {
+  pub fn add_node(&mut self, node: u32) {
     if let Vacant(entry) = self.edges.entry(node) {
       entry.set(HashSet::new());
     }
   }
 
   /// Register a dependency constraint.
-  pub fn add_edge(&mut self, a: i32, b: i32) {
+  pub fn add_edge(&mut self, a: u32, b: u32) {
     match self.edges.entry(a) {
       Vacant(entry) => {
         let mut hs = HashSet::new();
@@ -100,12 +100,12 @@ impl Graph {
   }
 
   /// The nodes in the graph.
-  pub fn nodes(&self) -> Keys<i32, HashSet<i32>> {
+  pub fn nodes(&self) -> Keys<u32, HashSet<u32>> {
     self.edges.keys()
   }
 
   /// The neighbors of a given node.
-  pub fn neighbors_of(&self, node: i32) -> Option<SetItems<i32>> {
+  pub fn neighbors_of(&self, node: u32) -> Option<SetItems<u32>> {
     self.edges.get(&node).and_then(|s| {
       if !s.is_empty() {
         Some(s.iter())
@@ -119,12 +119,12 @@ impl Graph {
   ///
   /// This essentially means: the given node plus all nodes
   /// that depend on it.
-  pub fn resolve_only(&self, node: i32) -> Result<RingBuf<i32>, RingBuf<i32>> {
+  pub fn resolve_only(&self, node: u32) -> Result<RingBuf<u32>, RingBuf<u32>> {
     Topological::new(self).from(node)
   }
 
   /// Topological ordering of the entire graph.
-  pub fn resolve(&self) -> Result<RingBuf<i32>, RingBuf<i32>> {
+  pub fn resolve(&self) -> Result<RingBuf<u32>, RingBuf<u32>> {
     Topological::new(self).all()
   }
 
@@ -147,8 +147,8 @@ impl Show for Graph {
 }
 
 /// A graph edge for graphviz
-pub type Node = i32;
-pub type Edge = (i32, i32);
+pub type Node = u32;
+pub type Edge = (u32, u32);
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
   fn graph_id(&self) -> dot::Id<'a> {
@@ -206,19 +206,19 @@ struct Topological<'a> {
   graph: &'a Graph,
 
   /// The nodes that have been visited so far
-  visited: HashSet<i32>,
+  visited: HashSet<u32>,
 
   /// Nodes that are on the path to the current node.
-  on_stack: HashSet<i32>,
+  on_stack: HashSet<u32>,
 
   /// Trace back a path in the case of a cycle.
-  edge_to: HashMap<i32, i32>,
+  edge_to: HashMap<u32, u32>,
 
   /// Nodes in an order which respects dependencies.
-  topological: RingBuf<i32>,
+  topological: RingBuf<u32>,
 
   /// Either an ordering or the path of a cycle.
-  result: Result<RingBuf<i32>, RingBuf<i32>>,
+  result: Result<RingBuf<u32>, RingBuf<u32>>,
 }
 
 impl<'a> Topological<'a> {
@@ -238,7 +238,7 @@ impl<'a> Topological<'a> {
   ///
   /// This uses a recursive depth-first search, as it facilitates
   /// keeping track of a cycle, if any is present.
-  fn dfs(&mut self, node: i32) {
+  fn dfs(&mut self, node: u32) {
     self.on_stack.insert(node);
     self.visited.insert(node);
 
@@ -280,8 +280,8 @@ impl<'a> Topological<'a> {
   }
 
   /// recompile the dependencies of `node` and then `node` itself
-  pub fn from(mut self, node: i32)
-     -> Result<RingBuf<i32>, RingBuf<i32>> {
+  pub fn from(mut self, node: u32)
+     -> Result<RingBuf<u32>, RingBuf<u32>> {
     self.dfs(node);
 
     self.result.and(Ok(self.topological))
@@ -289,7 +289,7 @@ impl<'a> Topological<'a> {
 
   /// the typical resolution algorithm, returns a topological ordering
   /// of the nodes which honors the dependencies
-  pub fn all(mut self) -> Result<RingBuf<i32>, RingBuf<i32>> {
+  pub fn all(mut self) -> Result<RingBuf<u32>, RingBuf<u32>> {
     for &node in self.graph.nodes() {
       if !self.visited.contains(&node) {
         self.dfs(node);

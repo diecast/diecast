@@ -1,8 +1,10 @@
 //! Site generation.
 
 use sync::{Mutex, Arc};
-use std::collections::{RingBuf, HashMap};
+use std::collections::{RingBuf, HashMap, Bitv};
 use std::collections::hash_map::{Vacant, Occupied};
+use std::sync::deque::{BufferPool, Stolen};
+use std::sync::TaskPool;
 use std::fmt::{mod, Show};
 
 use pattern::Pattern;
@@ -13,11 +15,11 @@ use item::Relation::{Reading, Writing, Mapping};
 use dependency::Graph;
 
 pub struct Job {
-  id: i32,
+  id: u32,
   binding: &'static str,
   item: Item,
   compiler: Arc<Box<Compile + Send + Sync>>,
-  dependencies: i32,
+  dependencies: u32,
 }
 
 impl Show for Job {
@@ -30,7 +32,7 @@ impl Job {
   pub fn new(binding: &'static str,
              item: Item,
              compiler: Arc<Box<Compile + Send + Sync>>,
-             id: i32)
+             id: u32)
          -> Job {
     Job {
       id: id,
@@ -41,11 +43,11 @@ impl Job {
     }
   }
 
-  pub fn set_id(&mut self, id: i32) {
+  pub fn set_id(&mut self, id: u32) {
     self.id = id;
   }
 
-  pub fn set_dependencies(&mut self, dependencies: i32) {
+  pub fn set_dependencies(&mut self, dependencies: u32) {
     self.dependencies = dependencies;
   }
 
@@ -69,7 +71,7 @@ pub struct Generator {
   paths: Vec<Path>,
 
   /// Mapping the bind name to its items
-  bindings: HashMap<&'static str, Vec<i32>>,
+  bindings: HashMap<&'static str, Vec<u32>>,
 
   /// The jobs
   jobs: Vec<Job>,
@@ -103,28 +105,7 @@ impl Generator {
 
 impl Generator {
   pub fn generate(mut self) {
-    // add a node for every graph
-    // the problem is that we want to store only the indexes?
-    // that way we can simply take them and put the existing vector
-    // in that order by iterating through half of the indices and using
-    // .as_mut_slice().swap(i, i * 2)
-    //
-    // in order to use indices, we need to maintain a map of Item to index?
-    //
-    // alternatively we could store Rc<T>, then when the graph returns
-    // the result, we could use std::rc::try_unwrap to unwrap them
-    // this seems much more straightforward? would have to use Weak<T> for
-    // edges
-    // this would still require that we maintain a map of name -> Item
-    // in order to declare dependencies by name. as a result, when the Graph
-    // returns there will be two Rc copies for every Item, so simply
-    // drop() the map?
-    // this would not be a problem if the Graph itself could take the name?
-    // seems like a better design, since the Graph is the only thing that cares
-    // about the name?
-    // alternatively, instead of putting every single Item in the graph, we only
-    // need to put in the names of the dependencies?
-    //
+    // ALTERNATIVE
     // push a map of name -> binding
     // add_node for every name
     // dependency reg. operates on name, e.g. "posts"
@@ -135,26 +116,76 @@ impl Generator {
     // job should include an index as given by the graph order
     // the graph should operate entirely based on the indices
 
+    // TODO: dependency enforcement
+    //       partition ordered based on dependencies = 0
+
     match self.graph.resolve() {
       Ok(order) => {
-        let mut swapped = 0u;
+        let mut optioned =
+          self.jobs.into_iter()
+            .map(Some)
+            .collect::<Vec<Option<Job>>>();
 
-        println!("ordering: {}", order);
-        println!("before: {}", self.jobs)
+        // put the jobs into the order provided
+        let ordered =
+          order.iter()
+            .map(|&index| optioned[index as uint].take().unwrap())
+            .collect::<Vec<Job>>();
 
-        for (to, from) in order.iter().enumerate() {
-          let from = *from as uint;
+        println!("order: {}", ordered);
 
-          if to >= swapped && to != from {
-            println!("swapping {} -> {}", from, to);
-            self.jobs.as_mut_slice().swap(from, to);
-          }
+        let jobs = ordered.len();
+        let mut job_queue = BufferPool::new();
+        let (mut worker, mut stealer) = job_queue.deque();
 
-          println!("#{}: {}", swapped, self.jobs)
-          swapped += 1;
+        for job in ordered.into_iter() {
+          worker.push(job);
         }
 
-        println!("after: {}", self.jobs)
+        let task_pool = TaskPool::new(4u);
+
+        let (tx, rx) = channel();
+
+        enum Status {
+          Finished(u32),
+          Error,
+          Aborted,
+        }
+
+        for _ in range(0, jobs) {
+          let tx = tx.clone();
+          let stealer = stealer.clone();
+
+          task_pool.execute(proc() {
+            match stealer.steal() {
+              Stolen::Data(job) => {
+                // process job
+                // tx.send(result);
+
+                tx.send(Status::Finished(job.id));
+              },
+              Stolen::Empty => {
+                tx.send(Status::Error);
+              },
+              Stolen::Abort => {
+                tx.send(Status::Aborted);
+              },
+            }
+          });
+        }
+
+        let mut completed = 0u;
+
+        while completed < jobs {
+          match rx.recv() {
+            Status::Finished(id) => println!("finished {}", id),
+            Status::Error => println!("errored"),
+            Status::Aborted => println!("aborted"),
+          }
+
+          // if paused, worker.push(job_again)
+          completed += 1;
+        }
       },
       Err(cycle) => {
         panic!("a dependency cycle was detected: {}", cycle);
@@ -175,7 +206,7 @@ impl Generator {
              item: Item,
              compiler: Arc<Box<Compile + Send + Sync>>,
              dependencies: &Option<Vec<&'static str>>) {
-    let index = self.jobs.len() as i32;
+    let index = self.jobs.len() as u32;
     self.jobs.push(Job::new(binding, item, compiler, index));
 
     match self.bindings.entry(binding) {
@@ -196,8 +227,6 @@ impl Generator {
     }
   }
 
-  // gen.bind("posts", Match("posts/*.md"), posts_compiler, None)
-  // gen.bind("post index", Create("something.html"), index_compiler, Some(["posts"]));
   pub fn creating(mut self, path: Path, binding: Binding) -> Generator {
       let compiler = Arc::new(binding.compiler);
       let target = self.output.join(path);
@@ -217,7 +246,6 @@ impl Generator {
 
       let compiler = Arc::new(binding.compiler);
 
-      // these two branches can't be DRYed because Rust
       // stupid hack to trick borrowck
       let paths = mem::replace(&mut self.paths, Vec::new());
 
