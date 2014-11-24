@@ -10,7 +10,8 @@ use diecast::compile::{CompilerChain, Read, Print};
 
 fn main() {
   let posts =
-    Binding::new("posts") // TODO: impl Pattern for Binding?
+    // TODO: impl Pattern for Binding?
+    Binding::new("posts")
       .compiler(
         CompilerChain::new()
           .link(Read)
@@ -23,7 +24,8 @@ fn main() {
         CompilerChain::new()
           .link(Read)
           .link(Print))
-      .dependencies(vec!["posts"]); // TODO: make possible to just do dependencies(posts)?
+      .dependencies(vec!["posts"]);
+      // TODO: ^ make possible to just do dependencies(posts)?
 
   let gen =
     Generator::new(Path::new("tests/fixtures/input"), Path::new("output"))

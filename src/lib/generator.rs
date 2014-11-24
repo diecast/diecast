@@ -15,16 +15,16 @@ use item::Relation::{Reading, Writing, Mapping};
 use dependency::Graph;
 
 pub struct Job {
-  id: u32,
-  binding: &'static str,
-  item: Item,
-  compiler: Arc<Box<Compile + Send + Sync>>,
-  dependencies: u32,
+  pub id: u32,
+  pub binding: &'static str,
+  pub item: Item,
+  pub compiler: Arc<Box<Compile + Send + Sync>>,
+  pub dependencies: u32,
 }
 
 impl Show for Job {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{}", self.id)
+    write!(f, "#{} [{}] {}, dependencies: {}", self.id, self.binding, self.item, self.dependencies)
   }
 }
 
@@ -41,18 +41,6 @@ impl Job {
       compiler: compiler,
       dependencies: 0,
     }
-  }
-
-  pub fn set_id(&mut self, id: u32) {
-    self.id = id;
-  }
-
-  pub fn set_dependencies(&mut self, dependencies: u32) {
-    self.dependencies = dependencies;
-  }
-
-  pub fn decrement_dependencies(&mut self) {
-    self.dependencies -= 1;
   }
 }
 
@@ -129,62 +117,89 @@ impl Generator {
         // put the jobs into the order provided
         let ordered =
           order.iter()
-            .map(|&index| optioned[index as uint].take().unwrap())
+            .map(|&(index, deps)| {
+              let mut job = optioned[index as uint].take().unwrap();
+              job.dependencies = deps;
+              return job;
+            })
             .collect::<Vec<Job>>();
 
         println!("order: {}", ordered);
 
         let jobs = ordered.len();
-        let mut job_queue = BufferPool::new();
-        let (mut worker, mut stealer) = job_queue.deque();
 
-        for job in ordered.into_iter() {
-          worker.push(job);
-        }
+        println!("jobs: {}", jobs);
+
+        let (ready, mut waiting) = ordered.partition(|ref job| job.dependencies == 0);
 
         let task_pool = TaskPool::new(4u);
-
         let (tx, rx) = channel();
+        let (worker, stealer) = channel();
+        let stealer = Arc::new(Mutex::new(stealer));
+
+        println!("ready: {}", ready);
+
+        for job in ready.into_iter() {
+          worker.send(job);
+        }
 
         enum Status {
           Finished(u32),
-          Error,
-          Aborted,
-        }
-
-        for _ in range(0, jobs) {
-          let tx = tx.clone();
-          let stealer = stealer.clone();
-
-          task_pool.execute(proc() {
-            match stealer.steal() {
-              Stolen::Data(job) => {
-                // process job
-                // tx.send(result);
-
-                tx.send(Status::Finished(job.id));
-              },
-              Stolen::Empty => {
-                tx.send(Status::Error);
-              },
-              Stolen::Abort => {
-                tx.send(Status::Aborted);
-              },
-            }
-          });
         }
 
         let mut completed = 0u;
 
-        while completed < jobs {
-          match rx.recv() {
-            Status::Finished(id) => println!("finished {}", id),
-            Status::Error => println!("errored"),
-            Status::Aborted => println!("aborted"),
-          }
+        // TODO: this needs to keep going until there are no more jobs
+        for i in range(0, jobs) {
+          println!("loop {}", i);
+          let tx = tx.clone();
+          let stealer = stealer.clone();
 
-          // if paused, worker.push(job_again)
-          completed += 1;
+          task_pool.execute(proc() {
+            let mut stealer = stealer.lock();
+
+            let job = stealer.recv();
+            // process job
+            tx.send(Status::Finished(job.id));
+          });
+        }
+
+        while completed < jobs {
+          println!("waiting");
+          match rx.recv() {
+            Status::Finished(id) => {
+              println!("finished {}", id);
+
+              // decrement dependencies of jobs
+              // TODO: can't use neighbors_of because it counts dependents
+              println!("before waiting: {}", waiting);
+
+              if let Some(mut dependencies) = self.graph.neighbors_of(id) {
+                for dependency in dependencies {
+                  for job in waiting.iter_mut() {
+                    println!("decremented");
+                    job.dependencies -= 1;
+                  }
+                }
+              }
+
+              println!("after waiting: {}", waiting);
+
+              // split the waiting vec again
+              let (ready, waiting_) = waiting.partition(|ref job| job.dependencies == 0);
+              waiting = waiting_;
+
+              println!("now ready: {}", ready);
+
+              for job in ready.into_iter() {
+                worker.send(job);
+              }
+
+              // if paused, worker.push(job_again)
+              completed += 1;
+              println!("completed {}", completed);
+            },
+          }
         }
       },
       Err(cycle) => {
@@ -217,11 +232,11 @@ impl Generator {
     self.graph.add_node(index);
 
     if let &Some(ref deps) = dependencies {
-      for dep in deps.iter() {
-        for id in self.bindings[*dep].iter() {
+      for &dep in deps.iter() {
+        for &id in self.bindings[dep].iter() {
           // id depends on index, so id must be done before index
           // so the edge goes: id -> index
-          self.graph.add_edge(*id, index);
+          self.graph.add_edge(id, index);
         }
       }
     }

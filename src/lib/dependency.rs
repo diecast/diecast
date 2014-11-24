@@ -12,6 +12,16 @@ use std::fmt::{mod, Show};
 
 use std::str;
 
+fn ringbuf_to_vec<T>(mut ringbuf: RingBuf<T>) -> Vec<T> {
+  let mut vec = Vec::new();
+
+  while let Some(x) = ringbuf.pop_front() {
+    vec.push(x);
+  }
+
+  return vec;
+}
+
 /// Represents a dependency graph.
 ///
 /// This graph tracks items and is able to produce an ordering
@@ -22,17 +32,23 @@ pub struct Graph {
   /// There's a key for every node in the graph, even if
   /// if it doesn't have any edges going out.
   edges: HashMap<u32, HashSet<u32>>,
+  dependencies: HashMap<u32, HashSet<u32>>,
 }
 
 impl Graph {
   pub fn new() -> Graph {
     Graph {
       edges: HashMap::new(),
+      dependencies: HashMap::new(),
     }
   }
 
   pub fn add_node(&mut self, node: u32) {
     if let Vacant(entry) = self.edges.entry(node) {
+      entry.set(HashSet::new());
+    }
+
+    if let Vacant(entry) = self.dependencies.entry(node) {
       entry.set(HashSet::new());
     }
   }
@@ -46,6 +62,15 @@ impl Graph {
         entry.set(hs);
       },
       Occupied(mut entry) => { entry.get_mut().insert(b); },
+    };
+
+    match self.dependencies.entry(b) {
+      Vacant(entry) => {
+        let mut hs = HashSet::new();
+        hs.insert(a);
+        entry.set(hs);
+      },
+      Occupied(mut entry) => { entry.get_mut().insert(a); },
     };
 
     self.add_node(b);
@@ -67,17 +92,45 @@ impl Graph {
     })
   }
 
+  /// The neighbors of a given node.
+  pub fn dependencies_of(&self, node: u32) -> Option<SetItems<u32>> {
+    println!("dependencies: {}", self.dependencies);
+    self.dependencies.get(&node).and_then(|s| {
+      if !s.is_empty() {
+        Some(s.iter())
+      } else {
+        None
+      }
+    })
+  }
+
   /// Topological ordering starting at the provided node.
   ///
   /// This essentially means: the given node plus all nodes
   /// that depend on it.
-  pub fn resolve_only(&self, node: u32) -> Result<RingBuf<u32>, RingBuf<u32>> {
+  pub fn resolve_only(&self, node: u32) -> Result<Vec<(u32, u32)>, Vec<u32>> {
     Topological::new(self).from(node)
+      .map(|order| {
+        order.iter()
+          .map(|&node| {
+            let deps = self.dependencies.get(&node).unwrap().len() as u32;
+            return (node, deps);
+          })
+          .collect::<Vec<(u32, u32)>>()
+      })
   }
 
   /// Topological ordering of the entire graph.
-  pub fn resolve(&self) -> Result<RingBuf<u32>, RingBuf<u32>> {
+  pub fn resolve(&self) -> Result<Vec<(u32, u32)>, Vec<u32>> {
     Topological::new(self).all()
+      .map(|order| {
+        order.iter()
+          .map(|&node| {
+            let deps = self.dependencies.get(&node).unwrap().len() as u32;
+            return (node, deps);
+          })
+          .collect::<Vec<(u32, u32)>>()
+      })
   }
 
   /// Render the dependency graph with graphviz. Visualize it with:
@@ -170,7 +223,7 @@ struct Topological<'a> {
   topological: RingBuf<u32>,
 
   /// Either an ordering or the path of a cycle.
-  result: Result<RingBuf<u32>, RingBuf<u32>>,
+  result: Result<Vec<u32>, Vec<u32>>,
 }
 
 impl<'a> Topological<'a> {
@@ -182,7 +235,7 @@ impl<'a> Topological<'a> {
       on_stack: HashSet::new(),
       edge_to: HashMap::new(),
       topological: RingBuf::new(),
-      result: Ok(RingBuf::new()),
+      result: Ok(Vec::new()),
     }
   }
 
@@ -222,7 +275,7 @@ impl<'a> Topological<'a> {
             previous = self.edge_to.get(&found);
           }
 
-          self.result = Err(path);
+          self.result = Err(ringbuf_to_vec(path));
         }
       }
     }
@@ -233,22 +286,22 @@ impl<'a> Topological<'a> {
 
   /// recompile the dependencies of `node` and then `node` itself
   pub fn from(mut self, node: u32)
-     -> Result<RingBuf<u32>, RingBuf<u32>> {
+     -> Result<Vec<u32>, Vec<u32>> {
     self.dfs(node);
 
-    self.result.and(Ok(self.topological))
+    self.result.and(Ok(ringbuf_to_vec(self.topological)))
   }
 
   /// the typical resolution algorithm, returns a topological ordering
   /// of the nodes which honors the dependencies
-  pub fn all(mut self) -> Result<RingBuf<u32>, RingBuf<u32>> {
+  pub fn all(mut self) -> Result<Vec<u32>, Vec<u32>> {
     for &node in self.graph.nodes() {
       if !self.visited.contains(&node) {
         self.dfs(node);
       }
     }
 
-    self.result.and(Ok(self.topological))
+    self.result.and(Ok(ringbuf_to_vec(self.topological)))
   }
 }
 

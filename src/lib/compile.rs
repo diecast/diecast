@@ -83,10 +83,9 @@ pub struct Print;
 impl Compile for Print {
   fn compile(&self, item: &mut Item) {
     if let &Some(ref body) = item.body() {
-      println!("printing body");
-      println!("{}", body);
+      ::std::io::stdio::println(body.as_slice());
     } else {
-      println!("no body!");
+      ::std::io::stdio::println("no body");
     }
   }
 }
