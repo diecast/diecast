@@ -17,7 +17,6 @@
 #![feature(while_let)]
 #![feature(globs)]
 
-extern crate sync;
 extern crate glob;
 extern crate anymap;
 extern crate regex;

@@ -1,9 +1,8 @@
 //! Site generation.
 
-use sync::{Mutex, Arc};
-use std::collections::{RingBuf, HashMap, Bitv};
+use std::sync::{Mutex, Arc};
+use std::collections::HashMap;
 use std::collections::hash_map::{Vacant, Occupied};
-use std::sync::deque::{BufferPool, Stolen};
 use std::sync::TaskPool;
 use std::fmt::{mod, Show};
 
@@ -109,17 +108,21 @@ impl Generator {
 
     match self.graph.resolve() {
       Ok(order) => {
+        use std::mem;
+
+        // trick the stupid borrowck
         let mut optioned =
-          self.jobs.into_iter()
+          mem::replace(&mut self.jobs, Vec::new())
+            .into_iter()
             .map(Some)
             .collect::<Vec<Option<Job>>>();
 
         // put the jobs into the order provided
         let ordered =
           order.iter()
-            .map(|&(index, deps)| {
+            .map(|&index| {
               let mut job = optioned[index as uint].take().unwrap();
-              job.dependencies = deps;
+              job.dependencies = self.graph.dependency_count(index);
               return job;
             })
             .collect::<Vec<Job>>();
@@ -156,7 +159,7 @@ impl Generator {
           let stealer = stealer.clone();
 
           task_pool.execute(proc() {
-            let mut stealer = stealer.lock();
+            let stealer = stealer.lock();
 
             let job = stealer.recv();
             // process job
@@ -174,13 +177,16 @@ impl Generator {
               // TODO: can't use neighbors_of because it counts dependents
               println!("before waiting: {}", waiting);
 
-              if let Some(mut dependencies) = self.graph.neighbors_of(id) {
-                for dependency in dependencies {
-                  for job in waiting.iter_mut() {
-                    println!("decremented");
+              if let Some(dependents) = self.graph.dependents_of(id) {
+                for job in waiting.iter_mut() {
+                  if dependents.contains(&job.id) {
                     job.dependencies -= 1;
                   }
                 }
+                // TODO: THIS IS VERY WRONG, FIX
+                // - for every job in waiting
+                // - if the job is a dependent
+                // -   decrement
               }
 
               println!("after waiting: {}", waiting);
@@ -228,8 +234,6 @@ impl Generator {
       Vacant(entry) => { entry.set(vec![index]); },
       Occupied(mut entry) => { entry.get_mut().push(index); },
     }
-
-    self.graph.add_node(index);
 
     if let &Some(ref deps) = dependencies {
       for &dep in deps.iter() {

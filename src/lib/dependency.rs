@@ -5,22 +5,9 @@ use std::collections::{HashMap, HashSet, RingBuf};
 use std::collections::hash_map::{Vacant, Occupied, Keys};
 use std::collections::hash_set::SetItems;
 
-use graphviz as dot;
-use graphviz::maybe_owned_vec::IntoMaybeOwnedVector;
-
 use std::fmt::{mod, Show};
 
-use std::str;
-
-fn ringbuf_to_vec<T>(mut ringbuf: RingBuf<T>) -> Vec<T> {
-  let mut vec = Vec::new();
-
-  while let Some(x) = ringbuf.pop_front() {
-    vec.push(x);
-  }
-
-  return vec;
-}
+use graphviz as dot;
 
 /// Represents a dependency graph.
 ///
@@ -32,24 +19,24 @@ pub struct Graph {
   /// There's a key for every node in the graph, even if
   /// if it doesn't have any edges going out.
   edges: HashMap<u32, HashSet<u32>>,
-  dependencies: HashMap<u32, HashSet<u32>>,
+
+  /// The dependencies a node has.
+  ///
+  /// This has to be stored separately because the direction of the
+  /// edges represents dependency-respecting evaluation order,
+  /// which is the reverse of the dependency relationship.
+  ///
+  /// e.g. the relationship that A depends on B can be represented as
+  /// A -> B, so therefore the evaluation order which respects that
+  /// dependency is the reverse, B -> A
+  reverse: HashMap<u32, HashSet<u32>>,
 }
 
 impl Graph {
   pub fn new() -> Graph {
     Graph {
       edges: HashMap::new(),
-      dependencies: HashMap::new(),
-    }
-  }
-
-  pub fn add_node(&mut self, node: u32) {
-    if let Vacant(entry) = self.edges.entry(node) {
-      entry.set(HashSet::new());
-    }
-
-    if let Vacant(entry) = self.dependencies.entry(node) {
-      entry.set(HashSet::new());
+      reverse: HashMap::new(),
     }
   }
 
@@ -64,7 +51,8 @@ impl Graph {
       Occupied(mut entry) => { entry.get_mut().insert(b); },
     };
 
-    match self.dependencies.entry(b) {
+    // mirror the same thing for reverse
+    match self.reverse.entry(b) {
       Vacant(entry) => {
         let mut hs = HashSet::new();
         hs.insert(a);
@@ -72,8 +60,6 @@ impl Graph {
       },
       Occupied(mut entry) => { entry.get_mut().insert(a); },
     };
-
-    self.add_node(b);
   }
 
   /// The nodes in the graph.
@@ -92,45 +78,27 @@ impl Graph {
     })
   }
 
-  /// The neighbors of a given node.
-  pub fn dependencies_of(&self, node: u32) -> Option<SetItems<u32>> {
-    println!("dependencies: {}", self.dependencies);
-    self.dependencies.get(&node).and_then(|s| {
-      if !s.is_empty() {
-        Some(s.iter())
-      } else {
-        None
-      }
-    })
+  /// The dependents a node has.
+  pub fn dependents_of(&self, node: u32) -> Option<&HashSet<u32>> {
+    self.edges.get(&node)
+  }
+
+  /// The number of dependencies a node has.
+  pub fn dependency_count(&self, node: u32) -> u32 {
+    self.reverse.get(&node).map(|s| s.len()).unwrap_or(0u) as u32
   }
 
   /// Topological ordering starting at the provided node.
   ///
   /// This essentially means: the given node plus all nodes
   /// that depend on it.
-  pub fn resolve_only(&self, node: u32) -> Result<Vec<(u32, u32)>, Vec<u32>> {
+  pub fn resolve_only(&self, node: u32) -> Result<RingBuf<u32>, RingBuf<u32>> {
     Topological::new(self).from(node)
-      .map(|order| {
-        order.iter()
-          .map(|&node| {
-            let deps = self.dependencies.get(&node).unwrap().len() as u32;
-            return (node, deps);
-          })
-          .collect::<Vec<(u32, u32)>>()
-      })
   }
 
   /// Topological ordering of the entire graph.
-  pub fn resolve(&self) -> Result<Vec<(u32, u32)>, Vec<u32>> {
+  pub fn resolve(&self) -> Result<RingBuf<u32>, RingBuf<u32>> {
     Topological::new(self).all()
-      .map(|order| {
-        order.iter()
-          .map(|&node| {
-            let deps = self.dependencies.get(&node).unwrap().len() as u32;
-            return (node, deps);
-          })
-          .collect::<Vec<(u32, u32)>>()
-      })
   }
 
   /// Render the dependency graph with graphviz. Visualize it with:
@@ -165,7 +133,7 @@ impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
   }
 
   fn node_label(&self, n: &Node) -> dot::LabelText {
-    dot::LabelStr(str::Owned(n.to_string()))
+    dot::LabelStr(n.to_string().into_cow())
   }
 }
 
@@ -175,7 +143,7 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
       .nodes()
       .map(|n| *n)
       .collect::<Vec<Node>>()
-      .into_maybe_owned()
+      .into_cow()
   }
 
   fn edges(&self) -> dot::Edges<'a, Edge> {
@@ -187,7 +155,7 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
       }
     }
 
-    edges.into_maybe_owned()
+    edges.into_cow()
   }
 
   fn source(&self, e: &Edge) -> Node {
@@ -223,7 +191,7 @@ struct Topological<'a> {
   topological: RingBuf<u32>,
 
   /// Either an ordering or the path of a cycle.
-  result: Result<Vec<u32>, Vec<u32>>,
+  result: Result<RingBuf<u32>, RingBuf<u32>>,
 }
 
 impl<'a> Topological<'a> {
@@ -235,7 +203,7 @@ impl<'a> Topological<'a> {
       on_stack: HashSet::new(),
       edge_to: HashMap::new(),
       topological: RingBuf::new(),
-      result: Ok(Vec::new()),
+      result: Ok(RingBuf::new()),
     }
   }
 
@@ -275,7 +243,7 @@ impl<'a> Topological<'a> {
             previous = self.edge_to.get(&found);
           }
 
-          self.result = Err(ringbuf_to_vec(path));
+          self.result = Err(path);
         }
       }
     }
@@ -285,23 +253,22 @@ impl<'a> Topological<'a> {
   }
 
   /// recompile the dependencies of `node` and then `node` itself
-  pub fn from(mut self, node: u32)
-     -> Result<Vec<u32>, Vec<u32>> {
+  pub fn from(mut self, node: u32) -> Result<RingBuf<u32>, RingBuf<u32>> {
     self.dfs(node);
 
-    self.result.and(Ok(ringbuf_to_vec(self.topological)))
+    self.result.and(Ok(self.topological))
   }
 
   /// the typical resolution algorithm, returns a topological ordering
   /// of the nodes which honors the dependencies
-  pub fn all(mut self) -> Result<Vec<u32>, Vec<u32>> {
+  pub fn all(mut self) -> Result<RingBuf<u32>, RingBuf<u32>> {
     for &node in self.graph.nodes() {
       if !self.visited.contains(&node) {
         self.dfs(node);
       }
     }
 
-    self.result.and(Ok(ringbuf_to_vec(self.topological)))
+    self.result.and(Ok(self.topological))
   }
 }
 
