@@ -179,14 +179,10 @@ impl Generator {
 
               if let Some(dependents) = self.graph.dependents_of(id) {
                 for job in waiting.iter_mut() {
-                  if dependents.contains(&job.id) {
+                  if dependents.contains(&(job.id as uint)) {
                     job.dependencies -= 1;
                   }
                 }
-                // TODO: THIS IS VERY WRONG, FIX
-                // - for every job in waiting
-                // - if the job is a dependent
-                // -   decrement
               }
 
               println!("after waiting: {}", waiting);
