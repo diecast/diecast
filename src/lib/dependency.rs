@@ -1,16 +1,13 @@
 //! Dependency tracking.
 
-use std::collections::{HashMap, RingBuf, BitvSet};
+use std::collections::{HashMap, HashSet, RingBuf};
+
 use std::collections::hash_map::{Vacant, Occupied, Keys};
-use std::collections::bitv_set::BitPositions;
+use std::collections::hash_set::SetItems;
 
 use std::fmt::{mod, Show};
 
 use graphviz as dot;
-
-// TODO: compare BitvSet to HashSet
-//       - usually better storage ?
-//       - questionable performance? bit iteration vs indirection
 
 /// Represents a dependency graph.
 ///
@@ -21,7 +18,7 @@ pub struct Graph {
   ///
   /// There's a key for every node in the graph, even if
   /// if it doesn't have any edges going out.
-  edges: HashMap<u32, BitvSet>,
+  edges: HashMap<u32, HashSet<u32>>,
 
   /// The dependencies a node has.
   ///
@@ -32,7 +29,7 @@ pub struct Graph {
   /// e.g. the relationship that A depends on B can be represented as
   /// A -> B, so therefore the evaluation order which respects that
   /// dependency is the reverse, B -> A
-  reverse: HashMap<u32, BitvSet>,
+  reverse: HashMap<u32, HashSet<u32>>,
 }
 
 impl Graph {
@@ -47,31 +44,31 @@ impl Graph {
   pub fn add_edge(&mut self, a: u32, b: u32) {
     match self.edges.entry(a) {
       Vacant(entry) => {
-        let mut hs = BitvSet::new();
-        hs.insert(b as uint);
+        let mut hs = HashSet::new();
+        hs.insert(b);
         entry.set(hs);
       },
-      Occupied(mut entry) => { entry.get_mut().insert(b as uint); },
+      Occupied(mut entry) => { entry.get_mut().insert(b); },
     };
 
     // mirror the same thing for reverse
     match self.reverse.entry(b) {
       Vacant(entry) => {
-        let mut hs = BitvSet::new();
-        hs.insert(a as uint);
+        let mut hs = HashSet::new();
+        hs.insert(a);
         entry.set(hs);
       },
-      Occupied(mut entry) => { entry.get_mut().insert(a as uint); },
+      Occupied(mut entry) => { entry.get_mut().insert(a); },
     };
   }
 
   /// The nodes in the graph.
-  pub fn nodes(&self) -> Keys<u32, BitvSet> {
+  pub fn nodes(&self) -> Keys<u32, HashSet<u32>> {
     self.edges.keys()
   }
 
   /// The neighbors of a given node.
-  pub fn neighbors_of(&self, node: u32) -> Option<BitPositions> {
+  pub fn neighbors_of(&self, node: u32) -> Option<SetItems<u32>> {
     self.edges.get(&node).and_then(|s| {
       if !s.is_empty() {
         Some(s.iter())
@@ -82,7 +79,7 @@ impl Graph {
   }
 
   /// The dependents a node has.
-  pub fn dependents_of(&self, node: u32) -> Option<&BitvSet> {
+  pub fn dependents_of(&self, node: u32) -> Option<&HashSet<u32>> {
     self.edges.get(&node)
   }
 
@@ -153,8 +150,8 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
     let mut edges = Vec::new();
 
     for (&source, targets) in self.edges.iter() {
-      for target in targets.iter() {
-        edges.push((source, target as u32));
+      for &target in targets.iter() {
+        edges.push((source, target));
       }
     }
 
@@ -182,10 +179,10 @@ struct Topological<'a> {
   graph: &'a Graph,
 
   /// The nodes that have been visited so far
-  visited: BitvSet,
+  visited: HashSet<u32>,
 
   /// Nodes that are on the path to the current node.
-  on_stack: BitvSet,
+  on_stack: HashSet<u32>,
 
   /// Trace back a path in the case of a cycle.
   edge_to: HashMap<u32, u32>,
@@ -202,8 +199,8 @@ impl<'a> Topological<'a> {
   fn new(graph: &'a Graph) -> Topological<'a> {
     Topological {
       graph: graph,
-      visited: BitvSet::new(),
-      on_stack: BitvSet::new(),
+      visited: HashSet::new(),
+      on_stack: HashSet::new(),
       edge_to: HashMap::new(),
       topological: RingBuf::new(),
       result: Ok(RingBuf::new()),
@@ -215,11 +212,11 @@ impl<'a> Topological<'a> {
   /// This uses a recursive depth-first search, as it facilitates
   /// keeping track of a cycle, if any is present.
   fn dfs(&mut self, node: u32) {
-    self.on_stack.insert(node as uint);
-    self.visited.insert(node as uint);
+    self.on_stack.insert(node);
+    self.visited.insert(node);
 
     if let Some(mut neighbors) = self.graph.neighbors_of(node) {
-      for neighbor in neighbors {
+      for &neighbor in neighbors {
         if self.result.is_err() {
           return;
         }
@@ -228,15 +225,15 @@ impl<'a> Topological<'a> {
         // make sure to add a breadcrumb to trace our path
         // backwards in case there's a cycle
         else if !self.visited.contains(&neighbor) {
-          self.edge_to.insert(neighbor as u32, node);
-          self.dfs(neighbor as u32);
+          self.edge_to.insert(neighbor, node);
+          self.dfs(neighbor);
         }
 
         // cycle detected
         // trace back breadcrumbs to reconstruct the cycle's path
         else if self.on_stack.contains(&neighbor) {
-          let mut path: RingBuf<u32> = RingBuf::new();
-          path.push_front(neighbor as u32);
+          let mut path = RingBuf::new();
+          path.push_front(neighbor);
           path.push_front(node);
 
           let mut previous = self.edge_to.get(&node);
@@ -251,7 +248,7 @@ impl<'a> Topological<'a> {
       }
     }
 
-    self.on_stack.remove(&(node as uint));
+    self.on_stack.remove(&node);
     self.topological.push_front(node);
   }
 
@@ -266,7 +263,7 @@ impl<'a> Topological<'a> {
   /// of the nodes which honors the dependencies
   pub fn all(mut self) -> Result<RingBuf<u32>, RingBuf<u32>> {
     for &node in self.graph.nodes() {
-      if !self.visited.contains(&(node as uint)) {
+      if !self.visited.contains(&node) {
         self.dfs(node);
       }
     }
