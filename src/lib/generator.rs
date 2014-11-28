@@ -14,11 +14,11 @@ use item::Relation::{Reading, Writing, Mapping};
 use dependency::Graph;
 
 pub struct Job {
-  pub id: u32,
+  pub id: uint,
   pub binding: &'static str,
   pub item: Item,
   pub compiler: Arc<Box<Compile + Send + Sync>>,
-  pub dependencies: u32,
+  pub dependencies: uint,
 }
 
 impl Show for Job {
@@ -31,7 +31,7 @@ impl Job {
   pub fn new(binding: &'static str,
              item: Item,
              compiler: Arc<Box<Compile + Send + Sync>>,
-             id: u32)
+             id: uint)
          -> Job {
     Job {
       id: id,
@@ -58,7 +58,7 @@ pub struct Generator {
   paths: Vec<Path>,
 
   /// Mapping the bind name to its items
-  bindings: HashMap<&'static str, Vec<u32>>,
+  bindings: HashMap<&'static str, Vec<uint>>,
 
   /// The jobs
   jobs: Vec<Job>,
@@ -121,7 +121,7 @@ impl Generator {
         let ordered =
           order.iter()
             .map(|&index| {
-              let mut job = optioned[index as uint].take().unwrap();
+              let mut job = optioned[index].take().unwrap();
               job.dependencies = self.graph.dependency_count(index);
               return job;
             })
@@ -147,7 +147,7 @@ impl Generator {
         }
 
         enum Status {
-          Finished(u32),
+          Finished(uint),
         }
 
         let mut completed = 0u;
@@ -223,7 +223,7 @@ impl Generator {
              item: Item,
              compiler: Arc<Box<Compile + Send + Sync>>,
              dependencies: &Option<Vec<&'static str>>) {
-    let index = self.jobs.len() as u32;
+    let index = self.jobs.len();
     self.jobs.push(Job::new(binding, item, compiler, index));
 
     match self.bindings.entry(binding) {
