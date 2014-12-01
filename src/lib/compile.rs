@@ -1,8 +1,5 @@
 //! Compiler behavior.
 
-// use std::collections::ringbuf::RingBuf;
-// use std::collections::Deque;
-
 use item::Item;
 
 /// Behavior of a compiler.
@@ -11,6 +8,19 @@ use item::Item;
 /// reference to the `Item` being compiled.
 pub trait Compile: Send + Sync {
   fn compile(&self, item: &mut Item);
+}
+
+impl<F> Compile for F where F: Fn(&mut Item), F: Send + Sync {
+  fn compile(&self, item: &mut Item) {
+    (*self)(item);
+  }
+}
+
+// TODO: this should be covered by the above someday?
+impl Compile for fn(&mut Item) {
+  fn compile(&self, item: &mut Item) {
+    (*self)(item)
+  }
 }
 
 /// Chain of compilers.
@@ -82,7 +92,7 @@ pub struct Print;
 
 impl Compile for Print {
   fn compile(&self, item: &mut Item) {
-    if let &Some(ref body) = item.body() {
+    if let &Some(ref body) = &item.body {
       ::std::io::stdio::println(body.as_slice());
     } else {
       ::std::io::stdio::println("no body");

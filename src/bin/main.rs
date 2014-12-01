@@ -1,5 +1,7 @@
 #![feature(phase)]
 #![feature(globs)]
+#![feature(if_let)]
+#![feature(unboxed_closures)]
 
 #[phase(plugin, link)]
 extern crate diecast;
@@ -7,6 +9,19 @@ extern crate diecast;
 use diecast::Generator;
 use diecast::generator::Binding;
 use diecast::compile::{CompilerChain, Read, Print};
+use diecast::item::Item;
+
+
+struct DummyValue { age: i32 }
+
+fn read_dummy(item: &mut Item) {
+  if let Some(&DummyValue { age }) = item.data.get::<DummyValue>() {
+    println!("dummy age is: {}", age);
+  }
+  else {
+    println!("no dummy value!");
+  }
+}
 
 fn main() {
   let posts =
@@ -15,6 +30,8 @@ fn main() {
       .compiler(
         CompilerChain::new()
           .link(Read)
+          .link(|&: item: &mut Item| { item.data.insert(DummyValue { age: 9 }); })
+          .link(read_dummy)
           .link(Print));
       // .router(posts_router);
 

@@ -1,16 +1,15 @@
 //! Site generation.
 
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex, TaskPool};
 use std::collections::HashMap;
 use std::collections::hash_map::{Vacant, Occupied};
-use std::sync::TaskPool;
 use std::fmt::{mod, Show};
 
 use pattern::Pattern;
 use route::{mod, Route};
 use compile::{mod, Compile};
 use item::Item;
-use item::Relation::{Reading, Writing, Mapping};
+use item::Relation::{Reading, Writing};
 use dependency::Graph;
 
 pub struct Job {
@@ -23,7 +22,11 @@ pub struct Job {
 
 impl Show for Job {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "#{} [{}] {}, dependencies: {}", self.id, self.binding, self.item, self.dependencies)
+    write!(f, "#{} [{}] {}, dependencies: {}",
+           self.id,
+           self.binding,
+           self.item,
+           self.dependencies)
   }
 }
 
@@ -40,6 +43,10 @@ impl Job {
       compiler: compiler,
       dependencies: 0,
     }
+  }
+
+  pub fn compile(&mut self) {
+    self.compiler.compile(&mut self.item)
   }
 }
 
@@ -159,10 +166,8 @@ impl Generator {
           let stealer = stealer.clone();
 
           task_pool.execute(proc() {
-            let stealer = stealer.lock();
-
-            let job = stealer.recv();
-            // process job
+            let mut job = stealer.lock().recv();
+            job.compile();
             tx.send(Status::Finished(job.id));
           });
         }

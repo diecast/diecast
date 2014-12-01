@@ -21,10 +21,10 @@ pub enum Relation {
 ///
 /// It also includes an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html) which is used to represent miscellaneous data.
 pub struct Item {
-  relation: Relation,
+  pub relation: Relation,
 
   /// The Item's body which will fill the target file.
-  body: Option<String>,
+  pub body: Option<String>,
 
   /// Any additional data (post metadata)
   ///
@@ -33,7 +33,7 @@ pub struct Item {
   /// * Comments
   /// * TOC
   /// * Tags
-  data: AnyMap,
+  pub data: AnyMap,
 }
 
 impl Item {
@@ -52,14 +52,6 @@ impl Item {
       body: None,
       data: AnyMap::new()
     }
-  }
-
-  pub fn body(&self) -> &Option<String> {
-    &self.body
-  }
-
-  pub fn set_body(&mut self, body: Option<String>) {
-    self.body = body;
   }
 
   pub fn read(&mut self) {
@@ -82,10 +74,6 @@ impl Item {
       },
       _ => (),
     }
-  }
-
-  pub fn relation(&self) -> &Relation {
-    &self.relation
   }
 
   pub fn route_to(mut self, to: Path) {
