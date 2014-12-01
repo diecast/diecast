@@ -92,10 +92,12 @@ pub fn write(item: &mut Item) {
 
 /// Compiler that prints the `Item`'s body.
 pub fn print(item: &mut Item) {
+  use std::io::stdio::println;
+
   if let &Some(ref body) = &item.body {
-    ::std::io::stdio::println(body.as_slice());
+    println(body.as_slice());
   } else {
-    ::std::io::stdio::println("no body");
+    println("no body");
   }
 }
 
