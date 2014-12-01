@@ -8,9 +8,9 @@ extern crate diecast;
 
 use diecast::Generator;
 use diecast::generator::Binding;
-use diecast::compile::{CompilerChain, Read, Print};
+use diecast::compile::Compiler;
+use diecast::compile::{read, print};
 use diecast::item::Item;
-
 
 struct DummyValue { age: i32 }
 
@@ -28,19 +28,19 @@ fn main() {
     // TODO: impl Pattern for Binding?
     Binding::new("posts")
       .compiler(
-        CompilerChain::new()
-          .link(Read)
+        Compiler::new()
+          .link(read)
           .link(|&: item: &mut Item| { item.data.insert(DummyValue { age: 9 }); })
+          .barrier()
           .link(read_dummy)
-          .link(Print));
-      // .router(posts_router);
+          .link(print));
 
   let post_index =
     Binding::new("post index")
       .compiler(
-        CompilerChain::new()
-          .link(Read)
-          .link(Print))
+        Compiler::new()
+          .link(read)
+          .link(print))
       .dependencies(vec!["posts"]);
       // TODO: ^ make possible to just do dependencies(posts)?
 

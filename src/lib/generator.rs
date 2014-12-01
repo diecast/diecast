@@ -12,12 +12,20 @@ use item::Item;
 use item::Relation::{Reading, Writing};
 use dependency::Graph;
 
+use self::Status::{Paused, Done};
+
+pub enum Status {
+  Paused,
+  Done,
+}
+
 pub struct Job {
   pub id: uint,
   pub binding: &'static str,
   pub item: Item,
   pub compiler: Arc<Box<Compile + Send + Sync>>,
   pub dependencies: uint,
+  pub status: Status,
 }
 
 impl Show for Job {
@@ -42,11 +50,13 @@ impl Job {
       item: item,
       compiler: compiler,
       dependencies: 0,
+      status: Paused,
     }
   }
 
-  pub fn compile(&mut self) {
-    self.compiler.compile(&mut self.item)
+  pub fn process(&mut self) {
+    self.compiler.compile(&mut self.item);
+    self.status = Done;
   }
 }
 
@@ -153,10 +163,6 @@ impl Generator {
           worker.send(job);
         }
 
-        enum Status {
-          Finished(uint),
-        }
-
         let mut completed = 0u;
 
         // TODO: this needs to keep going until there are no more jobs
@@ -167,22 +173,27 @@ impl Generator {
 
           task_pool.execute(proc() {
             let mut job = stealer.lock().recv();
-            job.compile();
-            tx.send(Status::Finished(job.id));
+            job.process();
+            tx.send(job);
           });
         }
 
         while completed < jobs {
           println!("waiting");
-          match rx.recv() {
-            Status::Finished(id) => {
-              println!("finished {}", id);
+          let current = rx.recv();
+
+          match current.status {
+            Status::Paused => {
+              println!("paused {}", current.id);
+            },
+            Status::Done => {
+              println!("finished {}", current.id);
 
               // decrement dependencies of jobs
               // TODO: can't use neighbors_of because it counts dependents
               println!("before waiting: {}", waiting);
 
-              if let Some(dependents) = self.graph.dependents_of(id) {
+              if let Some(dependents) = self.graph.dependents_of(current.id) {
                 for job in waiting.iter_mut() {
                   if dependents.contains(&job.id) {
                     job.dependencies -= 1;
@@ -298,8 +309,8 @@ impl Binding {
   pub fn new(name: &'static str) -> Binding {
     Binding {
       name: name,
-      compiler: box compile::Stub as Box<Compile + Send + Sync>,
-      router: box route::Identity as Box<Route + Send + Sync>,
+      compiler: box compile::stub as Box<Compile + Send + Sync>,
+      router: box route::identity as Box<Route + Send + Sync>,
       dependencies: None,
     }
   }

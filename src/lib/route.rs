@@ -17,14 +17,23 @@ impl Route for Path {
   }
 }
 
+impl<F> Route for F where F: Fn(&Path) -> Path, F: Send + Sync {
+  fn route(&self, from: &Path) -> Path {
+    (*self)(from)
+  }
+}
+
+// TODO: this should be covered by the above someday?
+impl Route for fn(&Path) -> Path {
+  fn route(&self, from: &Path) -> Path {
+    (*self)(from)
+  }
+}
+
 /// file.txt -> file.txt
 /// gen.route(Identity)
-pub struct Identity;
-
-impl Route for Identity {
-  fn route(&self, from: &Path) -> Path {
-    from.clone()
-  }
+pub fn identity(from: &Path) -> Path {
+  from.clone()
 }
 
 /// file.txt -> file.html
@@ -80,7 +89,7 @@ impl Route for RegexRoute {
     }
 
     // handle failure better
-    Identity.route(from)
+    identity(from)
   }
 }
 

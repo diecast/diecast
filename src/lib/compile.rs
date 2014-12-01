@@ -10,7 +10,9 @@ pub trait Compile: Send + Sync {
   fn compile(&self, item: &mut Item);
 }
 
-impl<F> Compile for F where F: Fn(&mut Item), F: Send + Sync {
+// TODO: Arc impl?
+
+impl<F> Compile for F where F: Fn(&mut Item) + Send + Sync {
   fn compile(&self, item: &mut Item) {
     (*self)(item);
   }
@@ -23,80 +25,77 @@ impl Compile for fn(&mut Item) {
   }
 }
 
+enum Link {
+  Compiler(Box<Compile + Send + Sync>),
+  Barrier,
+}
+
 /// Chain of compilers.
 ///
 /// Maintains a list of compilers and executes them
 /// in the order they were added.
-pub struct CompilerChain {
-  compilers: Vec<Box<Compile + Send + Sync>>,
+pub struct Compiler {
+  compilers: Vec<Link>,
   // maintain current progress as an iterator
   // pass: Items<'a, Box<Compile + Send + Sync>>,
 }
 
-impl CompilerChain {
-  pub fn new() -> CompilerChain {
-    CompilerChain { compilers: vec![] }
+impl Compiler {
+  pub fn new() -> Compiler {
+    Compiler { compilers: vec![] }
   }
 
   /// Add another compiler to the chain.
   ///
   /// ```ignore
   /// let chain =
-  ///   CompilerChain::new()
+  ///   Compiler::new()
   ///     .link(ReadBody)
   ///     .link(PrintBody);
   /// ```
-  pub fn link<C>(mut self, compiler: C) -> CompilerChain
+  pub fn link<C>(mut self, compiler: C) -> Compiler
     where C: Compile {
-    self.compilers.push(box compiler);
+    self.compilers.push(Link::Compiler(box compiler));
+    self
+  }
+
+  pub fn barrier(mut self) -> Compiler {
+    self.compilers.push(Link::Barrier);
     self
   }
 }
 
-impl Compile for CompilerChain {
+impl Compile for Compiler {
   fn compile(&self, item: &mut Item) {
     for compiler in self.compilers.iter() {
-      compiler.compile(item);
+      match *compiler {
+        Link::Compiler(ref compiler) => compiler.compile(item),
+        Link::Barrier => (),
+      }
     }
   }
 }
 
-pub struct Stub;
-
-impl Compile for Stub {
-  fn compile(&self, item: &mut Item) {
-    println!("no compiler established for: {}", item);
-  }
+pub fn stub(item: &mut Item) {
+  println!("no compiler established for: {}", item);
 }
 
 /// Compiler that reads the `Item`'s body.
-pub struct Read;
-
-impl Compile for Read {
-  fn compile(&self, item: &mut Item) {
-    item.read();
-  }
+pub fn read(item: &mut Item) {
+  item.read();
 }
 
 /// Compiler that writes the `Item`'s body.
-pub struct Write;
-
-impl Compile for Write {
-  fn compile(&self, item: &mut Item) {
-    item.write();
-  }
+pub fn write(item: &mut Item) {
+  item.write();
 }
 
 /// Compiler that prints the `Item`'s body.
-pub struct Print;
-
-impl Compile for Print {
-  fn compile(&self, item: &mut Item) {
-    if let &Some(ref body) = &item.body {
-      ::std::io::stdio::println(body.as_slice());
-    } else {
-      ::std::io::stdio::println("no body");
-    }
+pub fn print(item: &mut Item) {
+  if let &Some(ref body) = &item.body {
+    ::std::io::stdio::println(body.as_slice());
+  } else {
+    ::std::io::stdio::println("no body");
   }
 }
 
