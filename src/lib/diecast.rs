@@ -17,6 +17,7 @@
 #![feature(while_let)]
 #![feature(globs)]
 #![feature(unboxed_closures)]
+#![feature(slicing_syntax)]
 
 extern crate glob;
 extern crate anymap;

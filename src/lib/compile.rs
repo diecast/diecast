@@ -25,7 +25,7 @@ impl Compile for fn(&mut Item) {
   }
 }
 
-enum Link {
+pub enum Link {
   Compiler(Box<Compile + Send + Sync>),
   Barrier,
 }
@@ -35,14 +35,14 @@ enum Link {
 /// Maintains a list of compilers and executes them
 /// in the order they were added.
 pub struct Compiler {
-  compilers: Vec<Link>,
+  pub chain: Vec<Link>,
   // maintain current progress as an iterator
   // pass: Items<'a, Box<Compile + Send + Sync>>,
 }
 
 impl Compiler {
   pub fn new() -> Compiler {
-    Compiler { compilers: vec![] }
+    Compiler { chain: vec![] }
   }
 
   /// Add another compiler to the chain.
@@ -55,19 +55,19 @@ impl Compiler {
   /// ```
   pub fn link<C>(mut self, compiler: C) -> Compiler
     where C: Compile {
-    self.compilers.push(Link::Compiler(box compiler));
+    self.chain.push(Link::Compiler(box compiler));
     self
   }
 
   pub fn barrier(mut self) -> Compiler {
-    self.compilers.push(Link::Barrier);
+    self.chain.push(Link::Barrier);
     self
   }
 }
 
 impl Compile for Compiler {
   fn compile(&self, item: &mut Item) {
-    for compiler in self.compilers.iter() {
+    for compiler in self.chain.iter() {
       match *compiler {
         Link::Compiler(ref compiler) => compiler.compile(item),
         Link::Barrier => (),
