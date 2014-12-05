@@ -173,11 +173,11 @@ impl Generator {
         println!("order: {}", ordered);
 
         let total_jobs = ordered.len();
-        let (ready, mut waiting) = ordered.partition(|ref job| job.dependencies == 0);
         let task_pool = TaskPool::new(4u);
-        let (result_tx, result_rx) = channel();
         let (job_tx, job_rx) = channel();
+        let (result_tx, result_rx) = channel();
         let job_rx = Arc::new(Mutex::new(job_rx));
+        let (ready, mut waiting) = ordered.partition(|ref job| job.dependencies == 0);
 
         println!("jobs: {}", total_jobs);
 
