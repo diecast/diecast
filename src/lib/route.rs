@@ -23,13 +23,6 @@ impl<F> Route for F where F: Fn(&Path) -> Path, F: Send + Sync {
   }
 }
 
-// TODO: this should be covered by the above someday?
-impl Route for fn(&Path) -> Path {
-  fn route(&self, from: &Path) -> Path {
-    (*self)(from)
-  }
-}
-
 /// file.txt -> file.txt
 /// gen.route(Identity)
 pub fn identity(from: &Path) -> Path {

@@ -7,29 +7,20 @@ use std::fmt::{mod, Show};
 
 use pattern::Pattern;
 use route::{mod, Route};
-use compile::{mod, Compile, Compiler, Link};
+use compile::{mod, Compile, Compiler, Chain};
 use item::Item;
 use item::Relation::{Reading, Writing};
 use dependency::Graph;
 
-use self::Status::{Paused, Done, Processing};
-
-pub enum Status {
-  Processing,
-  Paused,
-  Done,
-}
+use compile::Status::{Paused, Done, Stopped};
 
 pub struct Job {
   pub id: uint,
   pub binding: &'static str,
 
   pub item: Item,
-  pub compiler: Arc<Compiler>,
-  pub position: uint,
-
+  pub compiler: Compiler,
   pub dependencies: uint,
-  pub status: Status,
 }
 
 impl Show for Job {
@@ -45,7 +36,7 @@ impl Show for Job {
 impl Job {
   pub fn new(binding: &'static str,
              item: Item,
-             compiler: Arc<Compiler>,
+             compiler: Compiler,
              id: uint)
          -> Job {
     Job {
@@ -53,33 +44,12 @@ impl Job {
       binding: binding,
       item: item,
       compiler: compiler,
-      position: 0,
       dependencies: 0,
-      status: Paused,
     }
   }
 
-  pub fn process(&mut self) {
-    self.status = Processing;
-
-    let mut slice = self.compiler.chain[self.position..].iter();
-
-    for link in slice {
-      println!("#{} is at position {}", self.id, self.position);
-      self.position += 1;
-
-      match link {
-        &Link::Compiler(ref compiler) => {
-          compiler.compile(&mut self.item);
-        },
-        &Link::Barrier => {
-          self.status = Paused;
-          return;
-        },
-      }
-    }
-
-    self.status = Done;
+  fn process(&mut self) {
+    self.compiler.compile(&mut self.item);
   }
 }
 
@@ -209,11 +179,11 @@ impl Generator {
           let current = result_rx.recv();
           println!("received");
 
-          match current.status {
-            Status::Processing => {
-              println!("processing {}", current.id);
+          match current.compiler.status {
+            Stopped => {
+              println!("stopped {}", current.id);
             },
-            Status::Paused => {
+            Paused => {
               println!("paused {}", current.id);
 
               let total = self.bindings[current.binding].len();
@@ -253,7 +223,7 @@ impl Generator {
                 }
               }
             },
-            Status::Done => {
+            Done => {
               println!("finished {}", current.id);
 
               // decrement dependencies of jobs
@@ -304,7 +274,7 @@ impl Generator {
   fn add_job(&mut self,
              binding: &'static str,
              item: Item,
-             compiler: Arc<Compiler>,
+             compiler: Compiler,
              dependencies: &Option<Vec<&'static str>>) {
     let index = self.jobs.len();
     self.jobs.push(Job::new(binding, item, compiler, index));
@@ -326,7 +296,7 @@ impl Generator {
   }
 
   pub fn creating(mut self, path: Path, binding: Binding) -> Generator {
-      let compiler = Arc::new(binding.compiler);
+      let compiler = binding.compiler;
       let target = self.output.join(path);
 
       self.add_job(
@@ -342,8 +312,6 @@ impl Generator {
     where P: Pattern + Send + Sync {
       use std::mem;
 
-      let compiler = Arc::new(binding.compiler);
-
       // stupid hack to trick borrowck
       let paths = mem::replace(&mut self.paths, Vec::new());
 
@@ -354,7 +322,7 @@ impl Generator {
           self.add_job(
             binding.name,
             Item::new(Reading(path.clone())),
-            compiler.clone(),
+            binding.compiler.clone(),
             &binding.dependencies);
         }
       }
@@ -376,14 +344,14 @@ impl Binding {
   pub fn new(name: &'static str) -> Binding {
     Binding {
       name: name,
-      compiler: Compiler::new().link(compile::stub),
+      compiler: Compiler::new(Chain::only(compile::stub)),
       router: box route::identity as Box<Route + Send + Sync>,
       dependencies: None,
     }
   }
 
-  pub fn compiler(mut self, compiler: Compiler) -> Binding {
-    self.compiler = compiler;
+  pub fn compiler(mut self, chain: Chain) -> Binding {
+    self.compiler = Compiler::new(chain);
     return self;
   }
 

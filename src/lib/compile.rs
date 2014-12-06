@@ -1,6 +1,9 @@
 //! Compiler behavior.
 
+use std::sync::Arc;
+
 use item::Item;
+use self::Status::{Stopped, Paused, Done};
 
 /// Behavior of a compiler.
 ///
@@ -18,16 +21,47 @@ impl<F> Compile for F where F: Fn(&mut Item) + Send + Sync {
   }
 }
 
-// TODO: this should be covered by the above someday?
-impl Compile for fn(&mut Item) {
-  fn compile(&self, item: &mut Item) {
-    (*self)(item)
-  }
-}
-
 pub enum Link {
   Compiler(Box<Compile + Send + Sync>),
   Barrier,
+}
+
+#[deriving(Clone)]
+pub enum Status {
+  Stopped,
+  Paused,
+  Done,
+}
+
+pub struct Chain {
+  chain: Vec<Link>,
+}
+
+impl Chain {
+  pub fn new() -> Chain {
+    Chain { chain: Vec::new() }
+  }
+
+  pub fn only<C>(compiler: C) -> Chain
+    where C: Compile {
+    Chain { chain: vec![Link::Compiler(box compiler as Box<Compile + Send + Sync>)] }
+  }
+
+  pub fn link<C>(mut self, compiler: C) -> Chain
+    where C: Compile {
+    // create a chainbuilder and wrap that in this
+    self.chain.push(Link::Compiler(box compiler as Box<Compile + Send + Sync>));
+    self
+  }
+
+  pub fn barrier(mut self) -> Chain {
+    self.chain.push(Link::Barrier);
+    self
+  }
+
+  pub fn build(mut self) -> Vec<Link> {
+    self.chain
+  }
 }
 
 /// Chain of compilers.
@@ -35,44 +69,46 @@ pub enum Link {
 /// Maintains a list of compilers and executes them
 /// in the order they were added.
 pub struct Compiler {
-  pub chain: Vec<Link>,
-  // maintain current progress as an iterator
-  // pass: Items<'a, Box<Compile + Send + Sync>>,
+  pub chain: Arc<Vec<Link>>,
+  pub status: Status,
+  position: uint,
+}
+
+impl Clone for Compiler {
+  fn clone(&self) -> Compiler {
+    Compiler {
+      chain: self.chain.clone(),
+      status: self.status.clone(),
+      position: self.position.clone(),
+    }
+  }
 }
 
 impl Compiler {
-  pub fn new() -> Compiler {
-    Compiler { chain: vec![] }
+  pub fn new(chain: Chain) -> Compiler {
+    Compiler {
+      chain: Arc::new(chain.build()),
+      position: 0,
+      status: Status::Stopped,
+    }
   }
 
-  /// Add another compiler to the chain.
-  ///
-  /// ```ignore
-  /// let chain =
-  ///   Compiler::new()
-  ///     .link(ReadBody)
-  ///     .link(PrintBody);
-  /// ```
-  pub fn link<C>(mut self, compiler: C) -> Compiler
-    where C: Compile {
-    self.chain.push(Link::Compiler(box compiler));
-    self
-  }
+  pub fn compile(&mut self, item: &mut Item) {
+    let mut slice = self.chain[self.position..].iter();
 
-  pub fn barrier(mut self) -> Compiler {
-    self.chain.push(Link::Barrier);
-    self
-  }
-}
+    for link in slice {
+      self.position += 1;
 
-impl Compile for Compiler {
-  fn compile(&self, item: &mut Item) {
-    for compiler in self.chain.iter() {
-      match *compiler {
-        Link::Compiler(ref compiler) => compiler.compile(item),
-        Link::Barrier => (),
+      match link {
+        &Link::Compiler(ref compiler) => compiler.compile(item),
+        &Link::Barrier => {
+          self.status = Paused;
+          return;
+        },
       }
     }
+
+    self.status = Done;
   }
 }
 
