@@ -274,20 +274,15 @@ impl<'a> Topological<'a> {
 
 #[cfg(test)]
 mod test {
-  use item::Item;
   use super::Graph;
   use std::io::File;
 
   #[test]
   fn detect_cycles() {
-    let a = 1;
-    let b = 2;
-    let c = 3;
-
     let mut graph = Graph::new();
-    graph.add_edge(a, b);
-    graph.add_edge(b, c);
-    graph.add_edge(c, a);
+    graph.add_edge(1, 2);
+    graph.add_edge(2, 3);
+    graph.add_edge(3, 1);
 
     let cycle = graph.resolve();
 
@@ -296,43 +291,29 @@ mod test {
 
   #[test]
   fn resolve_all() {
-    let item0 = 0;
-    let item1 = 1;
-    let item2 = 2;
-    let item3 = 3;
-    let item4 = 4;
-    let item5 = 5;
-    let item6 = 6;
-    let item7 = 7;
-    let item8 = 8;
-    let item9 = 9;
-    let item10 = 10;
-    let item11 = 11;
-    let item12 = 12;
-
     let mut graph = Graph::new();
 
-    graph.add_edge(item8, item7);
-    graph.add_edge(item7, item6);
+    graph.add_edge(8, 7);
+    graph.add_edge(7, 6);
 
-    graph.add_edge(item6, item9);
-    graph.add_edge(item9, item10);
-    graph.add_edge(item9, item12);
+    graph.add_edge(6, 9);
+    graph.add_edge(9, 10);
+    graph.add_edge(9, 12);
 
-    graph.add_edge(item9, item11);
-    graph.add_edge(item11, item12);
+    graph.add_edge(9, 11);
+    graph.add_edge(11, 12);
 
-    graph.add_edge(item6, item4);
+    graph.add_edge(6, 4);
 
-    graph.add_edge(item0, item6);
-    graph.add_edge(item0, item1);
-    graph.add_edge(item0, item5);
+    graph.add_edge(0, 6);
+    graph.add_edge(0, 1);
+    graph.add_edge(0, 5);
 
-    graph.add_edge(item5, item4);
+    graph.add_edge(5, 4);
 
-    graph.add_edge(item2, item0);
-    graph.add_edge(item2, item3);
-    graph.add_edge(item3, item5);
+    graph.add_edge(2, 0);
+    graph.add_edge(2, 3);
+    graph.add_edge(3, 5);
 
     let decomposed = graph.resolve();
 
@@ -341,45 +322,31 @@ mod test {
 
   #[test]
   fn resolve_only() {
-    let item0 = 0;
-    let item1 = 1;
-    let item2 = 2;
-    let item3 = 3;
-    let item4 = 4;
-    let item5 = 5;
-    let item6 = 6;
-    let item7 = 7;
-    let item8 = 8;
-    let item9 = 9;
-    let item10 = 10;
-    let item11 = 11;
-    let item12 = 12;
-
     let mut graph = Graph::new();
 
-    graph.add_edge(item8, item7);
-    graph.add_edge(item7, item6);
+    graph.add_edge(8, 7);
+    graph.add_edge(7, 6);
 
-    graph.add_edge(item6, item9);
-    graph.add_edge(item9, item10);
-    graph.add_edge(item9, item12);
+    graph.add_edge(6, 9);
+    graph.add_edge(9, 10);
+    graph.add_edge(9, 12);
 
-    graph.add_edge(item9, item11);
-    graph.add_edge(item11, item12);
+    graph.add_edge(9, 11);
+    graph.add_edge(11, 12);
 
-    graph.add_edge(item6, item4);
+    graph.add_edge(6, 4);
 
-    graph.add_edge(item0, item6);
-    graph.add_edge(item0, item1);
-    graph.add_edge(item0, item5);
+    graph.add_edge(0, 6);
+    graph.add_edge(0, 1);
+    graph.add_edge(0, 5);
 
-    graph.add_edge(item5, item4);
+    graph.add_edge(5, 4);
 
-    graph.add_edge(item2, item0);
-    graph.add_edge(item2, item3);
-    graph.add_edge(item3, item5);
+    graph.add_edge(2, 0);
+    graph.add_edge(2, 3);
+    graph.add_edge(3, 5);
 
-    let resolve_single = graph.resolve_only(item6);
+    let resolve_single = graph.resolve_only(6);
 
     assert!(resolve_single.is_ok());
   }
@@ -388,43 +355,29 @@ mod test {
   fn render() {
     use std::io::fs::{PathExtensions, unlink};
 
-    let item0 = 0;
-    let item1 = 1;
-    let item2 = 2;
-    let item3 = 3;
-    let item4 = 4;
-    let item5 = 5;
-    let item6 = 6;
-    let item7 = 7;
-    let item8 = 8;
-    let item9 = 9;
-    let item10 = 10;
-    let item11 = 11;
-    let item12 = 12;
-
     let mut graph = Graph::new();
 
-    graph.add_edge(item8, item7);
-    graph.add_edge(item7, item6);
+    graph.add_edge(8, 7);
+    graph.add_edge(7, 6);
 
-    graph.add_edge(item6, item9);
-    graph.add_edge(item9, item10);
-    graph.add_edge(item9, item12);
+    graph.add_edge(6, 9);
+    graph.add_edge(9, 10);
+    graph.add_edge(9, 12);
 
-    graph.add_edge(item9, item11);
-    graph.add_edge(item11, item12);
+    graph.add_edge(9, 11);
+    graph.add_edge(11, 12);
 
-    graph.add_edge(item6, item4);
+    graph.add_edge(6, 4);
 
-    graph.add_edge(item0, item6);
-    graph.add_edge(item0, item1);
-    graph.add_edge(item0, item5);
+    graph.add_edge(0, 6);
+    graph.add_edge(0, 1);
+    graph.add_edge(0, 5);
 
-    graph.add_edge(item5, item4);
+    graph.add_edge(5, 4);
 
-    graph.add_edge(item2, item0);
-    graph.add_edge(item2, item3);
-    graph.add_edge(item3, item5);
+    graph.add_edge(2, 0);
+    graph.add_edge(2, 3);
+    graph.add_edge(3, 5);
 
     let dot = Path::new("deps.dot");
 
