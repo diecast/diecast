@@ -277,9 +277,38 @@ mod test {
   use super::Graph;
   use std::io::File;
 
+  fn helper_graph() -> Graph {
+    let mut graph = Graph::new();
+
+    graph.add_edge(8, 7);
+    graph.add_edge(7, 6);
+
+    graph.add_edge(6, 9);
+    graph.add_edge(9, 10);
+    graph.add_edge(9, 12);
+
+    graph.add_edge(9, 11);
+    graph.add_edge(11, 12);
+
+    graph.add_edge(6, 4);
+
+    graph.add_edge(0, 6);
+    graph.add_edge(0, 1);
+    graph.add_edge(0, 5);
+
+    graph.add_edge(5, 4);
+
+    graph.add_edge(2, 0);
+    graph.add_edge(2, 3);
+    graph.add_edge(3, 5);
+
+    return graph;
+  }
+
   #[test]
   fn detect_cycles() {
     let mut graph = Graph::new();
+
     graph.add_edge(1, 2);
     graph.add_edge(2, 3);
     graph.add_edge(3, 1);
@@ -291,29 +320,7 @@ mod test {
 
   #[test]
   fn resolve_all() {
-    let mut graph = Graph::new();
-
-    graph.add_edge(8, 7);
-    graph.add_edge(7, 6);
-
-    graph.add_edge(6, 9);
-    graph.add_edge(9, 10);
-    graph.add_edge(9, 12);
-
-    graph.add_edge(9, 11);
-    graph.add_edge(11, 12);
-
-    graph.add_edge(6, 4);
-
-    graph.add_edge(0, 6);
-    graph.add_edge(0, 1);
-    graph.add_edge(0, 5);
-
-    graph.add_edge(5, 4);
-
-    graph.add_edge(2, 0);
-    graph.add_edge(2, 3);
-    graph.add_edge(3, 5);
+    let mut graph = helper_graph();
 
     let decomposed = graph.resolve();
 
@@ -322,29 +329,7 @@ mod test {
 
   #[test]
   fn resolve_only() {
-    let mut graph = Graph::new();
-
-    graph.add_edge(8, 7);
-    graph.add_edge(7, 6);
-
-    graph.add_edge(6, 9);
-    graph.add_edge(9, 10);
-    graph.add_edge(9, 12);
-
-    graph.add_edge(9, 11);
-    graph.add_edge(11, 12);
-
-    graph.add_edge(6, 4);
-
-    graph.add_edge(0, 6);
-    graph.add_edge(0, 1);
-    graph.add_edge(0, 5);
-
-    graph.add_edge(5, 4);
-
-    graph.add_edge(2, 0);
-    graph.add_edge(2, 3);
-    graph.add_edge(3, 5);
+    let mut graph = helper_graph();
 
     let resolve_single = graph.resolve_only(6);
 
@@ -355,29 +340,7 @@ mod test {
   fn render() {
     use std::io::fs::{PathExtensions, unlink};
 
-    let mut graph = Graph::new();
-
-    graph.add_edge(8, 7);
-    graph.add_edge(7, 6);
-
-    graph.add_edge(6, 9);
-    graph.add_edge(9, 10);
-    graph.add_edge(9, 12);
-
-    graph.add_edge(9, 11);
-    graph.add_edge(11, 12);
-
-    graph.add_edge(6, 4);
-
-    graph.add_edge(0, 6);
-    graph.add_edge(0, 1);
-    graph.add_edge(0, 5);
-
-    graph.add_edge(5, 4);
-
-    graph.add_edge(2, 0);
-    graph.add_edge(2, 3);
-    graph.add_edge(3, 5);
+    let mut graph = helper_graph();
 
     let dot = Path::new("deps.dot");
 
