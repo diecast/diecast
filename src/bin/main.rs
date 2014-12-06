@@ -25,7 +25,6 @@ fn read_dummy(item: &mut Item) {
 
 fn main() {
   let posts =
-    // TODO: impl Pattern for Binding?
     Binding::new("posts")
       .compiler(
         Chain::new()
