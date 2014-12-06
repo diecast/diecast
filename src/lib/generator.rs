@@ -104,21 +104,10 @@ impl Generator {
 }
 
 impl Generator {
+  // ALTERNATIVE
+  // have graph operate on binding names
+  // this cuts down on node count
   pub fn generate(mut self) {
-    // ALTERNATIVE
-    // push a map of name -> binding
-    // add_node for every name
-    // dependency reg. operates on name, e.g. "posts"
-    // once the name topological order is computed,
-    //   loop through each (name, binding) in the map
-    //   and do output.extend(binding.items)
-
-    // job should include an index as given by the graph order
-    // the graph should operate entirely based on the indices
-
-    // TODO: dependency enforcement
-    //       partition ordered based on dependencies = 0
-
     match self.graph.resolve() {
       Ok(order) => {
         use std::mem;
@@ -159,7 +148,6 @@ impl Generator {
 
         let mut completed = 0u;
 
-        // TODO: this needs to keep going until there are no more jobs
         for i in range(0, total_jobs) {
           println!("loop {}", i);
           let result_tx = result_tx.clone();
@@ -200,7 +188,9 @@ impl Generator {
                 },
               };
 
-              println!("paused so far ({}): {}", self.paused[binding].len(), self.paused[binding]);
+              println!("paused so far ({}): {}",
+                       self.paused[binding].len(),
+                       self.paused[binding]);
               println!("total to pause: {}", total);
               println!("finished: {}", finished);
 
@@ -227,7 +217,6 @@ impl Generator {
               println!("finished {}", current.id);
 
               // decrement dependencies of jobs
-              // TODO: can't use neighbors_of because it counts dependents
               println!("before waiting: {}", waiting);
 
               if let Some(dependents) = self.graph.dependents_of(current.id) {
@@ -250,7 +239,6 @@ impl Generator {
                 job_tx.send(job);
               }
 
-              // if paused, worker.push(job_again)
               completed += 1;
               println!("completed {}", completed);
             },

@@ -84,14 +84,21 @@ impl Pattern for Regex {
   }
 }
 
-// TODO: should this be for glob::Pattern?
-//       would avoid recreating the Pattern
-//       for each match check
-
+// TODO: consider making &str impl be exact match?
 /// Treat string slices as globs.
+///
+/// This simply converts the string to glob::Pattern.
+/// It's much more efficient to just use the glob::Pattern
+/// to begin with.
 impl<'a> Pattern for &'a str {
   fn matches(&self, p: &Path) -> bool {
     glob::Pattern::new(*self).matches_path(p)
+  }
+}
+
+impl Pattern for glob::Pattern {
+  fn matches(&self, p: &Path) -> bool {
+    self.matches_path(p)
   }
 }
 

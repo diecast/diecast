@@ -13,8 +13,6 @@ pub trait Compile: Send + Sync {
   fn compile(&self, item: &mut Item);
 }
 
-// TODO: Arc impl?
-
 impl<F> Compile for F where F: Fn(&mut Item) + Send + Sync {
   fn compile(&self, item: &mut Item) {
     (*self)(item);
@@ -49,7 +47,6 @@ impl Chain {
 
   pub fn link<C>(mut self, compiler: C) -> Chain
     where C: Compile {
-    // create a chainbuilder and wrap that in this
     self.chain.push(Link::Compiler(box compiler as Box<Compile + Send + Sync>));
     self
   }
