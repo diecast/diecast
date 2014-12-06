@@ -107,7 +107,7 @@ impl Generator {
   // ALTERNATIVE
   // have graph operate on binding names
   // this cuts down on node count
-  pub fn generate(mut self) {
+  pub fn build(mut self) {
     match self.graph.resolve() {
       Ok(order) => {
         use std::mem;

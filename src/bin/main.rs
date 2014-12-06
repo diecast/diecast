@@ -50,5 +50,5 @@ fn main() {
 
   println!("generating");
 
-  gen.generate();
+  gen.build();
 }
