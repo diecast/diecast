@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use item::Item;
-use self::Status::{Stopped, Paused, Done};
 
 /// Behavior of a compiler.
 ///
@@ -99,13 +98,13 @@ impl Compiler {
       match link {
         &Link::Compiler(ref compiler) => compiler.compile(item),
         &Link::Barrier => {
-          self.status = Paused;
+          self.status = Status::Paused;
           return;
         },
       }
     }
 
-    self.status = Done;
+    self.status = Status::Done;
   }
 }
 
