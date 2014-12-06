@@ -8,8 +8,8 @@ extern crate diecast;
 
 use diecast::Generator;
 use diecast::generator::Binding;
-use diecast::compile::Chain;
-use diecast::compile::{read, print};
+use diecast::compiler::Chain;
+use diecast::compiler::{read, print};
 use diecast::item::Item;
 
 struct DummyValue { age: i32 }

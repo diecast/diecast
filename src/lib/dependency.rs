@@ -320,7 +320,7 @@ mod test {
 
   #[test]
   fn resolve_all() {
-    let mut graph = helper_graph();
+    let graph = helper_graph();
 
     let decomposed = graph.resolve();
 
@@ -329,7 +329,7 @@ mod test {
 
   #[test]
   fn resolve_only() {
-    let mut graph = helper_graph();
+    let graph = helper_graph();
 
     let resolve_single = graph.resolve_only(6);
 
@@ -340,7 +340,7 @@ mod test {
   fn render() {
     use std::io::fs::{PathExtensions, unlink};
 
-    let mut graph = helper_graph();
+    let graph = helper_graph();
 
     let dot = Path::new("deps.dot");
 

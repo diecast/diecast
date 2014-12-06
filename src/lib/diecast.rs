@@ -30,15 +30,15 @@ extern crate regex_macros;
 
 pub use pattern::Pattern;
 pub use generator::Generator;
-pub use compile::Compile;
+pub use compiler::Compile;
 pub use item::Item;
 
 pub mod macros;
 pub mod deploy;
 pub mod pattern;
 pub mod item;
-pub mod route;
-pub mod compile;
+pub mod router;
+pub mod compiler;
 pub mod generator;
 pub mod dependency;
 

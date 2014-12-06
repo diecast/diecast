@@ -6,13 +6,13 @@ use std::collections::hash_map::{Vacant, Occupied};
 use std::fmt::{mod, Show};
 
 use pattern::Pattern;
-use route::{mod, Route};
-use compile::{mod, Compile, Compiler, Chain};
+use router::{mod, Route};
+use compiler::{mod, Compile, Compiler, Chain};
 use item::Item;
 use item::Relation::{Reading, Writing};
 use dependency::Graph;
 
-use compile::Status::{Paused, Done, Stopped};
+use compiler::Status::{Paused, Done, Stopped};
 
 pub struct Job {
   pub id: uint,
@@ -332,8 +332,8 @@ impl Binding {
   pub fn new(name: &'static str) -> Binding {
     Binding {
       name: name,
-      compiler: Compiler::new(Chain::only(compile::stub)),
-      router: box route::identity as Box<Route + Send + Sync>,
+      compiler: Compiler::new(Chain::only(compiler::stub)),
+      router: box router::identity as Box<Route + Send + Sync>,
       dependencies: None,
     }
   }
