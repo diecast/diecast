@@ -8,7 +8,7 @@ extern crate diecast;
 
 use diecast::Generator;
 use diecast::generator::Binding;
-use diecast::compile::{Compiler, Chain};
+use diecast::compile::Chain;
 use diecast::compile::{read, print};
 use diecast::item::Item;
 

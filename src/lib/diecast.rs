@@ -1,6 +1,4 @@
 #![crate_name = "diecast"]
-#![comment = "Language-Agnostic Static Site Generator in Rust"]
-#![license = "BSD"]
 
 // TODO: when ready, this prevents it from building
 //       if there are missing docs or warnings

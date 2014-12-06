@@ -56,7 +56,7 @@ impl Chain {
     self
   }
 
-  pub fn build(mut self) -> Vec<Link> {
+  pub fn build(self) -> Vec<Link> {
     self.chain
   }
 }
