@@ -1,6 +1,5 @@
 #![feature(phase)]
 #![feature(globs)]
-#![feature(if_let)]
 #![feature(unboxed_closures)]
 
 #[phase(plugin, link)]
@@ -29,7 +28,9 @@ fn main() {
       .compiler(
         Chain::new()
           .link(read)
-          .link(|&: item: &mut Item| { item.data.insert(DummyValue { age: 9 }); })
+          .link(|&: item: &mut Item| {
+            item.data.insert(DummyValue { age: 9 });
+          })
           .barrier()
           .link(read_dummy)
           .link(print));

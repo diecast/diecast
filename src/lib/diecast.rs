@@ -7,12 +7,9 @@
 
 //! This crate facilitates the creation of static site generators.
 
-#![feature(tuple_indexing)]
 #![feature(macro_rules)]
 #![feature(phase)]
 #![feature(default_type_params)]
-#![feature(if_let)]
-#![feature(while_let)]
 #![feature(globs)]
 #![feature(unboxed_closures)]
 #![feature(slicing_syntax)]
