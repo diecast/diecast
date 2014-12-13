@@ -21,5 +21,8 @@ rpath = true
 
 [dependencies]
 glob = "*"
-anymap = "*"
+
+[dependencies.anymap]
+git = "https://github.com/chris-morgan/anymap.git"
+branch = "clone"
 

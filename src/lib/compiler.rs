@@ -2,19 +2,19 @@
 
 use std::sync::Arc;
 
-use item::Item;
+use item::{Item, Dependencies};
 
 /// Behavior of a compiler.
 ///
 /// There's a single method that takes a mutable
 /// reference to the `Item` being compiled.
 pub trait Compile: Send + Sync {
-  fn compile(&self, item: &mut Item);
+  fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>);
 }
 
-impl<F> Compile for F where F: Fn(&mut Item) + Send + Sync {
-  fn compile(&self, item: &mut Item) {
-    (*self)(item);
+impl<F> Compile for F where F: Fn(&mut Item, Option<Dependencies>) + Send + Sync {
+  fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
+    (*self)(item, deps);
   }
 }
 
@@ -89,14 +89,14 @@ impl Compiler {
     }
   }
 
-  pub fn compile(&mut self, item: &mut Item) {
+  pub fn compile(&mut self, item: &mut Item, deps: Option<Dependencies>) {
     let mut slice = self.chain[self.position..].iter();
 
     for link in slice {
       self.position += 1;
 
       match link {
-        &Link::Compiler(ref compiler) => compiler.compile(item),
+        &Link::Compiler(ref compiler) => compiler.compile(item, deps.clone()),
         &Link::Barrier => {
           self.status = Status::Paused;
           return;
@@ -108,22 +108,22 @@ impl Compiler {
   }
 }
 
-pub fn stub(item: &mut Item) {
+pub fn stub(item: &mut Item, _deps: Option<Dependencies>) {
   println!("no compiler established for: {}", item);
 }
 
 /// Compiler that reads the `Item`'s body.
-pub fn read(item: &mut Item) {
+pub fn read(item: &mut Item, _deps: Option<Dependencies>) {
   item.read();
 }
 
 /// Compiler that writes the `Item`'s body.
-pub fn write(item: &mut Item) {
+pub fn write(item: &mut Item, _deps: Option<Dependencies>) {
   item.write();
 }
 
 /// Compiler that prints the `Item`'s body.
-pub fn print(item: &mut Item) {
+pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
   use std::io::stdio::println;
 
   if let &Some(ref body) = &item.body {

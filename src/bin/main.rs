@@ -9,15 +9,15 @@ use diecast::Generator;
 use diecast::generator::Binding;
 use diecast::compiler::Chain;
 use diecast::compiler::{read, print};
-use diecast::item::Item;
+use diecast::item::{Item, Dependencies};
 
+#[deriving(Clone)]
 struct DummyValue { age: i32 }
 
-fn read_dummy(item: &mut Item) {
+fn read_dummy(item: &mut Item, _deps: Option<Dependencies>) {
   if let Some(&DummyValue { age }) = item.data.get::<DummyValue>() {
     println!("dummy age is: {}", age);
-  }
-  else {
+  } else {
     println!("no dummy value!");
   }
 }
@@ -28,10 +28,10 @@ fn main() {
       .compiler(
         Chain::new()
           .link(read)
-          .link(|&: item: &mut Item| {
+          .link(|&: item: &mut Item, _| {
             item.data.insert(DummyValue { age: 9 });
           })
-          .barrier()
+          // .barrier()
           .link(read_dummy)
           .link(print));
 
@@ -40,8 +40,12 @@ fn main() {
       .compiler(
         Chain::new()
           .link(read)
+          .link(|&: item: &mut Item, deps: Option<Dependencies>| {
+            println!("processing {}", item);
+            println!("dependencies: {}", deps);
+          })
           .link(print))
-      .dependencies(vec!["posts"]);
+      .depends_on("posts");
       // TODO: ^ make possible to just do dependencies(posts)?
 
   let gen =

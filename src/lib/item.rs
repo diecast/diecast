@@ -3,9 +3,15 @@
 use anymap::AnyMap;
 use std::io::File;
 use std::fmt::{mod, Show};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use self::Relation::*;
 
+// TODO:
+pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
+
+#[deriving(Clone)]
 pub enum Relation {
   Reading(Path),
   Writing(Path),
@@ -20,6 +26,8 @@ pub enum Relation {
 /// It includes a body field which represents the read or to-be-written data.
 ///
 /// It also includes an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html) which is used to represent miscellaneous data.
+
+#[deriving(Clone)]
 pub struct Item {
   pub relation: Relation,
 

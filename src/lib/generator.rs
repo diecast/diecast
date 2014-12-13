@@ -8,7 +8,7 @@ use std::fmt::{mod, Show};
 use pattern::Pattern;
 use router::{mod, Route};
 use compiler::{mod, Compile, Compiler, Chain};
-use item::Item;
+use item::{Item, Dependencies};
 use item::Relation::{Reading, Writing};
 use dependency::Graph;
 
@@ -20,16 +20,17 @@ pub struct Job {
 
   pub item: Item,
   pub compiler: Compiler,
-  pub dependencies: uint,
+  pub dependency_count: uint,
+  pub dependencies: Option<Dependencies>,
 }
 
 impl Show for Job {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "#{} [{}] {}, dependencies: {}",
+    write!(f, "#{} [{}] {}, dependency_count: {}",
            self.id,
            self.binding,
            self.item,
-           self.dependencies)
+           self.dependency_count)
   }
 }
 
@@ -44,12 +45,15 @@ impl Job {
       binding: binding,
       item: item,
       compiler: compiler,
-      dependencies: 0,
+      dependency_count: 0,
+      dependencies: None,
     }
   }
 
   fn process(&mut self) {
-    self.compiler.compile(&mut self.item);
+    // TODO: can't just do this because then if a barrier exists
+    //       dependencies will be gone on resume
+    self.compiler.compile(&mut self.item, self.dependencies.take());
   }
 }
 
@@ -67,10 +71,14 @@ pub struct Generator {
   /// The collected paths in the input directory
   paths: Vec<Path>,
 
+  /// Tracks the jobs that have paused so far due to a barrier.
   paused: HashMap<&'static str, Vec<Job>>,
 
   /// Mapping the bind name to its items
   bindings: HashMap<&'static str, Vec<uint>>,
+
+  /// Keeps track of what binding depends on what
+  dependencies: HashMap<&'static str, Vec<&'static str>>,
 
   /// The jobs
   jobs: Vec<Job>,
@@ -97,6 +105,7 @@ impl Generator {
 
       paused: HashMap::new(),
       bindings: HashMap::new(),
+      dependencies: HashMap::new(),
       jobs: Vec::new(),
       graph: Graph::new(),
     }
@@ -124,7 +133,7 @@ impl Generator {
           order.iter()
             .map(|&index| {
               let mut job = optioned[index].take().unwrap();
-              job.dependencies = self.graph.dependency_count(index);
+              job.dependency_count = self.graph.dependency_count(index);
               return job;
             })
             .collect::<Vec<Job>>();
@@ -136,7 +145,7 @@ impl Generator {
         let (job_tx, job_rx) = channel();
         let (result_tx, result_rx) = channel();
         let job_rx = Arc::new(Mutex::new(job_rx));
-        let (ready, mut waiting) = ordered.partition(|ref job| job.dependencies == 0);
+        let (ready, mut waiting) = ordered.partition(|ref job| job.dependency_count == 0);
 
         println!("jobs: {}", total_jobs);
 
@@ -160,14 +169,21 @@ impl Generator {
           });
         }
 
-        // while let Ok(current) = rx.recv_opt() {
-        //   println!("received");
+        // Builds up the dependencies for an Item as they are built.
+        //
+        // Since multiple items may depend on the same Item, an Arc
+        // is used to avoid having to clone it each time, since the
+        // dependencies will be immutable anyways.
+        let mut finished_deps: HashMap<&'static str, Arc<Vec<Item>>> = HashMap::new();
+        let mut ready_deps: HashMap<&'static str, Dependencies> = HashMap::new();
+
         while completed < total_jobs {
           println!("waiting. completed: {} total: {}", completed, total_jobs);
           let current = result_rx.recv();
           println!("received");
 
           match current.compiler.status {
+            // TODO: this enum isn't necessary?
             Stopped => {
               println!("stopped {}", current.id);
             },
@@ -219,23 +235,58 @@ impl Generator {
               // decrement dependencies of jobs
               println!("before waiting: {}", waiting);
 
+              let binding = current.binding.clone();
+
               if let Some(dependents) = self.graph.dependents_of(current.id) {
                 for job in waiting.iter_mut() {
                   if dependents.contains(&job.id) {
-                    job.dependencies -= 1;
+                    job.dependency_count -= 1;
                   }
                 }
+              }
+
+              match finished_deps.entry(binding) {
+                Vacant(entry) => {
+                  entry.set(Arc::new(vec![current.item]));
+                },
+                Occupied(mut entry) => {
+                  entry.get_mut().make_unique().push(current.item);
+                },
               }
 
               println!("after waiting: {}", waiting);
 
               // split the waiting vec again
-              let (ready, waiting_) = waiting.partition(|ref job| job.dependencies == 0);
+              let (ready, waiting_) = waiting.partition(|ref job| job.dependency_count == 0);
               waiting = waiting_;
 
               println!("now ready: {}", ready);
 
-              for job in ready.into_iter() {
+              for mut job in ready.into_iter() {
+                let deps = match ready_deps.entry(binding) {
+                  Vacant(entry) => {
+                    let mut deps = HashMap::new();
+
+                    println!("checking dependencies of \"{}\"", binding);
+                    println!("current dependencies: {}", self.dependencies);
+
+                    for &dep in self.dependencies[job.binding].iter() {
+                      println!("getting finished \"{}\"", dep);
+                      deps.insert(dep, finished_deps[dep].clone());
+                    }
+
+                    let arc_deps = Arc::new(deps);
+                    let cloned = arc_deps.clone();
+
+                    entry.set(arc_deps);
+                    cloned
+                  },
+                  Occupied(entry) => {
+                    entry.get().clone()
+                  },
+                };
+
+                job.dependencies = Some(deps);
                 job_tx.send(job);
               }
 
@@ -293,6 +344,10 @@ impl Generator {
         compiler,
         &binding.dependencies);
 
+      if let Some(deps) = binding.dependencies {
+        self.dependencies.insert(binding.name, deps);
+      }
+
       self
   }
 
@@ -316,6 +371,10 @@ impl Generator {
       }
 
       mem::replace(&mut self.paths, paths);
+
+      if let Some(deps) = binding.dependencies {
+        self.dependencies.insert(binding.name, deps);
+      }
 
       self
   }
@@ -348,8 +407,11 @@ impl Binding {
     return self;
   }
 
-  pub fn dependencies(mut self, dependencies: Vec<&'static str>) -> Binding {
-    self.dependencies = Some(dependencies);
+  pub fn depends_on(mut self, dependency: &'static str) -> Binding {
+    let mut pushed = self.dependencies.unwrap_or_else(|| Vec::new());
+    pushed.push(dependency);
+    self.dependencies = Some(pushed);
+
     return self;
   }
 }
