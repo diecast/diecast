@@ -213,9 +213,23 @@ impl Generator {
               if finished {
                 let jobs = self.paused.remove(binding).unwrap();
 
-                for job in jobs.into_iter() {
+                let mut deps_map = HashMap::new();
+                let mut deps = Vec::new();
+
+                println!("checking dependencies of \"{}\"", binding);
+                println!("current dependencies: {}", self.dependencies);
+
+                for job in jobs.iter() {
+                  deps.push(job.item.clone());
+                }
+
+                deps_map.insert(binding, Arc::new(deps));
+                let arc_deps = Arc::new(deps_map);
+
+                for mut job in jobs.into_iter() {
                   println!("re-enqueuing: {}", job);
 
+                  job.dependencies = Some(arc_deps.clone());
                   job_tx.send(job);
 
                   let result_tx = result_tx.clone();
@@ -273,6 +287,10 @@ impl Generator {
                     for &dep in self.dependencies[job.binding].iter() {
                       println!("getting finished \"{}\"", dep);
                       deps.insert(dep, finished_deps[dep].clone());
+                    }
+
+                    if let Some(barriers) = job.dependencies {
+                      deps.insert(binding, barriers[binding].clone());
                     }
 
                     let arc_deps = Arc::new(deps);

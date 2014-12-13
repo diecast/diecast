@@ -28,10 +28,13 @@ fn main() {
       .compiler(
         Chain::new()
           .link(read)
-          .link(|&: item: &mut Item, _| {
+          .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
             item.data.insert(DummyValue { age: 9 });
           })
-          // .barrier()
+          .barrier()
+          .link(|&: _item: &mut Item, deps: Option<Dependencies>| {
+            println!("after barrier dependencies: {}", deps)
+          })
           .link(read_dummy)
           .link(print));
 
