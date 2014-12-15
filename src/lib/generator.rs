@@ -26,10 +26,11 @@ pub struct Job {
 
 impl Show for Job {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "#{} [{}] {}, dependency_count: {}",
+    write!(f, "#{} [{}] {}, depends on: {}, dependency_count: {}",
            self.id,
            self.binding,
            self.item,
+           self.dependencies,
            self.dependency_count)
   }
 }
@@ -53,7 +54,7 @@ impl Job {
   fn process(&mut self) {
     // TODO: can't just do this because then if a barrier exists
     //       dependencies will be gone on resume
-    self.compiler.compile(&mut self.item, self.dependencies.take());
+    self.compiler.compile(&mut self.item, self.dependencies.clone());
   }
 }
 
@@ -213,33 +214,73 @@ impl Generator {
               if finished {
                 let jobs = self.paused.remove(binding).unwrap();
 
-                let mut deps_map = HashMap::new();
-                let mut deps = Vec::new();
-
                 println!("checking dependencies of \"{}\"", binding);
                 println!("current dependencies: {}", self.dependencies);
 
-                for job in jobs.iter() {
-                  deps.push(job.item.clone());
-                }
-
-                deps_map.insert(binding, Arc::new(deps));
-                let arc_deps = Arc::new(deps_map);
+                let mut grouped = HashMap::new();
 
                 for mut job in jobs.into_iter() {
-                  println!("re-enqueuing: {}", job);
+                  match grouped.entry(job.binding) {
+                    Vacant(entry) => {
+                      entry.set(vec![job]);
+                    },
+                    Occupied(mut entry) => {
+                      entry.get_mut().push(job);
+                    },
+                  }
+                }
 
-                  job.dependencies = Some(arc_deps.clone());
-                  job_tx.send(job);
+                let keys =
+                  grouped.keys()
+                    .map(|s| s.clone())
+                    .collect::<Vec<&'static str>>();
 
-                  let result_tx = result_tx.clone();
-                  let job_rx = job_rx.clone();
+                for &binding in keys.iter() {
+                  let mut deps = HashMap::new();
 
-                  task_pool.execute(proc() {
-                    let mut job = job_rx.lock().recv();
-                    job.process();
-                    result_tx.send(job);
-                  });
+                  let currents = grouped.remove(binding).unwrap();
+                  let saved = Arc::new(currents.iter().map(|j| j.item.clone()).collect::<Vec<Item>>());
+
+                  for mut job in currents.into_iter() {
+                    println!("re-enqueuing: {}", job);
+
+                    let cur_deps = match deps.entry(binding) {
+                      Vacant(entry) => {
+                        let mut hm = HashMap::new();
+                        // TODO: need to push existing deps
+                        hm.insert(binding, Arc::new(vec![job.item.clone()]));
+
+                        if let Some(old_deps) = job.dependencies {
+                          for (binding, the_deps) in old_deps.iter() {
+                            println!("loop: {} - {}", binding, the_deps);
+                            hm.insert(*binding, the_deps.clone());
+                          }
+                        }
+
+                        hm.insert(binding, saved.clone());
+
+                        let arc_map = Arc::new(hm);
+                        let cloned = arc_map.clone();
+                        entry.set(arc_map);
+                        cloned
+                      },
+                      Occupied(entry) => {
+                        entry.get().clone()
+                      },
+                    };
+
+                    job.dependencies = Some(cur_deps);
+                    job_tx.send(job);
+
+                    let result_tx = result_tx.clone();
+                    let job_rx = job_rx.clone();
+
+                    task_pool.execute(proc() {
+                      let mut job = job_rx.lock().recv();
+                      job.process();
+                      result_tx.send(job);
+                    });
+                  }
                 }
               }
             },
@@ -287,10 +328,6 @@ impl Generator {
                     for &dep in self.dependencies[job.binding].iter() {
                       println!("getting finished \"{}\"", dep);
                       deps.insert(dep, finished_deps[dep].clone());
-                    }
-
-                    if let Some(barriers) = job.dependencies {
-                      deps.insert(binding, barriers[binding].clone());
                     }
 
                     let arc_deps = Arc::new(deps);

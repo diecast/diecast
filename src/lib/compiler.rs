@@ -23,7 +23,7 @@ pub enum Link {
   Barrier,
 }
 
-#[deriving(Clone)]
+#[deriving(Clone, Copy)]
 pub enum Status {
   Stopped,
   Paused,

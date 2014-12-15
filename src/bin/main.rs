@@ -36,14 +36,25 @@ fn main() {
             println!("after barrier dependencies: {}", deps)
           })
           .link(read_dummy)
+          .link(|&: _item: &mut Item, deps: Option<Dependencies>| {
+            println!("after dummy dependencies: {}", deps)
+          })
           .link(print));
 
   let post_index =
     Binding::new("post index")
       .compiler(
         Chain::new()
+          .link(|&: _item: &mut Item, deps: Option<Dependencies>| {
+            println!("before barrier dependencies: {}", deps)
+          })
           .link(read)
+          .barrier()
+          .link(|&: _item: &mut Item, deps: Option<Dependencies>| {
+            println!("after barrier dependencies: {}", deps)
+          })
           .link(|&: item: &mut Item, deps: Option<Dependencies>| {
+            println!("after after barrier dependencies: {}", deps)
             println!("processing {}", item);
             println!("dependencies: {}", deps);
           })

@@ -6,6 +6,7 @@ pub trait Deploy {
   fn run(&self);
 }
 
+#[deriving(Copy)]
 pub struct DoNothing;
 
 impl Deploy for DoNothing {
