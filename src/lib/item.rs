@@ -6,6 +6,8 @@ use std::fmt::{mod, Show};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use router::Route;
+
 use self::Relation::*;
 
 // TODO:
@@ -30,6 +32,9 @@ pub enum Relation {
 #[deriving(Clone)]
 pub struct Item {
   pub relation: Relation,
+
+  // pub from: Option<Path>,
+  // pub to: Option<Path>,
 
   /// The Item's body which will fill the target file.
   pub body: Option<String>,
@@ -84,11 +89,13 @@ impl Item {
     }
   }
 
-  pub fn route_to(mut self, to: Path) {
-    if let Reading(from) = self.relation {
-      self.relation = Mapping(from, to);
-    }
-  }
+  // pub fn route<R>(&mut self, router: R) where R: Route {
+  //   let to = if let Reading(ref from) = self.relation {
+  //     router.route(&from)
+  //   };
+
+  //   self.relation = Mapping(from, to);
+  // }
 }
 
 impl Show for Item {

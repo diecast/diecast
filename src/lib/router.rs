@@ -6,7 +6,7 @@ use regex::Regex;
 //
 // e.g. to route to a folder named after the year the post was published
 
-pub trait Route {
+pub trait Route: Send + Sync {
   fn route(&self, from: &Path) -> Path;
 }
 

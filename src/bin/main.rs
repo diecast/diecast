@@ -4,10 +4,11 @@
 
 #[phase(plugin, link)]
 extern crate diecast;
+extern crate glob;
 
 use diecast::Generator;
-use diecast::generator::Binding;
-use diecast::compiler::Chain;
+use diecast::generator::Processor;
+use diecast::compiler::{Compiler, Chain};
 use diecast::compiler::{read, print};
 use diecast::item::{Item, Dependencies};
 
@@ -23,48 +24,39 @@ fn read_dummy(item: &mut Item, _deps: Option<Dependencies>) {
 }
 
 fn main() {
+  let content_compiler =
+    Compiler::new(
+      Chain::new()
+        .link(read)
+        .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
+          item.data.insert(DummyValue { age: 9 });
+        })
+        .link(read_dummy)
+        .link(print)
+        .build());
+
   let posts =
-    Binding::new("posts")
-      .compiler(
-        Chain::new()
-          .link(read)
-          .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
-            item.data.insert(DummyValue { age: 9 });
-          })
-          .barrier()
-          .link(|&: _item: &mut Item, deps: Option<Dependencies>| {
-            println!("after barrier dependencies: {}", deps)
-          })
-          .link(read_dummy)
-          .link(|&: _item: &mut Item, deps: Option<Dependencies>| {
-            println!("after dummy dependencies: {}", deps)
-          })
-          .link(print));
+    Processor::new("posts")
+      .compiler(content_compiler.clone());
 
   let post_index =
-    Binding::new("post index")
+    Processor::new("post index")
+      // .depends_on(&posts)
+      .depends_on("posts")
       .compiler(
-        Chain::new()
-          .link(|&: _item: &mut Item, deps: Option<Dependencies>| {
-            println!("before barrier dependencies: {}", deps)
-          })
-          .link(read)
-          .barrier()
-          .link(|&: _item: &mut Item, deps: Option<Dependencies>| {
-            println!("after barrier dependencies: {}", deps)
-          })
-          .link(|&: item: &mut Item, deps: Option<Dependencies>| {
-            println!("after after barrier dependencies: {}", deps)
-            println!("processing {}", item);
-            println!("dependencies: {}", deps);
-          })
-          .link(print))
-      .depends_on("posts");
-      // TODO: ^ make possible to just do dependencies(posts)?
+        Compiler::new(
+          Chain::new()
+            .link(read)
+            .link(|&: item: &mut Item, deps: Option<Dependencies>| {
+              println!("processing {}", item);
+              println!("dependencies: {}", deps);
+            })
+            .link(print)
+            .build()));
 
   let gen =
     Generator::new(Path::new("tests/fixtures/input"), Path::new("output"))
-      .matching("posts/*.md", posts)
+      .matching(glob::Pattern::new("posts/*.md"), posts)
       .creating(Path::new("index.html"), post_index);
 
   println!("generating");

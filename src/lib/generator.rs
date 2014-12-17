@@ -12,7 +12,7 @@ use item::{Item, Dependencies};
 use item::Relation::{Reading, Writing};
 use dependency::Graph;
 
-use compiler::Status::{Paused, Done, Stopped};
+use compiler::Status::{Paused, Done};
 
 pub struct Job {
   pub id: uint,
@@ -52,8 +52,6 @@ impl Job {
   }
 
   fn process(&mut self) {
-    // TODO: can't just do this because then if a barrier exists
-    //       dependencies will be gone on resume
     self.compiler.compile(&mut self.item, self.dependencies.clone());
   }
 }
@@ -71,9 +69,6 @@ pub struct Generator {
 
   /// The collected paths in the input directory
   paths: Vec<Path>,
-
-  /// Tracks the jobs that have paused so far due to a barrier.
-  paused: HashMap<&'static str, Vec<Job>>,
 
   /// Mapping the bind name to its items
   bindings: HashMap<&'static str, Vec<uint>>,
@@ -104,7 +99,6 @@ impl Generator {
 
       paths: paths,
 
-      paused: HashMap::new(),
       bindings: HashMap::new(),
       dependencies: HashMap::new(),
       jobs: Vec::new(),
@@ -142,11 +136,12 @@ impl Generator {
         println!("order: {}", ordered);
 
         let total_jobs = ordered.len();
-        let task_pool = TaskPool::new(4u);
+        let task_pool = TaskPool::new(::std::os::num_cpus());
         let (job_tx, job_rx) = channel();
         let (result_tx, result_rx) = channel();
         let job_rx = Arc::new(Mutex::new(job_rx));
-        let (ready, mut waiting) = ordered.partition(|ref job| job.dependency_count == 0);
+        let (ready, mut waiting) =
+          ordered.partition(|ref job| job.dependency_count == 0);
 
         println!("jobs: {}", total_jobs);
 
@@ -175,8 +170,12 @@ impl Generator {
         // Since multiple items may depend on the same Item, an Arc
         // is used to avoid having to clone it each time, since the
         // dependencies will be immutable anyways.
-        let mut finished_deps: HashMap<&'static str, Arc<Vec<Item>>> = HashMap::new();
-        let mut ready_deps: HashMap<&'static str, Dependencies> = HashMap::new();
+        let mut finished_deps: HashMap<&'static str, Arc<Vec<Item>>> =
+          HashMap::new();
+        let mut ready_deps: HashMap<&'static str, Dependencies> =
+          HashMap::new();
+        let mut paused: HashMap<&'static str, Vec<Job>> =
+          HashMap::new();
 
         while completed < total_jobs {
           println!("waiting. completed: {} total: {}", completed, total_jobs);
@@ -184,17 +183,13 @@ impl Generator {
           println!("received");
 
           match current.compiler.status {
-            // TODO: this enum isn't necessary?
-            Stopped => {
-              println!("stopped {}", current.id);
-            },
             Paused => {
               println!("paused {}", current.id);
 
               let total = self.bindings[current.binding].len();
               let binding = current.binding.clone();
 
-              let finished = match self.paused.entry(binding) {
+              let finished = match paused.entry(binding) {
                 Vacant(entry) => {
                   entry.set(vec![current]);
                   1 == total
@@ -206,13 +201,13 @@ impl Generator {
               };
 
               println!("paused so far ({}): {}",
-                       self.paused[binding].len(),
-                       self.paused[binding]);
+                       paused[binding].len(),
+                       paused[binding]);
               println!("total to pause: {}", total);
               println!("finished: {}", finished);
 
               if finished {
-                let jobs = self.paused.remove(binding).unwrap();
+                let jobs = paused.remove(binding).unwrap();
 
                 println!("checking dependencies of \"{}\"", binding);
                 println!("current dependencies: {}", self.dependencies);
@@ -239,7 +234,10 @@ impl Generator {
                   let mut deps = HashMap::new();
 
                   let currents = grouped.remove(binding).unwrap();
-                  let saved = Arc::new(currents.iter().map(|j| j.item.clone()).collect::<Vec<Item>>());
+                  let saved =
+                    Arc::new(currents.iter()
+                               .map(|j| j.item.clone())
+                               .collect::<Vec<Item>>());
 
                   for mut job in currents.into_iter() {
                     println!("re-enqueuing: {}", job);
@@ -247,7 +245,6 @@ impl Generator {
                     let cur_deps = match deps.entry(binding) {
                       Vacant(entry) => {
                         let mut hm = HashMap::new();
-                        // TODO: need to push existing deps
                         hm.insert(binding, Arc::new(vec![job.item.clone()]));
 
                         if let Some(old_deps) = job.dependencies {
@@ -312,7 +309,8 @@ impl Generator {
               println!("after waiting: {}", waiting);
 
               // split the waiting vec again
-              let (ready, waiting_) = waiting.partition(|ref job| job.dependency_count == 0);
+              let (ready, waiting_) =
+                waiting.partition(|ref job| job.dependency_count == 0);
               waiting = waiting_;
 
               println!("now ready: {}", ready);
@@ -381,7 +379,7 @@ impl Generator {
     if let &Some(ref deps) = dependencies {
       for &dep in deps.iter() {
         for &id in self.bindings[dep].iter() {
-          // id depends on index, so id must be done before index
+          // index depends on id, so id must be done before index
           // so the edge goes: id -> index
           self.graph.add_edge(id, index);
         }
@@ -389,7 +387,7 @@ impl Generator {
     }
   }
 
-  pub fn creating(mut self, path: Path, binding: Binding) -> Generator {
+  pub fn creating(mut self, path: Path, binding: Processor) -> Generator {
       let compiler = binding.compiler;
       let target = self.output.join(path);
 
@@ -406,7 +404,7 @@ impl Generator {
       self
   }
 
-  pub fn matching<P>(mut self, pattern: P, binding: Binding) -> Generator
+  pub fn matching<P>(mut self, pattern: P, binding: Processor) -> Generator
     where P: Pattern + Send + Sync {
       use std::mem;
 
@@ -435,39 +433,55 @@ impl Generator {
   }
 }
 
-pub struct Binding {
+pub struct Processor {
   pub name: &'static str,
   pub compiler: Compiler,
   pub router: Box<Route + Send + Sync>,
   pub dependencies: Option<Vec<&'static str>>,
 }
 
-impl Binding {
-  pub fn new(name: &'static str) -> Binding {
-    Binding {
+impl Processor {
+  pub fn new(name: &'static str) -> Processor {
+    Processor {
       name: name,
-      compiler: Compiler::new(Chain::only(compiler::stub)),
+      compiler: Compiler::new(Chain::only(compiler::stub).build()),
       router: box router::identity as Box<Route + Send + Sync>,
       dependencies: None,
     }
   }
 
-  pub fn compiler(mut self, chain: Chain) -> Binding {
-    self.compiler = Compiler::new(chain);
+  pub fn compiler(mut self, compiler: Compiler) -> Processor {
+    self.compiler = compiler;
     return self;
   }
 
-  pub fn router<R>(mut self, router: R) -> Binding where R: Route + Send + Sync {
+  pub fn router<R>(mut self, router: R) -> Processor where R: Route + Send + Sync {
     self.router = box router as Box<Route + Send + Sync>;
     return self;
   }
 
-  pub fn depends_on(mut self, dependency: &'static str) -> Binding {
+  pub fn depends_on<D>(mut self, dependency: D) -> Processor where D: Dependency {
     let mut pushed = self.dependencies.unwrap_or_else(|| Vec::new());
-    pushed.push(dependency);
+    pushed.push(dependency.name());
     self.dependencies = Some(pushed);
 
     return self;
+  }
+}
+
+pub trait Dependency {
+  fn name(&self) -> &'static str;
+}
+
+impl Dependency for &'static str {
+  fn name(&self) -> &'static str {
+    self.clone()
+  }
+}
+
+impl<'a> Dependency for &'a Processor {
+  fn name(&self) -> &'static str {
+    self.name.clone()
   }
 }
 

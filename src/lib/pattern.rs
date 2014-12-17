@@ -93,7 +93,7 @@ impl Pattern for Regex {
 /// to begin with.
 impl<'a> Pattern for &'a str {
   fn matches(&self, p: &Path) -> bool {
-    glob::Pattern::new(*self).matches_path(p)
+    *self == p.as_str().unwrap()
   }
 }
 

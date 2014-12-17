@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use item::{Item, Dependencies};
+use router::Route;
 
 /// Behavior of a compiler.
 ///
@@ -25,7 +26,6 @@ pub enum Link {
 
 #[deriving(Clone, Copy)]
 pub enum Status {
-  Stopped,
   Paused,
   Done,
 }
@@ -55,8 +55,8 @@ impl Chain {
     self
   }
 
-  pub fn build(self) -> Vec<Link> {
-    self.chain
+  pub fn build(self) -> Arc<Vec<Link>> {
+    Arc::new(self.chain)
   }
 }
 
@@ -81,11 +81,11 @@ impl Clone for Compiler {
 }
 
 impl Compiler {
-  pub fn new(chain: Chain) -> Compiler {
+  pub fn new(chain: Arc<Vec<Link>>) -> Compiler {
     Compiler {
-      chain: Arc::new(chain.build()),
+      chain: chain,
       position: 0,
-      status: Status::Stopped,
+      status: Status::Paused,
     }
   }
 
@@ -107,6 +107,20 @@ impl Compiler {
     self.status = Status::Done;
   }
 }
+
+// pub struct Router<R> where R: Route {
+//   router: R
+// }
+
+// impl<R> Compile for Router<R> where R: Route {
+//   fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
+//     item.route(&self.router);
+//   }
+// }
+
+// pub fn router_with<R>(router: R) -> Box<Compile + Send + Sync> where R: Route {
+//   box move |&: item: &mut Item, deps: Option<Dependencies>| { item.route(router) }
+// }
 
 pub fn stub(item: &mut Item, _deps: Option<Dependencies>) {
   println!("no compiler established for: {}", item);
