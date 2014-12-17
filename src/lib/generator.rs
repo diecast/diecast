@@ -9,7 +9,6 @@ use pattern::Pattern;
 use router::{mod, Route};
 use compiler::{mod, Compile, Compiler, Chain};
 use item::{Item, Dependencies};
-use item::Relation::{Reading, Writing};
 use dependency::Graph;
 
 use compiler::Status::{Paused, Done};
@@ -158,7 +157,7 @@ impl Generator {
           let result_tx = result_tx.clone();
           let job_rx = job_rx.clone();
 
-          task_pool.execute(proc() {
+          task_pool.execute(move || {
             let mut job = job_rx.lock().recv();
             job.process();
             result_tx.send(job);
@@ -272,7 +271,7 @@ impl Generator {
                     let result_tx = result_tx.clone();
                     let job_rx = job_rx.clone();
 
-                    task_pool.execute(proc() {
+                    task_pool.execute(move || {
                       let mut job = job_rx.lock().recv();
                       job.process();
                       result_tx.send(job);
@@ -393,7 +392,7 @@ impl Generator {
 
       self.add_job(
         binding.name,
-        Item::new(Writing(target)),
+        Item::new(None, Some(target)),
         compiler,
         &binding.dependencies);
 
@@ -417,7 +416,7 @@ impl Generator {
         if pattern.matches(relative) {
           self.add_job(
             binding.name,
-            Item::new(Reading(path.clone())),
+            Item::new(Some(path.clone()), None),
             binding.compiler.clone(),
             &binding.dependencies);
         }

@@ -41,8 +41,7 @@ fn main() {
 
   let post_index =
     Processor::new("post index")
-      // .depends_on(&posts)
-      .depends_on("posts")
+      .depends_on(&posts)
       .compiler(
         Compiler::new(
           Chain::new()

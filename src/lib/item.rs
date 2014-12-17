@@ -8,17 +8,8 @@ use std::sync::Arc;
 
 use router::Route;
 
-use self::Relation::*;
-
 // TODO:
 pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
-
-#[deriving(Clone)]
-pub enum Relation {
-  Reading(Path),
-  Writing(Path),
-  Mapping(Path, Path),
-}
 
 /// Represents a compilation unit.
 ///
@@ -31,10 +22,8 @@ pub enum Relation {
 
 #[deriving(Clone)]
 pub struct Item {
-  pub relation: Relation,
-
-  // pub from: Option<Path>,
-  // pub to: Option<Path>,
+  pub from: Option<Path>,
+  pub to: Option<Path>,
 
   /// The Item's body which will fill the target file.
   pub body: Option<String>,
@@ -50,37 +39,36 @@ pub struct Item {
 }
 
 impl Item {
-  pub fn new(relation: Relation) -> Item {
+  pub fn new(from: Option<Path>, to: Option<Path>) -> Item {
     use std::io::fs::PathExtensions;
 
-    // ensure that the source is a file
-    match relation {
-      Reading(ref from) => assert!(from.is_file()),
-      Mapping(ref from, _) => assert!(from.is_file()),
-      _ => (),
+    if let Some(ref from) = from {
+      assert!(from.is_file())
     }
 
+    // ensure that the source is a file
     Item {
-      relation: relation,
+      from: from,
+      to: to,
       body: None,
       data: AnyMap::new()
     }
   }
 
   pub fn read(&mut self) {
-    match self.relation {
-      Reading(ref from) | Mapping(ref from, _) => {
-        self.body = File::open(from).read_to_string().ok();
+    match self.from {
+      Some(ref path) => {
+        self.body = File::open(path).read_to_string().ok();
       },
       _ => (),
     }
   }
 
   pub fn write(&mut self) {
-    match self.relation {
-      Writing(ref to) | Mapping(_, ref to) => {
+    match self.to {
+      Some(ref path) => {
         if let Some(ref body) = self.body {
-          File::create(to)
+          File::create(path)
             .write_str(body.as_slice())
             .unwrap();
         }
@@ -89,22 +77,17 @@ impl Item {
     }
   }
 
-  // pub fn route<R>(&mut self, router: R) where R: Route {
-  //   let to = if let Reading(ref from) = self.relation {
-  //     router.route(&from)
-  //   };
-
-  //   self.relation = Mapping(from, to);
-  // }
+  pub fn route<R>(&mut self, router: R) where R: Route {
+    if let Some(ref path) = self.from {
+      self.to = Some(router.route(path));
+    }
+  }
 }
 
 impl Show for Item {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match self.relation {
-      Mapping(ref from, ref to) => write!(f, "{} → {}", from.display(), to.display()),
-      Reading(ref from)         => write!(f, "reading {}", from.display()),
-      Writing(ref to)           => write!(f, "writing {}", to.display()),
-    }
+    write!(f, "no Show for Item yet")
+    // write!(f,"{} → {}", from, to)
   }
 }
 
