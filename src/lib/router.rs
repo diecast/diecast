@@ -10,6 +10,18 @@ pub trait Route: Send + Sync {
   fn route(&self, from: &Path) -> Path;
 }
 
+// impl Route for &'static (Route + Send + Sync) {
+//   fn route(&self, from: &Path) -> Path {
+//     (**self).route(from)
+//   }
+// }
+
+// impl Route for Box<Route + Send + Sync> {
+//   fn route(&self, from: &Path) -> Path {
+//     (**self).route(from)
+//   }
+// }
+
 /// gen.route(Path::new("something.txt"))
 impl Route for Path {
   fn route(&self, _from: &Path) -> Path {
@@ -26,6 +38,7 @@ impl<F> Route for F where F: Fn(&Path) -> Path, F: Send + Sync {
 /// file.txt -> file.txt
 /// gen.route(Identity)
 pub fn identity(from: &Path) -> Path {
+  println!("routing {} with the identity router", from.display());
   from.clone()
 }
 

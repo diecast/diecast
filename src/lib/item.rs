@@ -20,6 +20,8 @@ pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
 ///
 /// It also includes an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html) which is used to represent miscellaneous data.
 
+// TODO: use a UUID?
+
 #[deriving(Clone)]
 pub struct Item {
   pub from: Option<Path>,
@@ -86,8 +88,21 @@ impl Item {
 
 impl Show for Item {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "no Show for Item yet")
-    // write!(f,"{} → {}", from, to)
+    if let Some(ref path) = self.from {
+      write!(f, "{}", path.display());
+    } else {
+      write!(f, "None");
+    }
+
+    write!(f, " → ");
+
+    if let Some(ref path) = self.to {
+      write!(f, "{}", path.display());
+    } else {
+      write!(f, "None");
+    }
+
+    Ok(())
   }
 }
 

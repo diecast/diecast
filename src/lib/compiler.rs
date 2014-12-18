@@ -108,19 +108,23 @@ impl Compiler {
   }
 }
 
-// pub struct Router<R> where R: Route {
-//   router: R
-// }
+pub struct Router<R> where R: Route {
+  router: R
+}
 
-// impl<R> Compile for Router<R> where R: Route {
-//   fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
-//     item.route(&self.router);
-//   }
-// }
+impl<R> Router<R> where R: Route {
+  pub fn new(router: R) -> Router<R> {
+    Router {
+      router: router
+    }
+  }
+}
 
-// pub fn router_with<R>(router: R) -> Box<Compile + Send + Sync> where R: Route {
-//   box move |&: item: &mut Item, deps: Option<Dependencies>| { item.route(router) }
-// }
+impl<R> Compile for Router<R> where R: Route {
+  fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
+    item.route(&self.router);
+  }
+}
 
 pub fn stub(item: &mut Item, _deps: Option<Dependencies>) {
   println!("no compiler established for: {}", item);
