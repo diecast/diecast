@@ -58,30 +58,18 @@ impl Item {
   }
 
   pub fn read(&mut self) {
-    match self.from {
-      Some(ref path) => {
-        self.body = File::open(path).read_to_string().ok();
-      },
-      _ => (),
+    if let Some(ref path) = self.from {
+      self.body = File::open(path).read_to_string().ok();
     }
   }
 
   pub fn write(&mut self) {
-    match self.to {
-      Some(ref path) => {
-        if let Some(ref body) = self.body {
-          File::create(path)
-            .write_str(body.as_slice())
-            .unwrap();
-        }
-      },
-      _ => (),
-    }
-  }
-
-  pub fn route<R>(&mut self, router: R) where R: Route {
-    if let Some(ref path) = self.from {
-      self.to = Some(router.route(path));
+    if let Some(ref path) = self.to {
+      if let Some(ref body) = self.body {
+        File::create(path)
+          .write_str(body.as_slice())
+          .unwrap();
+      }
     }
   }
 }

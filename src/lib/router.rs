@@ -1,4 +1,4 @@
-use regex::Regex;
+use regex;
 
 // perhaps routing should occur until after all
 // of the compilers run but before the file is (possibly) written
@@ -13,13 +13,6 @@ pub trait Route {
 impl<'a, R> Route for &'a R where R: Route {
   fn route(&self, from: &Path) -> Path {
     (*self).route(from)
-  }
-}
-
-/// gen.route(Path::new("something.txt"))
-impl Route for Path {
-  fn route(&self, _from: &Path) -> Path {
-    self.clone()
   }
 }
 
@@ -64,32 +57,31 @@ impl Route for SetExtension {
 ///   RegexRoute::new(
 ///     regex!("/posts/post-(?P<name>.+)\.markdown"),
 ///     "/target/$name.html"));
-pub struct RegexRoute {
-  regex: Regex,
+pub struct Regex {
+  regex: regex::Regex,
 
   // perhaps use regex::Replacer instead?
   // http://doc.rust-lang.org/regex/regex/trait.Replacer.html
   template: &'static str,
 }
 
-impl RegexRoute {
-  pub fn new(regex: Regex, template: &'static str) -> RegexRoute {
-    RegexRoute {
+impl Regex {
+  pub fn new(regex: regex::Regex, template: &'static str) -> Regex {
+    Regex {
       regex: regex,
       template: template,
     }
   }
 }
 
-impl Route for RegexRoute {
+impl Route for Regex {
   fn route(&self, from: &Path) -> Path {
-    if let Some(path_str) = from.as_str() {
-      if let Some(caps) = self.regex.captures(path_str) {
-        return Path::new(caps.expand(self.template));
-      }
+    let path_str = from.as_str().unwrap();
+
+    if let Some(caps) = self.regex.captures(path_str) {
+      return Path::new(caps.expand(self.template));
     }
 
-    // handle failure better
     identity(from)
   }
 }

@@ -95,9 +95,9 @@ impl Compiler {
     for link in slice {
       self.position += 1;
 
-      match link {
-        &Link::Compiler(ref compiler) => compiler.compile(item, deps.clone()),
-        &Link::Barrier => {
+      match *link {
+        Link::Compiler(ref compiler) => compiler.compile(item, deps.clone()),
+        Link::Barrier => {
           self.status = Status::Paused;
           return;
         },
@@ -121,8 +121,10 @@ impl<R> Router<R> where R: Route + Send + Sync {
 }
 
 impl<R> Compile for Router<R> where R: Route + Send + Sync {
-  fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
-    item.route(&self.router);
+  fn compile(&self, item: &mut Item, _deps: Option<Dependencies>) {
+    let from = item.from.take().unwrap();
+    item.to = Some(self.router.route(&from));
+    item.from = Some(from);
   }
 }
 
