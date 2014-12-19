@@ -6,21 +6,15 @@ use regex::Regex;
 //
 // e.g. to route to a folder named after the year the post was published
 
-pub trait Route: Send + Sync {
+pub trait Route {
   fn route(&self, from: &Path) -> Path;
 }
 
-// impl Route for &'static (Route + Send + Sync) {
-//   fn route(&self, from: &Path) -> Path {
-//     (**self).route(from)
-//   }
-// }
-
-// impl Route for Box<Route + Send + Sync> {
-//   fn route(&self, from: &Path) -> Path {
-//     (**self).route(from)
-//   }
-// }
+impl<'a, R> Route for &'a R where R: Route {
+  fn route(&self, from: &Path) -> Path {
+    (*self).route(from)
+  }
+}
 
 /// gen.route(Path::new("something.txt"))
 impl Route for Path {
@@ -29,7 +23,7 @@ impl Route for Path {
   }
 }
 
-impl<F> Route for F where F: Fn(&Path) -> Path, F: Send + Sync {
+impl<F> Route for F where F: Fn(&Path) -> Path {
   fn route(&self, from: &Path) -> Path {
     (*self)(from)
   }
@@ -74,6 +68,7 @@ pub struct RegexRoute {
   regex: Regex,
 
   // perhaps use regex::Replacer instead?
+  // http://doc.rust-lang.org/regex/regex/trait.Replacer.html
   template: &'static str,
 }
 

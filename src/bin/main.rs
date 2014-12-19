@@ -34,14 +34,14 @@ fn main() {
         })
         .link(read_dummy)
         .link(print)
-        // .link(Router::new(router::identity))
-        .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
-          let from = item.from.take();
+        .link(Router::new(router::identity))
+        // .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
+        //   let from = item.from.take();
 
-          if let Some(ref path) = item.from {
-            item.route(Path::new(path.filename().unwrap()));
-          }
-        })
+        //   if let Some(ref path) = item.from {
+        //     item.route(Path::new(path.filename().unwrap()));
+        //   }
+        // })
         .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
           println!("routed to: {}", item.to.clone().unwrap().display());
         })

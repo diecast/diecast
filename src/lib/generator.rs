@@ -404,7 +404,7 @@ impl Generator {
   }
 
   pub fn matching<P>(mut self, pattern: P, binding: Processor) -> Generator
-    where P: Pattern + Send + Sync {
+    where P: Pattern {
       use std::mem;
 
       // stupid hack to trick borrowck
@@ -451,11 +451,6 @@ impl Processor {
 
   pub fn compiler(mut self, compiler: Compiler) -> Processor {
     self.compiler = compiler;
-    return self;
-  }
-
-  pub fn router<R>(mut self, router: R) -> Processor where R: Route + Send + Sync {
-    self.router = box router as Box<Route + Send + Sync>;
     return self;
   }
 

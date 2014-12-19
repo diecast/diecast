@@ -108,11 +108,11 @@ impl Compiler {
   }
 }
 
-pub struct Router<R> where R: Route {
+pub struct Router<R> where R: Route + Send + Sync {
   router: R
 }
 
-impl<R> Router<R> where R: Route {
+impl<R> Router<R> where R: Route + Send + Sync {
   pub fn new(router: R) -> Router<R> {
     Router {
       router: router
@@ -120,7 +120,7 @@ impl<R> Router<R> where R: Route {
   }
 }
 
-impl<R> Compile for Router<R> where R: Route {
+impl<R> Compile for Router<R> where R: Route + Send + Sync {
   fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
     item.route(&self.router);
   }
