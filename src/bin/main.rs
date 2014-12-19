@@ -11,10 +11,10 @@ extern crate regex_macros;
 
 use diecast::Generator;
 use diecast::generator::Processor;
-use diecast::compiler::{Compiler, Chain, Compile};
-use diecast::compiler::{read, print, Router};
+use diecast::compiler::{Compiler, Chain};
+use diecast::compiler::{read, print};
 use diecast::item::{Item, Dependencies};
-use diecast::router::{mod, Route};
+use diecast::router;
 
 #[deriving(Clone)]
 struct DummyValue { age: i32 }
@@ -37,22 +37,11 @@ fn main() {
         })
         .link(read_dummy)
         .link(print)
-        // .link(Router::new(router::identity))
-        // .link(
-        //   Router::new(
-        //     router::Regex::new(regex!(r"(?P<name>.+)\.md"), "md.$name")))
-        .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
-          let from = item.from.take();
-
-          if let Some(ref path) = from {
-            item.to =
-              // Some(Path::new(path.filename().unwrap()));
-              // Some(Path::new(format!("posts-{}.done", path.filename_str().unwrap()).as_slice()));
-              Some(router::Regex::new(regex!(r"(?P<name>.+)\.md"), "md.$name").route(path));
-          }
-
-          item.from = from;
-        })
+        .link(
+          router::identity
+          // router::Regex::new(regex!(r"(?P<name>.+)\.md"), "md.$name")
+          // router::SetExtension::new("doc")
+        )
         .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
           println!("routed {} -> {}",
                    item.from.clone().unwrap().display(),

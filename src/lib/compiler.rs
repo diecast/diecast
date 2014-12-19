@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use item::{Item, Dependencies};
-use router::Route;
 
 /// Behavior of a compiler.
 ///
@@ -105,26 +104,6 @@ impl Compiler {
     }
 
     self.status = Status::Done;
-  }
-}
-
-pub struct Router<R> where R: Route + Send + Sync {
-  router: R
-}
-
-impl<R> Router<R> where R: Route + Send + Sync {
-  pub fn new(router: R) -> Router<R> {
-    Router {
-      router: router
-    }
-  }
-}
-
-impl<R> Compile for Router<R> where R: Route + Send + Sync {
-  fn compile(&self, item: &mut Item, _deps: Option<Dependencies>) {
-    let from = item.from.take().unwrap();
-    item.to = Some(self.router.route(&from));
-    item.from = Some(from);
   }
 }
 

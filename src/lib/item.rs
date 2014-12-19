@@ -6,8 +6,6 @@ use std::fmt::{mod, Show};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use router::Route;
-
 // TODO:
 pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
 
@@ -77,17 +75,17 @@ impl Item {
 impl Show for Item {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     if let Some(ref path) = self.from {
-      write!(f, "{}", path.display());
+      try!(write!(f, "{}", path.display()));
     } else {
-      write!(f, "None");
+      try!(write!(f, "None"));
     }
 
-    write!(f, " → ");
+    try!(write!(f, " → "));
 
     if let Some(ref path) = self.to {
-      write!(f, "{}", path.display());
+      try!(write!(f, "{}", path.display()));
     } else {
-      write!(f, "None");
+      try!(write!(f, "None"));
     }
 
     Ok(())

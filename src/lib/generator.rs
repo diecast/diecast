@@ -6,7 +6,6 @@ use std::collections::hash_map::{Vacant, Occupied};
 use std::fmt::{mod, Show};
 
 use pattern::Pattern;
-use router::{mod, Route};
 use compiler::{mod, Compile, Compiler, Chain};
 use item::{Item, Dependencies};
 use dependency::Graph;
@@ -435,7 +434,6 @@ impl Generator {
 pub struct Processor {
   pub name: &'static str,
   pub compiler: Compiler,
-  pub router: Box<Route + Send + Sync>,
   pub dependencies: Option<Vec<&'static str>>,
 }
 
@@ -444,7 +442,6 @@ impl Processor {
     Processor {
       name: name,
       compiler: Compiler::new(Chain::only(compiler::stub).build()),
-      router: box router::identity as Box<Route + Send + Sync>,
       dependencies: None,
     }
   }
