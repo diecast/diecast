@@ -22,13 +22,10 @@ extern crate graphviz;
 #[phase(plugin)]
 extern crate regex_macros;
 
-// #[phase(plugin, link)]
-// extern crate stainless;
-
 pub use pattern::Pattern;
-pub use generator::Generator;
-pub use compiler::Compile;
-pub use item::Item;
+pub use generator::{Generator, Processor};
+pub use compiler::{Compiler, Chain};
+pub use item::{Item, Dependencies};
 
 pub mod macros;
 pub mod deploy;

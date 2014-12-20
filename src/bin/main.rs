@@ -5,16 +5,18 @@
 #[phase(plugin, link)]
 extern crate diecast;
 extern crate glob;
-extern crate regex;
-#[phase(plugin, link)]
-extern crate regex_macros;
 
-use diecast::Generator;
-use diecast::generator::Processor;
-use diecast::compiler::{Compiler, Chain};
-use diecast::compiler::{read, print};
-use diecast::item::{Item, Dependencies};
+use diecast::{
+  Generator,
+  Processor,
+  Compiler,
+  Chain,
+  Item,
+  Dependencies,
+};
+
 use diecast::router;
+use diecast::compiler;
 
 #[deriving(Clone)]
 struct DummyValue { age: i32 }
@@ -31,17 +33,13 @@ fn main() {
   let content_compiler =
     Compiler::new(
       Chain::new()
-        .link(read)
+        .link(compiler::read)
         .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
           item.data.insert(DummyValue { age: 9 });
         })
         .link(read_dummy)
-        .link(print)
-        .link(
-          router::identity
-          // router::Regex::new(regex!(r"(?P<name>.+)\.md"), "md.$name")
-          // router::SetExtension::new("doc")
-        )
+        .link(compiler::print)
+        .link(router::SetExtension::new("html"))
         .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
           println!("routed {} -> {}",
                    item.from.clone().unwrap().display(),
@@ -59,12 +57,12 @@ fn main() {
       .compiler(
         Compiler::new(
           Chain::new()
-            .link(read)
+            .link(compiler::read)
             .link(|&: item: &mut Item, deps: Option<Dependencies>| {
               println!("processing {}", item);
               println!("dependencies: {}", deps);
             })
-            .link(print)
+            .link(compiler::print)
             .build()));
 
   let gen =
