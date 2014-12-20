@@ -21,10 +21,11 @@ rpath = true
 
 [dependencies]
 glob = "*"
+# iron = "*"
 
 [dependencies.anymap]
-# git = "https://github.com/chris-morgan/anymap.git"
-git = "https://github.com/blaenk/anymap.git"
+git = "https://github.com/chris-morgan/anymap.git"
+# git = "https://github.com/blaenk/anymap.git"
 branch = "clone"
 
 # [dependencies.iron]

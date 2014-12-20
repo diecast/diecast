@@ -7,10 +7,9 @@ use std::fmt::{mod, Show};
 
 use pattern::Pattern;
 use compiler::{mod, Compile, Compiler, Chain};
+use compiler::Status::{Paused, Done};
 use item::{Item, Dependencies};
 use dependency::Graph;
-
-use compiler::Status::{Paused, Done};
 
 pub struct Job {
   pub id: uint,
