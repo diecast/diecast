@@ -23,7 +23,7 @@ extern crate graphviz;
 extern crate regex_macros;
 
 pub use pattern::Pattern;
-pub use site::{Site, Processor};
+pub use site::{Site, Rule};
 pub use compiler::{Compiler, Chain};
 pub use item::{Item, Dependencies};
 

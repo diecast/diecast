@@ -13,7 +13,7 @@ extern crate regex_macros;
 
 use diecast::{
   Site,
-  Processor,
+  Rule,
   Compiler,
   Chain,
   Item,
@@ -53,11 +53,11 @@ fn main() {
         .build());
 
   let posts =
-    Processor::new("posts")
+    Rule::new("posts")
       .compiler(content_compiler.clone());
 
   let post_index =
-    Processor::new("post index")
+    Rule::new("post index")
       .depends_on(&posts)
       .compiler(
         Compiler::new(

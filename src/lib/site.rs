@@ -384,7 +384,7 @@ impl Site {
     }
   }
 
-  pub fn creating(mut self, path: Path, binding: Processor) -> Site {
+  pub fn creating(mut self, path: Path, binding: Rule) -> Site {
       let compiler = binding.compiler;
       let target = self.output.join(path);
 
@@ -401,7 +401,7 @@ impl Site {
       return self;
   }
 
-  pub fn matching<P>(mut self, pattern: P, binding: Processor) -> Site
+  pub fn matching<P>(mut self, pattern: P, binding: Rule) -> Site
     where P: Pattern {
       use std::mem;
 
@@ -430,27 +430,27 @@ impl Site {
   }
 }
 
-pub struct Processor {
+pub struct Rule {
   pub name: &'static str,
   pub compiler: Compiler,
   pub dependencies: Option<Vec<&'static str>>,
 }
 
-impl Processor {
-  pub fn new(name: &'static str) -> Processor {
-    Processor {
+impl Rule {
+  pub fn new(name: &'static str) -> Rule {
+    Rule {
       name: name,
       compiler: Compiler::new(Chain::only(compiler::stub).build()),
       dependencies: None,
     }
   }
 
-  pub fn compiler(mut self, compiler: Compiler) -> Processor {
+  pub fn compiler(mut self, compiler: Compiler) -> Rule {
     self.compiler = compiler;
     return self;
   }
 
-  pub fn depends_on<D>(mut self, dependency: D) -> Processor where D: Dependency {
+  pub fn depends_on<D>(mut self, dependency: D) -> Rule where D: Dependency {
     let mut pushed = self.dependencies.unwrap_or_else(|| Vec::new());
     pushed.push(dependency.name());
     self.dependencies = Some(pushed);
@@ -469,7 +469,7 @@ impl Dependency for &'static str {
   }
 }
 
-impl<'a> Dependency for &'a Processor {
+impl<'a> Dependency for &'a Rule {
   fn name(&self) -> &'static str {
     self.name.clone()
   }
