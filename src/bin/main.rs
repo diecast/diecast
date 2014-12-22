@@ -6,8 +6,13 @@
 extern crate diecast;
 extern crate glob;
 
+extern crate regex;
+
+#[phase(plugin, link)]
+extern crate regex_macros;
+
 use diecast::{
-  Generator,
+  Site,
   Processor,
   Compiler,
   Chain,
@@ -65,12 +70,35 @@ fn main() {
             .link(compiler::print)
             .build()));
 
-  let gen =
-    Generator::new(Path::new("tests/fixtures/input"), Path::new("output"))
+  let site =
+    Site::new(Path::new("tests/fixtures/input"), Path::new("output"))
       .matching(glob::Pattern::new("posts/*.md"), posts)
       .creating(Path::new("index.html"), post_index);
 
+  // site.build();
+
   println!("generating");
 
-  gen.build();
+  let re =
+    regex!(
+      concat!(
+        "(?ms)",
+        r"\A---\s*\n",
+        r"(?P<metadata>.*?\n?)",
+        r"^---\s*$",
+        r"\n?",
+        r"(?P<body>.*)"));
+
+  let yaml =
+r"---
+something = lol
+another = hah
+---
+
+this is the content";
+
+  let captures = re.captures(yaml).unwrap();
+
+  println!("captures\n{}", captures.name("metadata").unwrap());
+  println!("body\n{}", captures.name("body").unwrap());
 }

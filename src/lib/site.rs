@@ -53,11 +53,11 @@ impl Job {
   }
 }
 
-/// A generator scans the input path to find
+/// A Site scans the input path to find
 /// files that match the given pattern. It then
 /// takes each of those files and passes it through
 /// the compiler chain.
-pub struct Generator {
+pub struct Site {
   /// The input directory
   input: Path,
 
@@ -80,8 +80,8 @@ pub struct Generator {
   graph: Graph,
 }
 
-impl Generator {
-  pub fn new(input: Path, output: Path) -> Generator {
+impl Site {
+  pub fn new(input: Path, output: Path) -> Site {
     use std::io::fs::PathExtensions;
     use std::io::fs;
 
@@ -90,7 +90,7 @@ impl Generator {
         .filter(|p| p.is_file())
         .collect::<Vec<Path>>();
 
-    Generator {
+    Site {
       input: input,
       output: output,
 
@@ -104,7 +104,7 @@ impl Generator {
   }
 }
 
-impl Generator {
+impl Site {
   // ALTERNATIVE
   // have graph operate on binding names
   // this cuts down on node count
@@ -384,7 +384,7 @@ impl Generator {
     }
   }
 
-  pub fn creating(mut self, path: Path, binding: Processor) -> Generator {
+  pub fn creating(mut self, path: Path, binding: Processor) -> Site {
       let compiler = binding.compiler;
       let target = self.output.join(path);
 
@@ -398,10 +398,10 @@ impl Generator {
         self.dependencies.insert(binding.name, deps);
       }
 
-      self
+      return self;
   }
 
-  pub fn matching<P>(mut self, pattern: P, binding: Processor) -> Generator
+  pub fn matching<P>(mut self, pattern: P, binding: Processor) -> Site
     where P: Pattern {
       use std::mem;
 
@@ -426,7 +426,7 @@ impl Generator {
         self.dependencies.insert(binding.name, deps);
       }
 
-      self
+      return self;
   }
 }
 

@@ -23,7 +23,7 @@ extern crate graphviz;
 extern crate regex_macros;
 
 pub use pattern::Pattern;
-pub use generator::{Generator, Processor};
+pub use site::{Site, Processor};
 pub use compiler::{Compiler, Chain};
 pub use item::{Item, Dependencies};
 
@@ -33,7 +33,7 @@ pub mod pattern;
 pub mod item;
 pub mod router;
 pub mod compiler;
-pub mod generator;
+pub mod site;
 pub mod dependency;
 
 // for macros
