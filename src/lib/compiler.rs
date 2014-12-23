@@ -134,7 +134,7 @@ pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
 }
 
 #[deriving(Clone)]
-pub struct TomlMetadata(pub toml::Table);
+pub struct TomlMetadata(pub toml::Value);
 
 pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
   if let Some(body) = item.body.take() {
@@ -150,7 +150,7 @@ pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
 
     if let Some(captures) = re.captures(body.as_slice()) {
       if let Some(metadata) = captures.name("metadata") {
-        let parsed = toml::Parser::new(metadata).parse().unwrap();
+        let parsed = toml::Value::Table(toml::Parser::new(metadata).parse().unwrap());
         item.data.insert(TomlMetadata(parsed));
       }
 

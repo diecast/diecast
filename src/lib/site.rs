@@ -130,7 +130,7 @@ impl Site {
             })
             .collect::<Vec<Job>>();
 
-        println!("order: {}", ordered);
+        // println!("order: {}", ordered);
 
         let total_jobs = ordered.len();
         let task_pool = TaskPool::new(::std::os::num_cpus());
@@ -140,9 +140,9 @@ impl Site {
         let (ready, mut waiting) =
           ordered.partition(|ref job| job.dependency_count == 0);
 
-        println!("jobs: {}", total_jobs);
+        // println!("jobs: {}", total_jobs);
 
-        println!("ready: {}", ready);
+        // println!("ready: {}", ready);
 
         for job in ready.into_iter() {
           job_tx.send(job);
@@ -151,7 +151,7 @@ impl Site {
         let mut completed = 0u;
 
         for i in range(0, total_jobs) {
-          println!("loop {}", i);
+          // println!("loop {}", i);
           let result_tx = result_tx.clone();
           let job_rx = job_rx.clone();
 
@@ -175,13 +175,13 @@ impl Site {
           HashMap::new();
 
         while completed < total_jobs {
-          println!("waiting. completed: {} total: {}", completed, total_jobs);
+          // println!("waiting. completed: {} total: {}", completed, total_jobs);
           let current = result_rx.recv();
-          println!("received");
+          // println!("received");
 
           match current.compiler.status {
             Paused => {
-              println!("paused {}", current.id);
+              // println!("paused {}", current.id);
 
               let total = self.bindings[current.binding].len();
               let binding = current.binding.clone();
@@ -197,17 +197,17 @@ impl Site {
                 },
               };
 
-              println!("paused so far ({}): {}",
-                       paused[binding].len(),
-                       paused[binding]);
-              println!("total to pause: {}", total);
-              println!("finished: {}", finished);
+              // println!("paused so far ({}): {}",
+              //          paused[binding].len(),
+              //          paused[binding]);
+              // println!("total to pause: {}", total);
+              // println!("finished: {}", finished);
 
               if finished {
                 let jobs = paused.remove(binding).unwrap();
 
-                println!("checking dependencies of \"{}\"", binding);
-                println!("current dependencies: {}", self.dependencies);
+                // println!("checking dependencies of \"{}\"", binding);
+                // println!("current dependencies: {}", self.dependencies);
 
                 let mut grouped = HashMap::new();
 
@@ -237,7 +237,7 @@ impl Site {
                                .collect::<Vec<Item>>());
 
                   for mut job in currents.into_iter() {
-                    println!("re-enqueuing: {}", job);
+                    // println!("re-enqueuing: {}", job);
 
                     let cur_deps = match deps.entry(binding) {
                       Vacant(entry) => {
@@ -246,7 +246,7 @@ impl Site {
 
                         if let Some(old_deps) = job.dependencies {
                           for (binding, the_deps) in old_deps.iter() {
-                            println!("loop: {} - {}", binding, the_deps);
+                            // println!("loop: {} - {}", binding, the_deps);
                             hm.insert(*binding, the_deps.clone());
                           }
                         }
@@ -279,10 +279,10 @@ impl Site {
               }
             },
             Done => {
-              println!("finished {}", current.id);
+              // println!("finished {}", current.id);
 
               // decrement dependencies of jobs
-              println!("before waiting: {}", waiting);
+              // println!("before waiting: {}", waiting);
 
               let binding = current.binding.clone();
 
@@ -303,25 +303,25 @@ impl Site {
                 },
               }
 
-              println!("after waiting: {}", waiting);
+              // println!("after waiting: {}", waiting);
 
               // split the waiting vec again
               let (ready, waiting_) =
                 waiting.partition(|ref job| job.dependency_count == 0);
               waiting = waiting_;
 
-              println!("now ready: {}", ready);
+              // println!("now ready: {}", ready);
 
               for mut job in ready.into_iter() {
                 let deps = match ready_deps.entry(binding) {
                   Vacant(entry) => {
                     let mut deps = HashMap::new();
 
-                    println!("checking dependencies of \"{}\"", binding);
-                    println!("current dependencies: {}", self.dependencies);
+                    // println!("checking dependencies of \"{}\"", binding);
+                    // println!("current dependencies: {}", self.dependencies);
 
                     for &dep in self.dependencies[job.binding].iter() {
-                      println!("getting finished \"{}\"", dep);
+                      // println!("getting finished \"{}\"", dep);
                       deps.insert(dep, finished_deps[dep].clone());
                     }
 
@@ -341,7 +341,7 @@ impl Site {
               }
 
               completed += 1;
-              println!("completed {}", completed);
+              // println!("completed {}", completed);
             },
           }
         }
@@ -372,6 +372,8 @@ impl Site {
       Vacant(entry) => { entry.set(vec![index]); },
       Occupied(mut entry) => { entry.get_mut().push(index); },
     }
+
+    self.graph.add_node(index);
 
     if let &Some(ref deps) = dependencies {
       for &dep in deps.iter() {
@@ -414,6 +416,7 @@ impl Site {
         if pattern.matches(relative) {
           self.add_job(
             binding.name,
+            // make Vec<Path> -> Vec<Arc<Path>> to avoid copying?
             Item::new(Some(path.clone()), None),
             binding.compiler.clone(),
             &binding.dependencies);

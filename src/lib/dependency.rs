@@ -40,6 +40,12 @@ impl Graph {
     }
   }
 
+  pub fn add_node(&mut self, node: uint) {
+    if let Vacant(entry) = self.edges.entry(node) {
+      entry.set(HashSet::new());
+    }
+  }
+
   /// Register a dependency constraint.
   pub fn add_edge(&mut self, a: uint, b: uint) {
     match self.edges.entry(a) {
