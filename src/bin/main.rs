@@ -39,6 +39,7 @@ fn main() {
     Compiler::new(
       Chain::new()
         .link(compiler::read)
+        .link(compiler::parse_toml)
         .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
           item.data.insert(DummyValue { age: 9 });
         })
@@ -76,29 +77,4 @@ fn main() {
       .creating(Path::new("index.html"), post_index);
 
   // site.build();
-
-  println!("generating");
-
-  let re =
-    regex!(
-      concat!(
-        "(?ms)",
-        r"\A---\s*\n",
-        r"(?P<metadata>.*?\n?)",
-        r"^---\s*$",
-        r"\n?",
-        r"(?P<body>.*)"));
-
-  let yaml =
-r"---
-something = lol
-another = hah
----
-
-this is the content";
-
-  let captures = re.captures(yaml).unwrap();
-
-  println!("captures\n{}", captures.name("metadata").unwrap());
-  println!("body\n{}", captures.name("body").unwrap());
 }

@@ -18,6 +18,7 @@ extern crate glob;
 extern crate anymap;
 extern crate regex;
 extern crate graphviz;
+extern crate toml;
 
 #[phase(plugin)]
 extern crate regex_macros;

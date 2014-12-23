@@ -1,6 +1,7 @@
 //! Compiler behavior.
 
 use std::sync::Arc;
+use toml;
 
 use item::{Item, Dependencies};
 
@@ -129,6 +130,40 @@ pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
     println(body.as_slice());
   } else {
     println("no body");
+  }
+}
+
+#[deriving(Clone)]
+pub struct TomlMetadata(pub toml::Table);
+
+pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
+  if let Some(body) = item.body.take() {
+    let re =
+      regex!(
+        concat!(
+          "(?ms)",
+          r"\A---\s*\n",
+          r"(?P<metadata>.*?\n?)",
+          r"^---\s*$",
+          r"\n?",
+          r"(?P<body>.*)"));
+
+    if let Some(captures) = re.captures(body.as_slice()) {
+      if let Some(metadata) = captures.name("metadata") {
+        let parsed = toml::Parser::new(metadata).parse().unwrap();
+        item.data.insert(TomlMetadata(parsed));
+      }
+
+      if let Some(body) = captures.name("body") {
+        item.body = Some(body.to_string());
+        return;
+      } else {
+        item.body = None;
+        return;
+      }
+    }
+
+    item.body = Some(body);
   }
 }
 
