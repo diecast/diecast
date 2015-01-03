@@ -2,12 +2,14 @@
 
 use std::collections::{HashMap, HashSet, RingBuf};
 
-use std::collections::hash_map::{Vacant, Occupied, Keys};
-use std::collections::hash_set::SetItems;
+use std::collections::hash_map::Keys;
+use std::collections::hash_map::Entry::{Vacant, Occupied};
+use std::collections::hash_set::Iter;
 
-use std::fmt::{mod, Show};
+use std::fmt::{self, Show};
 
 use graphviz as dot;
+use std::borrow::IntoCow;
 
 /// Represents a dependency graph.
 ///
@@ -74,7 +76,7 @@ impl Graph {
   }
 
   /// The neighbors of a given node.
-  pub fn neighbors_of(&self, node: uint) -> Option<SetItems<uint>> {
+  pub fn neighbors_of(&self, node: uint) -> Option<Iter<uint>> {
     self.edges.get(&node).and_then(|s| {
       if !s.is_empty() {
         Some(s.iter())

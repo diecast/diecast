@@ -2,7 +2,7 @@
 
 use anymap::AnyMap;
 use std::io::File;
-use std::fmt::{mod, Show};
+use std::fmt::{self, Show};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
 
 // TODO: use a UUID?
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct Item {
   pub from: Option<Path>,
   pub to: Option<Path>,

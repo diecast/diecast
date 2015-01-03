@@ -24,7 +24,7 @@ pub enum Link {
   Barrier,
 }
 
-#[deriving(Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum Status {
   Paused,
   Done,
@@ -133,7 +133,7 @@ pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
   }
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct TomlMetadata(pub toml::Value);
 
 pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {

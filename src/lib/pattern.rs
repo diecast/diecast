@@ -69,7 +69,7 @@ impl<P1, P2> Pattern for OrPattern<P1, P2>
 }
 
 /// Pattern that matches everything.
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct Everything;
 
 impl Pattern for Everything {

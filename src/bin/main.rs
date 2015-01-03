@@ -7,7 +7,6 @@ extern crate diecast;
 #[phase(plugin, link)]
 extern crate regex_macros;
 extern crate glob;
-extern crate term;
 extern crate regex;
 
 use diecast::{
@@ -20,29 +19,9 @@ use diecast::{
 };
 
 use diecast::router;
-use diecast::compiler::{mod, TomlMetadata};
-use std::fmt::Show;
-
-fn colored<S, M>(
-  term: &mut Box<term::Terminal<term::WriterWrapper> + Send>,
-  color: term::color::Color,
-  status: S,
-  message: M,
-  ) -> ::std::io::IoResult<()>
-where S: Show, M: Show {
-  try!(term.reset());
-  try!(term.fg(color));
-  try!(term.attr(term::attr::Attr::Bold));
-  try!(term.write_str(format!("{:>12}", status).as_slice()));
-  try!(term.reset());
-  try!(term.write_line(format!(" {}", message).as_slice()));
-  try!(term.flush());
-  Ok(())
-}
+use diecast::compiler::{self, TomlMetadata};
 
 fn main() {
-  let mut t = term::stdout().unwrap();
-
   let content_compiler =
     Compiler::new(
       Chain::new()
@@ -66,13 +45,9 @@ fn main() {
     Rule::new("posts")
       .compiler(content_compiler.clone());
 
-  colored(&mut t, term::color::GREEN, "preparing", "building dependency graph");
-
   let site =
     Site::new(Path::new("tests/fixtures/input"), Path::new("output"))
       .matching(glob::Pattern::new("posts/*.md"), posts);
-
-  colored(&mut t, term::color::GREEN, "compiling", "building site");
 
   site.build();
 }

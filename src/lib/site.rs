@@ -1,12 +1,13 @@
 //! Site generation.
 
 use std::sync::{Arc, Mutex, TaskPool};
+use std::sync::mpsc::channel;
 use std::collections::HashMap;
-use std::collections::hash_map::{Vacant, Occupied};
-use std::fmt::{mod, Show};
+use std::collections::hash_map::Entry::{Vacant, Occupied};
+use std::fmt::{self, Show};
 
 use pattern::Pattern;
-use compiler::{mod, Compile, Compiler, Chain};
+use compiler::{self, Compile, Compiler, Chain};
 use compiler::Status::{Paused, Done};
 use item::{Item, Dependencies};
 use dependency::Graph;
@@ -137,8 +138,8 @@ impl Site {
         let (job_tx, job_rx) = channel();
         let (result_tx, result_rx) = channel();
         let job_rx = Arc::new(Mutex::new(job_rx));
-        let (ready, mut waiting) =
-          ordered.partition(|ref job| job.dependency_count == 0);
+        let (ready, mut waiting): (Vec<Job>, Vec<Job>) =
+          ordered.into_iter().partition(|ref job| job.dependency_count == 0);
 
         // println!("jobs: {}", total_jobs);
 
@@ -150,13 +151,13 @@ impl Site {
 
         let mut completed = 0u;
 
-        for i in range(0, total_jobs) {
+        for _ in range(0, total_jobs) {
           // println!("loop {}", i);
           let result_tx = result_tx.clone();
           let job_rx = job_rx.clone();
 
           task_pool.execute(move || {
-            let mut job = job_rx.lock().recv();
+            let mut job = job_rx.lock().unwrap().recv().unwrap();
             job.process();
             result_tx.send(job);
           });
@@ -176,7 +177,7 @@ impl Site {
 
         while completed < total_jobs {
           // println!("waiting. completed: {} total: {}", completed, total_jobs);
-          let current = result_rx.recv();
+          let current = result_rx.recv().unwrap();
           // println!("received");
 
           match current.compiler.status {
@@ -270,7 +271,7 @@ impl Site {
                     let job_rx = job_rx.clone();
 
                     task_pool.execute(move || {
-                      let mut job = job_rx.lock().recv();
+                      let mut job = job_rx.lock().unwrap().recv().unwrap();
                       job.process();
                       result_tx.send(job);
                     });
@@ -306,8 +307,8 @@ impl Site {
               // println!("after waiting: {}", waiting);
 
               // split the waiting vec again
-              let (ready, waiting_) =
-                waiting.partition(|ref job| job.dependency_count == 0);
+              let (ready, waiting_): (Vec<Job>, Vec<Job>) =
+                waiting.into_iter().partition(|ref job| job.dependency_count == 0);
               waiting = waiting_;
 
               // println!("now ready: {}", ready);

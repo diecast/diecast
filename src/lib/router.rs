@@ -18,7 +18,7 @@ pub fn identity(item: &mut Item, _deps: Option<Dependencies>) {
 
 /// file.txt -> file.html
 /// gen.route(SetExtension::new("html"))
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct SetExtension {
   extension: &'static str,
 }
