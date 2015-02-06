@@ -1,8 +1,8 @@
 //! Compilation unit for the `Generator`.
 
 use anymap::AnyMap;
-use std::io::File;
-use std::fmt::{self, Show};
+use std::old_io::File;
+use std::fmt::{self, Debug};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -40,7 +40,7 @@ pub struct Item {
 
 impl Item {
   pub fn new(from: Option<Path>, to: Option<Path>) -> Item {
-    use std::io::fs::PathExtensions;
+    use std::old_io::fs::PathExtensions;
 
     if let Some(ref from) = from {
       assert!(from.is_file())
@@ -72,7 +72,7 @@ impl Item {
   }
 }
 
-impl Show for Item {
+impl Debug for Item {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     if let Some(ref path) = self.from {
       try!(write!(f, "{}", path.display()));

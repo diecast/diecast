@@ -41,12 +41,12 @@ impl Chain {
 
   pub fn only<C>(compiler: C) -> Chain
     where C: Compile {
-    Chain { chain: vec![Link::Compiler(box compiler as Box<Compile + Send + Sync>)] }
+    Chain { chain: vec![Link::Compiler(Box::new(compiler) as Box<Compile + Send + Sync>)] }
   }
 
   pub fn link<C>(mut self, compiler: C) -> Chain
     where C: Compile {
-    self.chain.push(Link::Compiler(box compiler as Box<Compile + Send + Sync>));
+    self.chain.push(Link::Compiler(Box::new(compiler) as Box<Compile + Send + Sync>));
     self
   }
 
@@ -67,7 +67,7 @@ impl Chain {
 pub struct Compiler {
   pub chain: Arc<Vec<Link>>,
   pub status: Status,
-  position: uint,
+  position: usize,
 }
 
 impl Clone for Compiler {
@@ -90,7 +90,7 @@ impl Compiler {
   }
 
   pub fn compile(&mut self, item: &mut Item, deps: Option<Dependencies>) {
-    let mut slice = self.chain[self.position..].iter();
+    let slice = self.chain[self.position..].iter();
 
     for link in slice {
       self.position += 1;
@@ -109,7 +109,7 @@ impl Compiler {
 }
 
 pub fn stub(item: &mut Item, _deps: Option<Dependencies>) {
-  println!("no compiler established for: {}", item);
+  println!("no compiler established for: {:?}", item);
 }
 
 /// Compiler that reads the `Item`'s body.
@@ -124,7 +124,7 @@ pub fn write(item: &mut Item, _deps: Option<Dependencies>) {
 
 /// Compiler that prints the `Item`'s body.
 pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
-  use std::io::stdio::println;
+  use std::old_io::stdio::println;
 
   if let &Some(ref body) = &item.body {
     println(body.as_slice());

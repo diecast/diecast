@@ -1,5 +1,3 @@
-#![macro_escape]
-
 /// This macro simply brings the dsl module's contents
 /// within the scope of the expression passed to it.
 ///
@@ -22,7 +20,7 @@
 macro_rules! pattern {
   ($pat:expr) => {
     {
-      use diecast::pattern::dsl::*;
+      use $crate::pattern::dsl::*;
       $pat
     }
   };
@@ -41,23 +39,23 @@ macro_rules! variadic {
 /// Constructs an `OrPattern` out of variable arguments.
 #[macro_export]
 macro_rules! or {
-  ($($e:expr),+) => {variadic!(::diecast::pattern::dsl::or, $($e),+)};
+  ($($e:expr),+) => {variadic!($crate::pattern::dsl::or, $($e),+)};
 }
 
 /// Constructs an `AndPattern` out of variable arguments.
 #[macro_export]
 macro_rules! and {
-  ($($e:expr),+) => {variadic!(::diecast::pattern::dsl::and, $($e),+)};
+  ($($e:expr),+) => {variadic!($crate::pattern::dsl::and, $($e),+)};
 }
 
 /// Constructs a `NotPattern` out of variable arguments.
 #[macro_export]
 macro_rules! not {
   ($e:expr) => {
-    ::diecast::pattern::dsl::not($e)
+    $crate::pattern::dsl::not($e)
   };
 
   ($head:expr, $($tail:expr),+) => {
-    ::diecast::pattern::dsl::and(::diecast::pattern::dsl::not($head), not!($($tail),+))
+    $crate::pattern::dsl::and($crate::pattern::dsl::not($head), not!($($tail),+))
   };
 }

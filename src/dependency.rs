@@ -3,10 +3,10 @@
 use std::collections::{HashMap, HashSet, RingBuf};
 
 use std::collections::hash_map::Keys;
-use std::collections::hash_map::Entry::{Vacant, Occupied};
+use std::collections::hash_map::Entry::Vacant;
 use std::collections::hash_set::Iter;
 
-use std::fmt::{self, Show};
+use std::fmt;
 
 use graphviz as dot;
 use std::borrow::IntoCow;
@@ -20,7 +20,7 @@ pub struct Graph {
   ///
   /// There's a key for every node in the graph, even if
   /// if it doesn't have any edges going out.
-  edges: HashMap<uint, HashSet<uint>>,
+  edges: HashMap<usize, HashSet<usize>>,
 
   /// The dependencies a node has.
   ///
@@ -31,7 +31,7 @@ pub struct Graph {
   /// e.g. the relationship that A depends on B can be represented as
   /// A -> B, so therefore the evaluation order which respects that
   /// dependency is the reverse, B -> A
-  reverse: HashMap<uint, HashSet<uint>>,
+  reverse: HashMap<usize, HashSet<usize>>,
 }
 
 impl Graph {
@@ -42,41 +42,25 @@ impl Graph {
     }
   }
 
-  pub fn add_node(&mut self, node: uint) {
+  pub fn add_node(&mut self, node: usize) {
     if let Vacant(entry) = self.edges.entry(node) {
-      entry.set(HashSet::new());
+      entry.insert(HashSet::new());
     }
   }
 
   /// Register a dependency constraint.
-  pub fn add_edge(&mut self, a: uint, b: uint) {
-    match self.edges.entry(a) {
-      Vacant(entry) => {
-        let mut hs = HashSet::new();
-        hs.insert(b);
-        entry.set(hs);
-      },
-      Occupied(mut entry) => { entry.get_mut().insert(b); },
-    };
-
-    // mirror the same thing for reverse
-    match self.reverse.entry(b) {
-      Vacant(entry) => {
-        let mut hs = HashSet::new();
-        hs.insert(a);
-        entry.set(hs);
-      },
-      Occupied(mut entry) => { entry.get_mut().insert(a); },
-    };
+  pub fn add_edge(&mut self, a: usize, b: usize) {
+    self.edges.entry(a).get().unwrap_or_else(|v| v.insert(HashSet::new())).insert(b);
+    self.reverse.entry(b).get().unwrap_or_else(|v| v.insert(HashSet::new())).insert(a);
   }
 
   /// The nodes in the graph.
-  pub fn nodes(&self) -> Keys<uint, HashSet<uint>> {
+  pub fn nodes(&self) -> Keys<usize, HashSet<usize>> {
     self.edges.keys()
   }
 
   /// The neighbors of a given node.
-  pub fn neighbors_of(&self, node: uint) -> Option<Iter<uint>> {
+  pub fn neighbors_of(&self, node: usize) -> Option<Iter<usize>> {
     self.edges.get(&node).and_then(|s| {
       if !s.is_empty() {
         Some(s.iter())
@@ -87,25 +71,25 @@ impl Graph {
   }
 
   /// The dependents a node has.
-  pub fn dependents_of(&self, node: uint) -> Option<&HashSet<uint>> {
+  pub fn dependents_of(&self, node: usize) -> Option<&HashSet<usize>> {
     self.edges.get(&node)
   }
 
   /// The number of dependencies a node has.
-  pub fn dependency_count(&self, node: uint) -> uint {
-    self.reverse.get(&node).map(|s| s.len()).unwrap_or(0u)
+  pub fn dependency_count(&self, node: usize) -> usize {
+    self.reverse.get(&node).map(|s| s.len()).unwrap_or(0us)
   }
 
   /// Topological ordering starting at the provided node.
   ///
   /// This essentially means: the given node plus all nodes
   /// that depend on it.
-  pub fn resolve_only(&self, node: uint) -> Result<RingBuf<uint>, RingBuf<uint>> {
+  pub fn resolve_only(&self, node: usize) -> Result<RingBuf<usize>, RingBuf<usize>> {
     Topological::new(self).from(node)
   }
 
   /// Topological ordering of the entire graph.
-  pub fn resolve(&self) -> Result<RingBuf<uint>, RingBuf<uint>> {
+  pub fn resolve(&self) -> Result<RingBuf<usize>, RingBuf<usize>> {
     Topological::new(self).all()
   }
 
@@ -120,7 +104,7 @@ impl Graph {
   }
 }
 
-impl Show for Graph {
+impl fmt::Debug for Graph {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     try!(self.edges.fmt(f));
     Ok(())
@@ -128,8 +112,8 @@ impl Show for Graph {
 }
 
 /// A graph edge for graphviz
-pub type Node = uint;
-pub type Edge = (uint, uint);
+pub type Node = usize;
+pub type Edge = (usize, usize);
 
 impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
   fn graph_id(&self) -> dot::Id<'a> {
@@ -141,7 +125,7 @@ impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
   }
 
   fn node_label(&self, n: &Node) -> dot::LabelText {
-    dot::LabelStr(n.to_string().into_cow())
+    dot::LabelText::LabelStr(n.to_string().into_cow())
   }
 }
 
@@ -187,19 +171,19 @@ struct Topological<'a> {
   graph: &'a Graph,
 
   /// The nodes that have been visited so far
-  visited: HashSet<uint>,
+  visited: HashSet<usize>,
 
   /// Nodes that are on the path to the current node.
-  on_stack: HashSet<uint>,
+  on_stack: HashSet<usize>,
 
   /// Trace back a path in the case of a cycle.
-  edge_to: HashMap<uint, uint>,
+  edge_to: HashMap<usize, usize>,
 
   /// Nodes in an order which respects dependencies.
-  topological: RingBuf<uint>,
+  topological: RingBuf<usize>,
 
   /// Either an ordering or the path of a cycle.
-  result: Result<RingBuf<uint>, RingBuf<uint>>,
+  result: Result<RingBuf<usize>, RingBuf<usize>>,
 }
 
 impl<'a> Topological<'a> {
@@ -219,11 +203,11 @@ impl<'a> Topological<'a> {
   ///
   /// This uses a recursive depth-first search, as it facilitates
   /// keeping track of a cycle, if any is present.
-  fn dfs(&mut self, node: uint) {
+  fn dfs(&mut self, node: usize) {
     self.on_stack.insert(node);
     self.visited.insert(node);
 
-    if let Some(mut neighbors) = self.graph.neighbors_of(node) {
+    if let Some(neighbors) = self.graph.neighbors_of(node) {
       for &neighbor in neighbors {
         if self.result.is_err() {
           return;
@@ -261,7 +245,7 @@ impl<'a> Topological<'a> {
   }
 
   /// recompile the dependencies of `node` and then `node` itself
-  pub fn from(mut self, node: uint) -> Result<RingBuf<uint>, RingBuf<uint>> {
+  pub fn from(mut self, node: usize) -> Result<RingBuf<usize>, RingBuf<usize>> {
     self.dfs(node);
 
     self.result.and(Ok(self.topological))
@@ -269,7 +253,7 @@ impl<'a> Topological<'a> {
 
   /// the typical resolution algorithm, returns a topological ordering
   /// of the nodes which honors the dependencies
-  pub fn all(mut self) -> Result<RingBuf<uint>, RingBuf<uint>> {
+  pub fn all(mut self) -> Result<RingBuf<usize>, RingBuf<usize>> {
     for &node in self.graph.nodes() {
       if !self.visited.contains(&node) {
         self.dfs(node);
@@ -283,7 +267,7 @@ impl<'a> Topological<'a> {
 #[cfg(test)]
 mod test {
   use super::Graph;
-  use std::io::File;
+  use std::old_io::File;
 
   fn helper_graph() -> Graph {
     let mut graph = Graph::new();
@@ -346,7 +330,7 @@ mod test {
 
   #[test]
   fn render() {
-    use std::io::fs::{PathExtensions, unlink};
+    use std::old_io::fs::{PathExtensions, unlink};
 
     let graph = helper_graph();
 

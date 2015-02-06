@@ -5,15 +5,6 @@ name = "diecast"
 version = "0.0.1"
 authors = ["Jorge Israel Peña <jorge.israel.p@gmail.com>"]
 
-[lib]
-name = "diecast"
-path = "src/lib/diecast.rs"
-plugin = true
-
-[[bin]]
-name = "diecast"
-doc = false
-
 [profile.dev]
 opt-level = 0
 debug = true
@@ -21,12 +12,14 @@ rpath = true
 
 [dependencies]
 glob = "*"
+regex = "*"
+regex_macros = "*"
 # iron = "*"
 
 [dependencies.anymap]
-git = "https://github.com/chris-morgan/anymap.git"
-# git = "https://github.com/blaenk/anymap.git"
-branch = "clone"
+path = "../anymap"
+# git = "https://github.com/chris-morgan/anymap.git"
+# branch = "clone"
 
 # [dependencies.iron]
 # git = "https://github.com/iron/iron.git"

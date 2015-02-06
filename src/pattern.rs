@@ -27,6 +27,12 @@ pub trait Pattern {
   fn matches(&self, &Path) -> bool;
 }
 
+impl<'a, P> Pattern for &'a P where P: Pattern {
+    fn matches(&self, path: &Path) -> bool {
+        (**self).matches(path)
+    }
+}
+
 /// The negation of a pattern.
 pub struct NotPattern<P>
   where P: Pattern {
@@ -138,11 +144,6 @@ pub mod dsl {
 mod test {
   use super::{Pattern, Everything};
 
-  fn matches<T>(pattern: T, p: &Path) -> bool
-    where T: Pattern {
-    pattern.matches(p)
-  }
-
   #[test]
   fn match_everything() {
     let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
@@ -152,12 +153,14 @@ mod test {
 
   #[test]
   fn match_globs() {
-    let posts = "posts/**.md";
+    use glob;
+
+    let pattern = glob::Pattern::new("posts/**/*.md").unwrap();
     let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
     let about_page = Path::new("pages/about.md");
 
-    assert!(matches(posts.as_slice(), &intro_to_rust));
-    assert!(!matches(posts.as_slice(), &about_page));
+    assert!(<glob::Pattern as Pattern>::matches(&pattern, &intro_to_rust));
+    assert!(!<glob::Pattern as Pattern>::matches(&pattern, &about_page));
   }
 
   #[test]
@@ -171,16 +174,18 @@ mod test {
 
   #[test]
   fn match_conjunctions() {
-    let posts = "posts/**.md";
+    use glob;
+
+    let posts = glob::Pattern::new("posts/**/*.md").unwrap();
     let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
     let this_week_in_rust = Path::new("posts/short/this-week-in-rust.md");
     let about_page = Path::new("pages/about.md");
 
-    assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+    assert!(!and!(&posts, not!("posts/short/this-week-in-rust.md"))
             .matches(&this_week_in_rust));
-    assert!(and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+    assert!(and!(&posts, not!("posts/short/this-week-in-rust.md"))
             .matches(&intro_to_rust));
-    assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+    assert!(!and!(&posts, not!("posts/short/this-week-in-rust.md"))
             .matches(&about_page));
   }
 
@@ -211,29 +216,32 @@ mod test {
 
   #[test]
   fn use_macros() {
-    let posts = "posts/**.md";
+    use glob;
+
+    let posts = glob::Pattern::new("posts/**/*.md").unwrap();
+    let posts_level = glob::Pattern::new("posts/**").unwrap();
     let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
     let this_week_in_rust = Path::new("posts/short/this-week-in-rust.md");
     let about_page = Path::new("pages/about.md");
 
     assert!(or!("pages/about.md", "pages/lately.md").matches(&about_page));
-    assert!(and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+    assert!(and!(&posts, not!("posts/short/this-week-in-rust.md"))
             .matches(&intro_to_rust));
-    assert!(!and!(posts.as_slice(), not!("posts/short/this-week-in-rust.md"))
+    assert!(!and!(&posts, not!("posts/short/this-week-in-rust.md"))
             .matches(&this_week_in_rust));
 
     assert!(or!("pages/about.md",
-                and!("posts/**",
+                and!(&posts_level,
                      not!("posts/short/this-week-in-rust.md")))
            .matches(&intro_to_rust));
 
     assert!(or!("pages/about.md",
-                and!("posts/**",
+                and!(&posts_level,
                      not!("posts/short/this-week-in-rust.md")))
            .matches(&about_page));
 
     assert!(!or!("pages/about.md",
-                 and!("posts/**",
+                 and!(&posts_level,
                       not!("posts/short/this-week-in-rust.md")))
            .matches(&this_week_in_rust));
   }
