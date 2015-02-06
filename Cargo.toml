@@ -14,6 +14,8 @@ rpath = true
 glob = "*"
 regex = "*"
 regex_macros = "*"
+log = "*"
+env_logger = "*"
 # iron = "*"
 
 [dependencies.anymap]

@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet, RingBuf};
 
 use std::collections::hash_map::Keys;
 use std::collections::hash_map::Entry::Vacant;
-use std::collections::hash_set::Iter;
 
 use std::fmt;
 
@@ -59,20 +58,14 @@ impl Graph {
         self.edges.keys()
     }
 
-    /// The neighbors of a given node.
-    pub fn neighbors_of(&self, node: usize) -> Option<Iter<usize>> {
-        self.edges.get(&node).and_then(|s| {
-            if !s.is_empty() {
-                Some(s.iter())
-            } else {
-                None
-            }
-        })
-    }
-
+    // TODO: this seems identical to the above?
     /// The dependents a node has.
     pub fn dependents_of(&self, node: usize) -> Option<&HashSet<usize>> {
         self.edges.get(&node)
+    }
+
+    pub fn dependencies_of(&self, node: usize) -> Option<&HashSet<usize>> {
+        self.reverse.get(&node)
     }
 
     /// The number of dependencies a node has.
@@ -207,7 +200,7 @@ impl<'a> Topological<'a> {
         self.on_stack.insert(node);
         self.visited.insert(node);
 
-        if let Some(neighbors) = self.graph.neighbors_of(node) {
+        if let Some(neighbors) = self.graph.dependents_of(node) {
             for &neighbor in neighbors {
                 if self.result.is_err() {
                     return;
@@ -254,6 +247,8 @@ impl<'a> Topological<'a> {
     /// the typical resolution algorithm, returns a topological ordering
     /// of the nodes which honors the dependencies
     pub fn all(mut self) -> Result<RingBuf<usize>, RingBuf<usize>> {
+        println!("graph: {:?}", self.graph);
+
         for &node in self.graph.nodes() {
             if !self.visited.contains(&node) {
                 self.dfs(node);

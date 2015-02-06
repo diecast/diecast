@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 // TODO:
-pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
+pub type Dependencies = Arc<HashMap<usize, Arc<Vec<Item>>>>;
 
 /// Represents a compilation unit.
 ///

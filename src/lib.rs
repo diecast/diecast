@@ -19,6 +19,9 @@ extern crate regex;
 extern crate graphviz;
 extern crate toml;
 
+#[macro_use]
+extern crate log;
+
 #[plugin]
 extern crate regex_macros;
 

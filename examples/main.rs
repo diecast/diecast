@@ -7,6 +7,7 @@ extern crate diecast;
 extern crate regex_macros;
 extern crate glob;
 extern crate regex;
+extern crate env_logger;
 
 use diecast::{
     Site,
@@ -21,6 +22,8 @@ use diecast::router;
 use diecast::compiler::{self, TomlMetadata};
 
 fn main() {
+    env_logger::init().unwrap();
+
     let content_compiler =
         Compiler::new(
             Chain::new()
@@ -45,9 +48,15 @@ fn main() {
         Rule::new("posts")
         .compiler(content_compiler.clone());
 
+    let post_index =
+        Rule::new("index")
+        .compiler(Compiler::new(Chain::only(compiler::stub).build()))
+        .depends_on(&posts);
+
     let site =
         Site::new(Path::new("tests/fixtures/input"), Path::new("output"))
-        .matching(glob::Pattern::new("posts/*.md").unwrap(), posts);
+        .matching(glob::Pattern::new("posts/*.md").unwrap(), posts)
+        .creating(Path::new("blah.html"), post_index);
 
     site.build();
 }
