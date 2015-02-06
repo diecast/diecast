@@ -37,8 +37,3 @@ pub mod compiler;
 pub mod site;
 pub mod dependency;
 
-// for macros
-mod diecast {
-  pub use pattern;
-}
-

@@ -22,73 +22,73 @@ pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
 
 #[derive(Clone)]
 pub struct Item {
-  pub from: Option<Path>,
-  pub to: Option<Path>,
+    pub from: Option<Path>,
+    pub to: Option<Path>,
 
-  /// The Item's body which will fill the target file.
-  pub body: Option<String>,
+    /// The Item's body which will fill the target file.
+    pub body: Option<String>,
 
-  /// Any additional data (post metadata)
-  ///
-  /// * Title
-  /// * Date
-  /// * Comments
-  /// * TOC
-  /// * Tags
-  pub data: AnyMap,
+    /// Any additional data (post metadata)
+    ///
+    /// * Title
+    /// * Date
+    /// * Comments
+    /// * TOC
+    /// * Tags
+    pub data: AnyMap,
 }
 
 impl Item {
-  pub fn new(from: Option<Path>, to: Option<Path>) -> Item {
-    use std::old_io::fs::PathExtensions;
+    pub fn new(from: Option<Path>, to: Option<Path>) -> Item {
+        use std::old_io::fs::PathExtensions;
 
-    if let Some(ref from) = from {
-      assert!(from.is_file())
+        if let Some(ref from) = from {
+            assert!(from.is_file())
+        }
+
+        // ensure that the source is a file
+        Item {
+            from: from,
+            to: to,
+            body: None,
+            data: AnyMap::new()
+        }
     }
 
-    // ensure that the source is a file
-    Item {
-      from: from,
-      to: to,
-      body: None,
-      data: AnyMap::new()
+    pub fn read(&mut self) {
+        if let Some(ref path) = self.from {
+            self.body = File::open(path).read_to_string().ok();
+        }
     }
-  }
 
-  pub fn read(&mut self) {
-    if let Some(ref path) = self.from {
-      self.body = File::open(path).read_to_string().ok();
+    pub fn write(&mut self) {
+        if let Some(ref path) = self.to {
+            if let Some(ref body) = self.body {
+                File::create(path)
+                    .write_str(body)
+                    .unwrap();
+            }
+        }
     }
-  }
-
-  pub fn write(&mut self) {
-    if let Some(ref path) = self.to {
-      if let Some(ref body) = self.body {
-        File::create(path)
-          .write_str(body.as_slice())
-          .unwrap();
-      }
-    }
-  }
 }
 
 impl Debug for Item {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    if let Some(ref path) = self.from {
-      try!(write!(f, "{}", path.display()));
-    } else {
-      try!(write!(f, "None"));
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(ref path) = self.from {
+            try!(write!(f, "{}", path.display()));
+        } else {
+            try!(write!(f, "None"));
+        }
+
+        try!(write!(f, " → "));
+
+        if let Some(ref path) = self.to {
+            try!(write!(f, "{}", path.display()));
+        } else {
+            try!(write!(f, "None"));
+        }
+
+        Ok(())
     }
-
-    try!(write!(f, " → "));
-
-    if let Some(ref path) = self.to {
-      try!(write!(f, "{}", path.display()));
-    } else {
-      try!(write!(f, "None"));
-    }
-
-    Ok(())
-  }
 }
 
