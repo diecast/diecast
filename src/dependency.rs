@@ -49,8 +49,12 @@ impl Graph {
 
     /// Register a dependency constraint.
     pub fn add_edge(&mut self, a: usize, b: usize) {
-        self.edges.entry(a).get().unwrap_or_else(|v| v.insert(HashSet::new())).insert(b);
-        self.reverse.entry(b).get().unwrap_or_else(|v| v.insert(HashSet::new())).insert(a);
+        self.edges.entry(a).get()
+            .unwrap_or_else(|v| v.insert(HashSet::new()))
+            .insert(b);
+        self.reverse.entry(b).get()
+            .unwrap_or_else(|v| v.insert(HashSet::new()))
+            .insert(a);
     }
 
     /// The nodes in the graph.
@@ -247,7 +251,7 @@ impl<'a> Topological<'a> {
     /// the typical resolution algorithm, returns a topological ordering
     /// of the nodes which honors the dependencies
     pub fn all(mut self) -> Result<RingBuf<usize>, RingBuf<usize>> {
-        println!("graph: {:?}", self.graph);
+        trace!("graph: {:?}", self.graph);
 
         for &node in self.graph.nodes() {
             if !self.visited.contains(&node) {

@@ -22,7 +22,7 @@ extern crate toml;
 #[macro_use]
 extern crate log;
 
-#[plugin]
+#[plugin] #[no_link]
 extern crate regex_macros;
 
 pub use pattern::Pattern;

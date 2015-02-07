@@ -7,6 +7,8 @@ extern crate diecast;
 extern crate regex_macros;
 extern crate glob;
 extern crate regex;
+#[macro_use]
+extern crate log;
 extern crate env_logger;
 
 use diecast::{
@@ -29,24 +31,33 @@ fn main() {
             Chain::new()
             .link(compiler::read)
             .link(compiler::parse_toml)
-            .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
+            .barrier()
+            .link(|_item: &mut Item, deps: Option<Dependencies>| {
+                trace!("after barrier:\n{:?}", deps);
+            })
+            .link(|item: &mut Item, _deps: Option<Dependencies>| {
                 if let Some(&TomlMetadata(ref meta)) = item.data.get::<TomlMetadata>() {
-                    println!("meta:\n{}", meta);
+                    trace!("meta:\n{}", meta);
                 }
 
-                println!("body:\n{:?}", item.body);
+                trace!("body:\n{:?}", item.body);
             })
             .link(router::SetExtension::new("html"))
-            .link(|&: item: &mut Item, _deps: Option<Dependencies>| {
-                println!("routed {} → {}",
+            .link(|item: &mut Item, _deps: Option<Dependencies>| {
+                trace!("routed {} → {}",
                          item.from.clone().unwrap().display(),
                          item.to.clone().unwrap().display());
             })
             .build());
 
+    let dummy =
+        Rule::new("dummy")
+        .compiler(Compiler::new(Chain::only(compiler::stub).build()));
+
     let posts =
         Rule::new("posts")
-        .compiler(content_compiler.clone());
+        .compiler(content_compiler.clone())
+        .depends_on(&dummy);
 
     let post_index =
         Rule::new("index")
@@ -55,6 +66,7 @@ fn main() {
 
     let site =
         Site::new(Path::new("tests/fixtures/input"), Path::new("output"))
+        .creating(Path::new("dummy.html"), dummy)
         .matching(glob::Pattern::new("posts/*.md").unwrap(), posts)
         .creating(Path::new("blah.html"), post_index);
 

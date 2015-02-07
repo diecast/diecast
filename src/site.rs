@@ -1,8 +1,8 @@
 //! Site generation.
 
-use std::sync::{Arc, Mutex, TaskPool};
-use std::sync::mpsc::channel;
-use std::collections::HashMap;
+use std::sync::{Arc, TaskPool};
+use std::sync::mpsc::{Sender, Receiver, channel};
+use std::collections::{HashMap, RingBuf};
 use std::collections::hash_map::Entry::{Vacant, Occupied};
 use std::fmt;
 
@@ -13,8 +13,8 @@ use item::{Item, Dependencies};
 use dependency::Graph;
 
 pub struct Job {
-    pub id: usize,
-    pub binding: usize,
+    pub id: JobId,
+    pub binding: BindingId,
 
     pub item: Item,
     pub compiler: Compiler,
@@ -34,20 +34,16 @@ impl fmt::Debug for Job {
 }
 
 impl Job {
-    pub fn new(binding: usize,
-               item: Item,
-               compiler: Compiler,
-               id: usize)
-        -> Job {
-            Job {
-                id: id,
-                binding: binding,
-                item: item,
-                compiler: compiler,
-                dependency_count: 0,
-                dependencies: None,
-            }
+    pub fn new(binding: BindingId, item: Item, compiler: Compiler, id: JobId) -> Job {
+        Job {
+            id: id,
+            binding: binding,
+            item: item,
+            compiler: compiler,
+            dependency_count: 0,
+            dependencies: None,
         }
+    }
 
     fn process(&mut self) {
         self.compiler.compile(&mut self.item, self.dependencies.clone());
@@ -69,16 +65,37 @@ pub struct Site {
     paths: Vec<Path>,
 
     /// Mapping the id to its dependencies
-    bindings: HashMap<usize, Vec<usize>>,
+    bindings: HashMap<BindingId, Vec<JobId>>,
 
     /// Mapping the name to its id
-    ids: HashMap<&'static str, usize>,
+    ids: HashMap<&'static str, BindingId>,
 
     /// The jobs
     jobs: Vec<Job>,
 
     /// Dependency resolution
     graph: Graph,
+
+    /// Thread pool to process jobs
+    thread_pool: TaskPool,
+
+    /// For worker threads to send result back to main
+    result_tx: Sender<Job>,
+
+    /// For main thread to receive results
+    result_rx: Receiver<Job>,
+
+    /// the dependencies as they're being built
+    staging_deps: HashMap<BindingId, Vec<Item>>,
+
+    /// finished dependencies
+    finished_deps: HashMap<BindingId, Arc<Vec<Item>>>,
+
+    /// dependencies that are currently paused due to a barrier
+    paused: HashMap<BindingId, Vec<Job>>,
+
+    /// items whose dependencies have not been fulfilled
+    waiting: Vec<Job>,
 }
 
 impl Site {
@@ -91,6 +108,9 @@ impl Site {
             .filter(|p| p.is_file())
             .collect::<Vec<Path>>();
 
+        // channels for sending and receiving results
+        let (result_tx, result_rx) = channel();
+
         Site {
             input: input,
             output: output,
@@ -101,254 +121,257 @@ impl Site {
             ids: HashMap::new(),
             jobs: Vec::new(),
             graph: Graph::new(),
+
+            thread_pool: TaskPool::new(::std::os::num_cpus()),
+            result_tx: result_tx,
+            result_rx: result_rx,
+
+            staging_deps: HashMap::new(),
+            finished_deps: HashMap::new(),
+            paused: HashMap::new(),
+
+            waiting: Vec::new(),
         }
     }
 }
 
+fn sort_jobs(jobs: &mut Vec<Job>, order: &RingBuf<BindingId>, graph: &Graph) {
+    let mut boundary = 0;
+
+    for &bind_id in order {
+        let mut idx = boundary;
+
+        while idx < jobs.len() {
+            let current_binding = jobs[idx].binding;
+
+            if current_binding == bind_id {
+                jobs[idx].dependency_count = graph.dependency_count(current_binding);
+                jobs.swap(boundary, idx);
+                boundary += 1;
+            }
+
+            idx += 1;
+        }
+    }
+
+}
+
+pub type BindingId = usize;
+pub type JobId = usize;
+
 impl Site {
+    fn dispatch_job(&self, job: Job) {
+        let result_tx = self.result_tx.clone();
+
+        self.thread_pool.execute(move || {
+            let mut job = job;
+            job.process();
+            result_tx.send(job).unwrap();
+        });
+    }
+
+    fn handle_paused(&mut self, current: Job) {
+        trace!("paused {}", current.id);
+
+        let binding = current.binding;
+
+        // total number of jobs in the binding
+        let total = self.bindings[binding].len();
+
+        // add this paused job to the collection of
+        // paused jobs for this binding
+        // and return whether all jobs have been paused
+        let finished = {
+            let jobs = self.paused.entry(binding).get()
+                           .unwrap_or_else(|v| v.insert(vec![]));
+            jobs.push(current);
+            jobs.len() == total
+        };
+
+        trace!("paused so far ({}): {:?}",
+               self.paused[binding].len(),
+               self.paused[binding]);
+        trace!("total to pause: {}", total);
+        trace!("finished: {}", finished);
+
+        // there are still more jobs that haven't hit the barrier
+        if !finished {
+            return;
+        }
+
+        // get paused jobs to begin re-dispatching them
+        let jobs = self.paused.remove(&binding).unwrap();
+
+        // create the new set of dependencies
+        // if the binding already had dependencies, copy them
+        let mut new_deps =
+            if let Some(ref old_deps) = jobs[0].dependencies {
+                (**old_deps).clone()
+            } else {
+                HashMap::new()
+            };
+
+        // insert the frozen state of these jobs
+        new_deps.insert(binding, {
+            Arc::new(jobs.iter()
+                .map(|j| j.item.clone())
+                .collect::<Vec<Item>>())
+        });
+
+        trace!("checking dependencies of \"{}\"", binding);
+
+        let arc_map = Arc::new(new_deps);
+
+        // package each job with its dependencies
+        for mut job in jobs {
+            job.dependencies = Some(arc_map.clone());
+
+            trace!("re-enqueuing: {:?}", job);
+
+            self.dispatch_job(job);
+        }
+    }
+
+    fn handle_done(&mut self, current: Job) {
+        trace!("finished {}", current.id);
+        trace!("before waiting: {:?}", self.waiting);
+
+        let binding = current.binding;
+        let total = self.bindings[binding].len();
+
+        // add to collection of finished items
+        let finished = match self.staging_deps.entry(binding) {
+            Vacant(entry) => {
+                entry.insert(vec![current.item]);
+                1 == total
+            },
+            Occupied(mut entry) => {
+                entry.get_mut().push(current.item);
+                entry.get().len() == total
+            },
+        };
+
+        trace!("checking if done");
+
+        // if the binding isn't complete, nothing more to do
+        if !finished {
+            return;
+        }
+
+        // binding is complete
+        trace!("binding {} finished", binding);
+
+        // if they're done, move from staging to finished
+        self.finished_deps.insert(binding, Arc::new({
+            self.staging_deps.remove(&binding).unwrap()
+        }));
+
+        let dependents = self.graph.dependents_of(binding);
+
+        // no dependents
+        if dependents.is_none() {
+            return;
+        }
+
+        // prepare dependencies for all ready dependents
+
+        let dependents = dependents.unwrap();
+
+        // decrement the dependency count of dependents in the waiting queue
+        for job in &mut self.waiting {
+            if dependents.contains(&job.binding) {
+                job.dependency_count -= 1;
+            }
+        }
+
+        trace!("finished_deps: {:?}", self.finished_deps);
+
+        // swap out in order to partition
+        let waiting = ::std::mem::replace(&mut self.waiting, Vec::new());
+
+        // separate out the now-ready jobs
+        let (ready, waiting): (Vec<Job>, Vec<Job>) =
+            waiting.into_iter().partition(|ref job| job.dependency_count == 0);
+
+        self.waiting = waiting;
+
+        let mut deps_cache = HashMap::new();
+        let mut dependents = ready.iter().map(|j| j.binding).collect::<Vec<usize>>();
+
+        dependents.sort();
+        dependents.dedup();
+
+        // this creates a cache of binding -> dependencies
+        // this way multiple jobs that are part of the same binding
+        // dont end up reconstructing the dependencies each time
+        //
+        // there's no need to add the save states due to barriers here,
+        // because this will be the first time the jobs are going to run,
+        // so they won't have reached any barriers to begin with
+        for dependent in dependents {
+            let mut deps = HashMap::new();
+
+            for &dep in self.graph.dependencies_of(dependent).unwrap() {
+                trace!("adding dependency: {:?}", dep);
+                deps.insert(dep, self.finished_deps[dep].clone());
+            }
+
+            deps_cache.insert(dependent, Arc::new(deps));
+        }
+
+        // attach the dependencies and dispatch
+        for mut job in ready {
+            job.dependencies = Some(deps_cache[job.binding].clone());
+            trace!("job now ready: {:?}", job);
+            self.dispatch_job(job)
+        }
+    }
+
     pub fn build(mut self) {
         match self.graph.resolve() {
             Ok(order) => {
                 use std::mem;
 
-                // trick the stupid borrowck
-                let mut unordered = mem::replace(&mut self.jobs, Vec::new());
-                let mut ordered = vec![];
+                // put the jobs in the correct evaluation order
+                sort_jobs(&mut self.jobs, &order, &self.graph);
 
-                for bind_id in order {
-                    let (matched, rest): (Vec<Job>, Vec<Job>)
-                        = unordered.into_iter().partition(|ref job| job.binding == bind_id);
-
-                    for mut job in matched {
-                        job.dependency_count = self.graph.dependency_count(job.binding);
-                        ordered.push(job);
-                    }
-
-                    unordered = rest;
-                }
+                // swap out the jobs in order to consume them
+                let ordered = mem::replace(&mut self.jobs, Vec::new());
 
                 trace!("ordered: {:?}", ordered);
 
+                // total number of jobs
                 let total_jobs = ordered.len();
-                let task_pool = TaskPool::new(::std::os::num_cpus());
-                let (job_tx, job_rx) = channel();
-                let (result_tx, result_rx) = channel();
-                let job_rx = Arc::new(Mutex::new(job_rx));
-                let (ready, mut waiting): (Vec<Job>, Vec<Job>) =
+
+                // determine which jobs are ready
+                let (ready, waiting): (Vec<Job>, Vec<Job>) =
                    ordered.into_iter().partition(|ref job| job.dependency_count == 0);
 
-                trace!("jobs: {}", total_jobs);
+                self.waiting = waiting;
 
+                trace!("jobs: {}", total_jobs);
                 trace!("ready: {:?}", ready);
 
+                // dispatch the jobs that are ready
                 for job in ready {
-                    job_tx.send(job).unwrap();
+                    self.dispatch_job(job);
                 }
 
+                // jobs completed so far
                 let mut completed = 0us;
 
-                for i in range(0, total_jobs) {
-                    trace!("loop {}", i);
-                    let result_tx = result_tx.clone();
-                    let job_rx = job_rx.clone();
-
-                    task_pool.execute(move || {
-                        let mut job = job_rx.lock().unwrap().recv().unwrap();
-                        job.process();
-                        result_tx.send(job).unwrap();
-                    });
-                }
-
-                // Builds up the dependencies for an Item as they are built.
-                //
-                // Since multiple items may depend on the same Item, an Arc
-                // is used to avoid having to clone it each time, since the
-                // dependencies will be immutable anyways.
-                let mut staging_deps: HashMap<usize, Vec<Item>> =
-                    HashMap::new();
-                let mut finished_deps: HashMap<usize, Arc<Vec<Item>>> =
-                    HashMap::new();
-                // TODO: is ready_deps now obsolete because finished_deps is
-                //       ONLY for finished dependencies?
-                let mut ready_deps: HashMap<usize, Dependencies> =
-                    HashMap::new();
-                let mut paused: HashMap<usize, Vec<Job>> =
-                    HashMap::new();
-
                 while completed < total_jobs {
+                    let current = self.result_rx.recv().unwrap();
+
                     trace!("waiting. completed: {} total: {}", completed, total_jobs);
-                    let current = result_rx.recv().unwrap();
                     trace!("received");
 
                     match current.compiler.status {
                         Paused => {
-                            trace!("paused {}", current.id);
-
-                            let total = self.bindings[current.binding].len();
-                            let binding = current.binding;
-
-                            let finished = match paused.entry(binding) {
-                                Vacant(entry) => {
-                                    entry.insert(vec![current]);
-                                    1 == total
-                                },
-                                Occupied(mut entry) => {
-                                    entry.get_mut().push(current);
-                                    entry.get().len() == total
-                                },
-                            };
-
-                            trace!("paused so far ({}): {:?}",
-                                     paused[binding].len(),
-                                     paused[binding]);
-                            trace!("total to pause: {}", total);
-                            trace!("finished: {}", finished);
-
-                            if finished {
-                                let jobs = paused.remove(&binding).unwrap();
-
-                                trace!("checking dependencies of \"{}\"", binding);
-
-                                let mut grouped = HashMap::new();
-
-                                for job in jobs {
-                                    match grouped.entry(job.binding) {
-                                        Vacant(entry) => {
-                                            entry.insert(vec![job]);
-                                        },
-                                        Occupied(mut entry) => {
-                                            entry.get_mut().push(job);
-                                        },
-                                    }
-                                }
-
-                                let keys =
-                                    grouped.keys()
-                                    .map(|s| s.clone())
-                                    .collect::<Vec<usize>>();
-
-                                for &binding in &keys {
-                                    let mut deps = HashMap::new();
-
-                                    let currents = grouped.remove(&binding).unwrap();
-                                    let saved =
-                                        Arc::new(currents.iter()
-                                                 .map(|j| j.item.clone())
-                                                 .collect::<Vec<Item>>());
-
-                                    for mut job in currents {
-                                        trace!("re-enqueuing: {:?}", job);
-
-                                        let cur_deps = match deps.entry(binding) {
-                                            Vacant(entry) => {
-                                                let mut hm = HashMap::new();
-                                                hm.insert(binding, Arc::new(vec![job.item.clone()]));
-
-                                                if let Some(old_deps) = job.dependencies {
-                                                    for (binding, the_deps) in old_deps.iter() {
-                                                        trace!("loop: {} - {:?}", binding, the_deps);
-                                                        hm.insert(*binding, the_deps.clone());
-                                                    }
-                                                }
-
-                                                hm.insert(binding, saved.clone());
-
-                                                let arc_map = Arc::new(hm);
-                                                let cloned = arc_map.clone();
-                                                entry.insert(arc_map);
-                                                cloned
-                                            },
-                                            Occupied(entry) => {
-                                                entry.get().clone()
-                                            },
-                                        };
-
-                                        job.dependencies = Some(cur_deps);
-                                        job_tx.send(job).unwrap();
-
-                                        let result_tx = result_tx.clone();
-                                        let job_rx = job_rx.clone();
-
-                                        task_pool.execute(move || {
-                                            let mut job = job_rx.lock().unwrap().recv().unwrap();
-                                            job.process();
-                                            result_tx.send(job).unwrap();
-                                        });
-                                    }
-                                }
-                            }
+                            self.handle_paused(current);
                         },
                         Done => {
-                            trace!("finished {}", current.id);
-
-                            trace!("before waiting: {:?}", waiting);
-
-                            let binding = current.binding.clone();
-
-                            // add to collection of finished items
-                            let done_so_far = match staging_deps.entry(binding) {
-                                Vacant(entry) => {
-                                    entry.insert(vec![current.item]);
-                                    1
-                                },
-                                Occupied(mut entry) => {
-                                    entry.get_mut().push(current.item);
-                                    entry.get().len()
-                                },
-                            };
-
-                            let total = self.bindings[binding].len();
-
-                            trace!("checking if done");
-                            // if they're done, move from staging to finished
-                            if done_so_far == total {
-                                trace!("binding {} finished", binding);
-                                let deps = staging_deps.remove(&binding).unwrap();
-                                finished_deps.insert(binding, Arc::new(deps));
-
-                                if let Some(dependents) = self.graph.dependents_of(current.binding) {
-                                    // TODO: change to &mut waiting
-                                    for job in &mut waiting {
-                                        if dependents.contains(&job.binding) {
-                                            job.dependency_count -= 1;
-                                        }
-                                    }
-
-                                    trace!("finished_deps: {:?}", finished_deps);
-
-                                    // decrement dependencies of jobs
-                                    // split the waiting vec again
-                                    let (ready, waiting_): (Vec<Job>, Vec<Job>) =
-                                        waiting.into_iter().partition(|ref job| job.dependency_count == 0);
-                                    waiting = waiting_;
-
-                                    for mut job in ready {
-                                        let deps = match ready_deps.entry(binding) {
-                                            Vacant(entry) => {
-                                                let mut deps = HashMap::new();
-
-                                                for &dep in self.graph.dependencies_of(job.binding).unwrap() {
-                                                    trace!("adding dependency: {:?}", dep);
-                                                    deps.insert(dep, finished_deps[dep].clone());
-                                                }
-
-                                                let arc_deps = Arc::new(deps);
-                                                let cloned = arc_deps.clone();
-
-                                                entry.insert(arc_deps);
-                                                cloned
-                                            },
-                                            Occupied(entry) => {
-                                                entry.get().clone()
-                                            },
-                                        };
-
-                                        job.dependencies = Some(deps);
-                                        job_tx.send(job).unwrap();
-                                    }
-                                }
-                            }
-
+                            self.handle_done(current);
                             completed += 1;
                             trace!("completed {}", completed);
                         },
@@ -363,36 +386,46 @@ impl Site {
         trace!("THIS IS A DEBUG MESSAGE");
     }
 
-    // TODO: ensure can only add dependency on &Dependency to avoid
-    // string errors
+    // TODO: ensure can only add dependency on &Dependency to avoid string errors
     fn add_job(&mut self,
                binding: &'static str,
                item: Item,
                compiler: Compiler,
                dependencies: &Option<Vec<&'static str>>) {
+        // create or get an id for this name
         let bind_count = self.ids.len();
-        let bind_index: usize =
-            *self.ids.entry(binding).get().unwrap_or_else(|v| v.insert(bind_count));
+        let bind_index: BindingId =
+            *self.ids.entry(binding).get()
+                .unwrap_or_else(|v| v.insert(bind_count));
 
         trace!("adding job for {:?}", item);
         trace!("bind index: {}", bind_index);
 
+        // create a job id
         let index = self.jobs.len();
         trace!("index: {}", index);
+
+        // add the job to the list of jobs
         self.jobs.push(Job::new(bind_index, item, compiler, index));
 
-        self.bindings.entry(bind_index).get().unwrap_or_else(|v| v.insert(vec![])).push(index);
+        // associate the job id with the binding
+        self.bindings.entry(bind_index).get()
+            .unwrap_or_else(|v| v.insert(vec![]))
+            .push(index);
 
         trace!("bindings: {:?}", self.bindings);
 
+        // add the binding to the graph
         self.graph.add_node(bind_index);
 
+        // if there are dependencies, create an edge from the dependency to this binding
         if let &Some(ref deps) = dependencies {
             trace!("has dependencies: {:?}", deps);
+
             for &dep in deps {
-                let bind_idx = self.ids[dep];
-                trace!("setting dependency {} -> {}", bind_idx, bind_index);
-                self.graph.add_edge(bind_idx, bind_index);
+                let dependency_id = self.ids[dep];
+                trace!("setting dependency {} -> {}", dependency_id, bind_index);
+                self.graph.add_edge(dependency_id, bind_index);
             }
         }
     }
@@ -414,7 +447,6 @@ impl Site {
     where P: Pattern {
         use std::mem;
 
-        // stupid hack to trick borrowck
         let paths = mem::replace(&mut self.paths, Vec::new());
 
         for path in &paths {
@@ -424,6 +456,7 @@ impl Site {
                 self.add_job(
                     binding.name,
                     // TODO: make Vec<Path> -> Vec<Arc<Path>> to avoid copying?
+                    //       what does this mean?
                     Item::new(Some(path.clone()), None),
                     binding.compiler.clone(),
                     &binding.dependencies);
