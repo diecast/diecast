@@ -70,6 +70,9 @@ pub struct Site {
     /// Mapping the name to its id
     ids: HashMap<&'static str, BindingId>,
 
+    /// Mapping the id to its name
+    names: HashMap<BindingId, &'static str>,
+
     /// The jobs
     jobs: Vec<Job>,
 
@@ -119,6 +122,7 @@ impl Site {
 
             bindings: HashMap::new(),
             ids: HashMap::new(),
+            names: HashMap::new(),
             jobs: Vec::new(),
             graph: Graph::new(),
 
@@ -212,7 +216,7 @@ impl Site {
             };
 
         // insert the frozen state of these jobs
-        new_deps.insert(binding, {
+        new_deps.insert(self.names[binding], {
             Arc::new(jobs.iter()
                 .map(|j| j.item.clone())
                 .collect::<Vec<Item>>())
@@ -313,15 +317,15 @@ impl Site {
 
             for &dep in self.graph.dependencies_of(dependent).unwrap() {
                 trace!("adding dependency: {:?}", dep);
-                deps.insert(dep, self.finished_deps[dep].clone());
+                deps.insert(self.names[dep], self.finished_deps[dep].clone());
             }
 
-            deps_cache.insert(dependent, Arc::new(deps));
+            deps_cache.insert(self.names[dependent], Arc::new(deps));
         }
 
         // attach the dependencies and dispatch
         for mut job in ready {
-            job.dependencies = Some(deps_cache[job.binding].clone());
+            job.dependencies = Some(deps_cache[self.names[job.binding]].clone());
             trace!("job now ready: {:?}", job);
             self.dispatch_job(job)
         }
@@ -397,6 +401,8 @@ impl Site {
         let bind_index: BindingId =
             *self.ids.entry(binding).get()
                 .unwrap_or_else(|v| v.insert(bind_count));
+
+        self.names.insert(bind_index, binding);
 
         trace!("adding job for {:?}", item);
         trace!("bind index: {}", bind_index);
