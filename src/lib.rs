@@ -26,6 +26,8 @@ extern crate log;
 extern crate regex_macros;
 
 extern crate hoedown;
+extern crate handlebars;
+extern crate "rustc-serialize" as rustc_serialize;
 
 pub use pattern::Pattern;
 pub use site::{Site, Rule};

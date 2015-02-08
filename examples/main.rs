@@ -3,7 +3,7 @@
 
 #[plugin]
 extern crate diecast;
-#[plugin]
+#[plugin] #[no_link]
 extern crate regex_macros;
 extern crate glob;
 extern crate regex;

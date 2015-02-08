@@ -17,7 +17,12 @@ regex_macros = "*"
 log = "*"
 env_logger = "*"
 hoedown = "*"
+handlebars = "*"
+rustc-serialize = "*"
 # iron = "*"
+
+# [dependencies.rustc-serialize]
+# path = "../rustc-serialize"
 
 [dependencies.anymap]
 path = "../anymap"

@@ -134,10 +134,13 @@ pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
 }
 
 #[derive(Clone)]
-pub struct TomlMetadata(pub toml::Value);
+pub struct Metadata(pub String);
 
-pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
+pub fn parse_metadata(item: &mut Item, _deps: Option<Dependencies>) {
     if let Some(body) = item.body.take() {
+        // TODO:
+        // should probably allow arbitrary amount of
+        // newlines after metadata block?
         let re =
             regex!(
                 concat!(
@@ -150,8 +153,7 @@ pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
 
         if let Some(captures) = re.captures(&body) {
             if let Some(metadata) = captures.name("metadata") {
-                let parsed = toml::Value::Table(toml::Parser::new(metadata).parse().unwrap());
-                item.data.insert(TomlMetadata(parsed));
+                item.data.insert(Metadata(metadata.to_string()));
             }
 
             if let Some(body) = captures.name("body") {
@@ -167,6 +169,21 @@ pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
     }
 }
 
+#[derive(Clone)]
+pub struct TomlMetadata(pub toml::Value);
+
+pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
+    let parsed = if let Some(&Metadata(ref parsed)) = item.data.get::<Metadata>() {
+        Some(toml::Value::Table(toml::Parser::new(parsed).parse().unwrap()))
+    } else {
+        None
+    };
+
+    if let Some(parsed) = parsed {
+        item.data.insert(TomlMetadata(parsed));
+    }
+}
+
 pub fn render_markdown(item: &mut Item, _deps: Option<Dependencies>) {
     use hoedown::Markdown;
     use hoedown::renderer::html;
@@ -176,6 +193,56 @@ pub fn render_markdown(item: &mut Item, _deps: Option<Dependencies>) {
         let renderer = html::Html::new(html::Flags::empty(), 0);
         let buffer = document.render_to_buffer(renderer);
         item.data.insert(buffer);
+        item.body = Some(body);
+    }
+}
+
+// TODO: this isn't necessary. in fact, on Barriers, it ends up cloning the data
+// this is mainly to ensure that the user is passing an Arc
+#[derive(Clone)]
+pub struct Inject<T> where T: Sync + Send + 'static {
+    data: Arc<T>,
+}
+
+impl<T> Inject<T> where T: Sync + Send + 'static {
+    pub fn with(t: Arc<T>) -> Inject<T>
+    where T: Sync + Send + 'static {
+        Inject {
+            data: t
+        }
+    }
+}
+
+impl<T> Compile for Inject<T> where T: Sync + Send + 'static {
+    fn compile(&self, item: &mut Item, _deps: Option<Dependencies>) {
+        item.data.insert(self.data.clone());
+    }
+}
+
+use rustc_serialize::json::Json;
+use handlebars::Handlebars;
+
+pub struct RenderTemplate {
+    name: &'static str,
+    handler: Box<Fn(&Item, Option<Dependencies>) -> Json + Sync + Send + 'static>,
+}
+
+impl RenderTemplate {
+    pub fn new<H>(name: &'static str, handler: H) -> RenderTemplate
+    where H: Fn(&Item, Option<Dependencies>) -> Json + Sync + Send + 'static {
+        RenderTemplate {
+            name: name,
+            handler: Box::new(handler),
+        }
+    }
+}
+
+impl Compile for RenderTemplate {
+    fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
+        if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
+            let json = (*self.handler)(item, deps);
+            item.body = Some(registry.render(self.name, &json).unwrap());
+        }
     }
 }
 
