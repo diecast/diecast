@@ -10,6 +10,7 @@ extern crate regex;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate hoedown;
 
 use diecast::{
     Site,
@@ -22,6 +23,7 @@ use diecast::{
 
 use diecast::router;
 use diecast::compiler::{self, TomlMetadata};
+use hoedown::buffer::Buffer;
 
 fn main() {
     env_logger::init().unwrap();
@@ -41,6 +43,10 @@ fn main() {
                 }
 
                 trace!("body:\n{:?}", item.body);
+            })
+            .link(compiler::render_markdown)
+            .link(|item: &mut Item, _deps: Option<Dependencies>| {
+                println!("{:?}", item.data.get::<Buffer>().unwrap().as_str().unwrap());
             })
             .link(router::SetExtension::new("html"))
             .link(|item: &mut Item, _deps: Option<Dependencies>| {

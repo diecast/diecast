@@ -109,7 +109,7 @@ impl Compiler {
 }
 
 pub fn stub(item: &mut Item, _deps: Option<Dependencies>) {
-    println!("no compiler established for: {:?}", item);
+    trace!("no compiler established for: {:?}", item);
 }
 
 /// Compiler that reads the `Item`'s body.
@@ -164,6 +164,18 @@ pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
         }
 
         item.body = Some(body);
+    }
+}
+
+pub fn render_markdown(item: &mut Item, _deps: Option<Dependencies>) {
+    use hoedown::Markdown;
+    use hoedown::renderer::html;
+
+    if let Some(body) = item.body.take() {
+        let document = Markdown::new(body.as_bytes());
+        let renderer = html::Html::new(html::Flags::empty(), 0);
+        let buffer = document.render_to_buffer(renderer);
+        item.data.insert(buffer);
     }
 }
 

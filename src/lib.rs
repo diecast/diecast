@@ -25,6 +25,8 @@ extern crate log;
 #[plugin] #[no_link]
 extern crate regex_macros;
 
+extern crate hoedown;
+
 pub use pattern::Pattern;
 pub use site::{Site, Rule};
 pub use compiler::{Compiler, Chain};

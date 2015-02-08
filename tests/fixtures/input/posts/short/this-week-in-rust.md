@@ -2,4 +2,4 @@
 name = "something happening"
 ---
 
-something happened this week in rust
+something _happened_ this week in rust
