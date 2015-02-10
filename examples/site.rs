@@ -1,6 +1,7 @@
 #![feature(plugin)]
 #![feature(path)]
 #![feature(io)]
+#![feature(core)]
 
 #[plugin]
 extern crate diecast;
@@ -84,11 +85,10 @@ fn main() {
         Rule::new("posts")
             .compiler(content_compiler.clone());
 
-    trace!("test matches: {}", regex!(r"^\.|^#|~$|\.swp$").is_match("#example.html"));
-
     let config =
         Configuration::new(Path::new("tests/fixtures/input"), Path::new("output"))
-            .ignoring(regex!(r"^\.|^#|~$|\.swp$"));
+            // .preview(true)
+            .ignore(regex!(r"^\.|^#|~$|\.swp$"));
 
     let site =
         Site::new(config)

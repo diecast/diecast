@@ -145,18 +145,19 @@ pub fn write(item: &mut Item, _deps: Option<Dependencies>) {
 
     if let Some(ref path) = item.to {
         if let Some(ref body) = item.body {
-            let out_dir = item.configuration.output.join(path.dir_path());
+            let conf_out = item.configuration.output();
+            let target = conf_out.join(path.dir_path());
 
-            if !item.configuration.output.is_ancestor_of(&out_dir) {
-                panic!("attempted to write outside of the output directory: {:?}", out_dir);
+            if !conf_out.is_ancestor_of(&target) {
+                panic!("attempted to write outside of the output directory: {:?}", target);
             }
 
-            trace!("mkdir -p {:?}", out_dir);
+            trace!("mkdir -p {:?}", target);
 
-            fs::mkdir_recursive(&out_dir, ::std::old_io::USER_RWX)
+            fs::mkdir_recursive(&target, ::std::old_io::USER_RWX)
                 .unwrap();
 
-            File::create(&item.configuration.output.join(path))
+            File::create(&conf_out.join(path))
                 .write_str(&body)
                 .unwrap();
         }

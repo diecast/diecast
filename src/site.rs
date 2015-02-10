@@ -4,7 +4,7 @@ use std::sync::{Arc, TaskPool};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::collections::{BTreeMap, RingBuf};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
-use std::old_io::fs;
+use std::old_io::{fs, TempDir};
 // use std::old_io::net::ip::SocketAddr;
 use std::fmt;
 
@@ -59,8 +59,9 @@ pub struct Configuration {
     pub input: Path,
 
     /// The output directory
-    pub output: Path,
+    output: Path,
 
+    /// The number of cpu count
     pub threads: usize,
 
     // TODO: necessary?
@@ -75,7 +76,7 @@ pub struct Configuration {
     ignore: Option<Box<Pattern + Sync + Send>>,
 
     /// Whether we're in preview mode
-    is_preview: bool,
+    preview_dir: Option<TempDir>,
 
     // Socket on which to listen when in preview mode
     // socket_addr: SocketAddr
@@ -88,25 +89,41 @@ impl Configuration {
             output: output,
             threads: ::std::os::num_cpus(),
             ignore: None,
-            is_preview: false,
+            preview_dir: None,
         }
     }
 
-    pub fn with_thread_count(mut self, count: usize) -> Configuration {
+    pub fn thread_count(mut self, count: usize) -> Configuration {
         self.threads = count;
         self
     }
 
-    pub fn ignoring<P>(mut self, pattern: P) -> Configuration
+    pub fn ignore<P>(mut self, pattern: P) -> Configuration
     where P: Pattern + Sync + Send {
         self.ignore = Some(Box::new(pattern));
         self
     }
 
-    pub fn set_preview(mut self, is_preview: bool) -> Configuration {
-        self.is_preview = is_preview;
+    pub fn preview(mut self, is_preview: bool) -> Configuration {
+        if self.preview_dir.is_some() == is_preview {
+            return self;
+        }
+
+        if is_preview {
+            self.preview_dir = Some(TempDir::new(self.output.filename_str().unwrap()).unwrap());
+        } else {
+            self.preview_dir = None;
+        }
 
         self
+    }
+
+    pub fn output(&self) -> &Path {
+        if let Some(ref temp) = self.preview_dir {
+            temp.path()
+        } else {
+            &self.output
+        }
     }
 }
 
@@ -166,20 +183,18 @@ impl Site {
             fs::walk_dir(&configuration.input).unwrap()
             .filter(|p| {
                 let is_ignored = if let Some(ref pattern) = configuration.ignore {
-                    trace!("ignore pattern present");
-
                     pattern.matches(&Path::new(p.filename_str().unwrap()))
                 } else {
                     false
                 };
-
-                trace!("is ignored: {}", is_ignored);
 
                 p.is_file() && !is_ignored
             })
             .collect::<Vec<Path>>();
 
         let threads = configuration.threads;
+
+        trace!("output directory is: {:?}", configuration.output());
 
         trace!("using {} threads", threads);
 
@@ -407,7 +422,7 @@ impl Site {
                 use std::mem;
 
                 // create the output directory
-                fs::mkdir_recursive(&self.configuration.output, ::std::old_io::USER_RWX)
+                fs::mkdir_recursive(self.configuration.output(), ::std::old_io::USER_RWX)
                     .unwrap();
 
                 // put the jobs in the correct evaluation order
@@ -512,7 +527,7 @@ impl Site {
 
     pub fn creating(mut self, path: Path, binding: Rule) -> Site {
         let compiler = binding.compiler;
-        let target = self.configuration.output.join(path);
+        let target = self.configuration.output().join(path);
 
         let conf = self.configuration.clone();
 
