@@ -217,6 +217,13 @@ pub fn render_markdown(item: &mut Item, _deps: Option<Dependencies>) {
     }
 }
 
+pub fn inject_with<T>(t: Arc<T>) -> Box<Compile + Sync + Send + 'static>
+where T: Sync + Send + 'static {
+    Box::new(move |item: &mut Item, deps: Option<Dependencies>| {
+        item.data.insert(t.clone());
+    })
+}
+
 // TODO: this isn't necessary. in fact, on Barriers, it ends up cloning the data
 // this is mainly to ensure that the user is passing an Arc
 #[derive(Clone)]
@@ -241,6 +248,17 @@ impl<T> Compile for Inject<T> where T: Sync + Send + 'static {
 
 use rustc_serialize::json::Json;
 use handlebars::Handlebars;
+
+pub fn render_template<H>(name: &'static str, handler: H)
+    -> Box<Compile + Sync + Send + 'static>
+where H: Fn(&Item, Option<Dependencies>) -> Json + Sync + Send + 'static {
+    Box::new(move |item: &mut Item, deps: Option<Dependencies>| {
+        if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
+            let json = handler(item, deps);
+            item.body = Some(registry.render(name, &json).unwrap());
+        }
+    })
+}
 
 pub struct RenderTemplate {
     name: &'static str,

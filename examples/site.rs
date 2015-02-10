@@ -65,13 +65,16 @@ fn main() {
     let content_compiler =
         Compiler::new(
             Chain::new()
-                .link(compiler::Inject::with(template_registry))
+                // .link(compiler::Inject::with(template_registry))
+                .link(compiler::inject_with(template_registry))
                 .link(compiler::read)
                 .link(compiler::parse_metadata)
                 .link(compiler::parse_toml)
                 .link(compiler::render_markdown)
-                .link(router::SetExtension::new("html"))
-                .link(compiler::RenderTemplate::new("article", article_handler))
+                // .link(router::SetExtension::new("html"))
+                .link(router::set_extension("html"))
+                // .link(compiler::RenderTemplate::new("article", article_handler))
+                .link(compiler::render_template("article", article_handler))
                 .link(compiler::print)
                 .build());
 

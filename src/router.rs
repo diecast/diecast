@@ -16,6 +16,14 @@ pub fn identity(item: &mut Item, _deps: Option<Dependencies>) {
     item.to = item.from.clone();
 }
 
+pub fn set_extension(extension: &'static str) -> Box<Compile + Sync + Send + 'static> {
+    Box::new(move |item: &mut Item, deps: Option<Dependencies>| {
+        let mut cloned = item.from.clone().unwrap();
+        cloned.set_extension(extension);
+        item.to = Some(cloned);
+    })
+}
+
 /// file.txt -> file.html
 /// gen.route(SetExtension::new("html"))
 #[derive(Copy)]
