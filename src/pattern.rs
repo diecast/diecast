@@ -27,7 +27,19 @@ pub trait Pattern {
     fn matches(&self, &Path) -> bool;
 }
 
-impl<'a, P> Pattern for &'a P where P: Pattern {
+impl<T: ?Sized + Pattern> Pattern for Box<T> {
+    fn matches(&self, path: &Path) -> bool {
+        (**self).matches(path)
+    }
+}
+
+impl<'a, T: ?Sized + Pattern> Pattern for &'a T {
+    fn matches(&self, path: &Path) -> bool {
+        (**self).matches(path)
+    }
+}
+
+impl<'a, T: ?Sized + Pattern> Pattern for &'a mut T {
     fn matches(&self, path: &Path) -> bool {
         (**self).matches(path)
     }

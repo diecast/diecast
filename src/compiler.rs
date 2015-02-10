@@ -13,6 +13,26 @@ pub trait Compile: Send + Sync {
     fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>);
 }
 
+impl<T: ?Sized + Compile> Compile for Box<T> {
+    fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
+        (**self).compile(item, dependencies);
+    }
+}
+
+impl<T: ?Sized + Compile> Compile for &'static T {
+    fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
+        (**self).compile(item, dependencies);
+    }
+}
+
+impl<T: ?Sized + Compile> Compile for &'static mut T {
+    fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
+        (**self).compile(item, dependencies);
+    }
+}
+
+
+
 impl<F> Compile for F where F: Fn(&mut Item, Option<Dependencies>) + Send + Sync {
     fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
         self(item, deps);
