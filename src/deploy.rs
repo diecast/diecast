@@ -6,6 +6,8 @@ pub trait Deploy {
     fn run(&self);
 }
 
+// TODO: need impls for box, ref, and ref mut as with Compile & Deploy
+
 #[derive(Copy)]
 pub struct DoNothing;
 

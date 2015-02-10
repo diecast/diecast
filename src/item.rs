@@ -5,6 +5,7 @@ use std::old_io::File;
 use std::fmt::{self, Debug};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use site::Configuration;
 
 // TODO:
 pub type Dependencies = Arc<BTreeMap<&'static str, Arc<Vec<Item>>>>;
@@ -22,6 +23,8 @@ pub type Dependencies = Arc<BTreeMap<&'static str, Arc<Vec<Item>>>>;
 
 #[derive(Clone)]
 pub struct Item {
+    pub configuration: Arc<Configuration>,
+
     pub from: Option<Path>,
     pub to: Option<Path>,
 
@@ -39,15 +42,16 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new(from: Option<Path>, to: Option<Path>) -> Item {
+    pub fn new(config: Arc<Configuration>, from: Option<Path>, to: Option<Path>) -> Item {
         use std::old_io::fs::PathExtensions;
 
         if let Some(ref from) = from {
-            assert!(from.is_file())
+            assert!(config.input.join(from).is_file())
         }
 
         // ensure that the source is a file
         Item {
+            configuration: config,
             from: from,
             to: to,
             body: None,
@@ -57,7 +61,7 @@ impl Item {
 
     pub fn read(&mut self) {
         if let Some(ref path) = self.from {
-            self.body = File::open(path).read_to_string().ok();
+            self.body = File::open(&self.configuration.input.join(path)).read_to_string().ok();
         }
     }
 

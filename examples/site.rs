@@ -17,6 +17,7 @@ extern crate "rustc-serialize" as rustc_serialize;
 
 use diecast::{
     Site,
+    Configuration,
     Rule,
     Compiler,
     Chain,
@@ -76,16 +77,24 @@ fn main() {
                 // .link(compiler::RenderTemplate::new("article", article_handler))
                 .link(compiler::render_template("article", article_handler))
                 .link(compiler::print)
+                .link(compiler::write)
                 .build());
 
     let posts =
         Rule::new("posts")
             .compiler(content_compiler.clone());
 
+    trace!("test matches: {}", regex!(r"^\.|^#|~$|\.swp$").is_match("#example.html"));
+
+    let config =
+        Configuration::new(Path::new("tests/fixtures/input"), Path::new("output"))
+            .ignoring(regex!(r"^\.|^#|~$|\.swp$"));
+
     let site =
-        Site::new(Path::new("tests/fixtures/input"), Path::new("output"))
+        Site::new(config)
             .matching(glob::Pattern::new("pages/*.md").unwrap(), posts);
 
-    site.build();
+    site
+        .build();
 }
 

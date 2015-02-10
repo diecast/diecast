@@ -4,6 +4,8 @@ use std::sync::{Arc, TaskPool};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::collections::{BTreeMap, RingBuf};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
+use std::old_io::fs;
+// use std::old_io::net::ip::SocketAddr;
 use std::fmt;
 
 use pattern::Pattern;
@@ -50,16 +52,70 @@ impl Job {
     }
 }
 
+/// The configuration of the build
+/// an Arc of this is given to each Item
+pub struct Configuration {
+    /// The input directory
+    pub input: Path,
+
+    /// The output directory
+    pub output: Path,
+
+    pub threads: usize,
+
+    // TODO: necessary?
+    // The cache directory
+    // cache: Path,
+
+    /// a global pattern used to ignore files and paths
+    ///
+    /// the following are from hakyll
+    /// e.g.
+    /// config.ignore = not!(regex!("^\.|^#|~$|\.swp$"))
+    ignore: Option<Box<Pattern + Sync + Send>>,
+
+    /// Whether we're in preview mode
+    is_preview: bool,
+
+    // Socket on which to listen when in preview mode
+    // socket_addr: SocketAddr
+}
+
+impl Configuration {
+    pub fn new(input: Path, output: Path) -> Configuration {
+        Configuration {
+            input: input,
+            output: output,
+            threads: ::std::os::num_cpus(),
+            ignore: None,
+            is_preview: false,
+        }
+    }
+
+    pub fn with_thread_count(mut self, count: usize) -> Configuration {
+        self.threads = count;
+        self
+    }
+
+    pub fn ignoring<P>(mut self, pattern: P) -> Configuration
+    where P: Pattern + Sync + Send {
+        self.ignore = Some(Box::new(pattern));
+        self
+    }
+
+    pub fn set_preview(mut self, is_preview: bool) -> Configuration {
+        self.is_preview = is_preview;
+
+        self
+    }
+}
+
 /// A Site scans the input path to find
 /// files that match the given pattern. It then
 /// takes each of those files and passes it through
 /// the compiler chain.
 pub struct Site {
-    /// The input directory
-    input: Path,
-
-    /// The output directory
-    output: Path,
+    configuration: Arc<Configuration>,
 
     /// The collected paths in the input directory
     paths: Vec<Path>,
@@ -102,21 +158,36 @@ pub struct Site {
 }
 
 impl Site {
-    pub fn new(input: Path, output: Path) -> Site {
+    pub fn new(configuration: Configuration) -> Site {
         use std::old_io::fs::PathExtensions;
         use std::old_io::fs;
 
         let paths =
-            fs::walk_dir(&input).unwrap()
-            .filter(|p| p.is_file())
+            fs::walk_dir(&configuration.input).unwrap()
+            .filter(|p| {
+                let is_ignored = if let Some(ref pattern) = configuration.ignore {
+                    trace!("ignore pattern present");
+
+                    pattern.matches(&Path::new(p.filename_str().unwrap()))
+                } else {
+                    false
+                };
+
+                trace!("is ignored: {}", is_ignored);
+
+                p.is_file() && !is_ignored
+            })
             .collect::<Vec<Path>>();
+
+        let threads = configuration.threads;
+
+        trace!("using {} threads", threads);
 
         // channels for sending and receiving results
         let (result_tx, result_rx) = channel();
 
         Site {
-            input: input,
-            output: output,
+            configuration: Arc::new(configuration),
 
             paths: paths,
 
@@ -126,7 +197,7 @@ impl Site {
             jobs: Vec::new(),
             graph: Graph::new(),
 
-            thread_pool: TaskPool::new(::std::os::num_cpus()),
+            thread_pool: TaskPool::new(threads),
             result_tx: result_tx,
             result_rx: result_rx,
 
@@ -335,6 +406,10 @@ impl Site {
             Ok(order) => {
                 use std::mem;
 
+                // create the output directory
+                fs::mkdir_recursive(&self.configuration.output, ::std::old_io::USER_RWX)
+                    .unwrap();
+
                 // put the jobs in the correct evaluation order
                 sort_jobs(&mut self.jobs, &order, &self.graph);
 
@@ -437,11 +512,13 @@ impl Site {
 
     pub fn creating(mut self, path: Path, binding: Rule) -> Site {
         let compiler = binding.compiler;
-        let target = self.output.join(path);
+        let target = self.configuration.output.join(path);
+
+        let conf = self.configuration.clone();
 
         self.add_job(
             binding.name,
-            Item::new(None, Some(target)),
+            Item::new(conf, None, Some(target)),
             compiler,
             &binding.dependencies);
 
@@ -455,14 +532,21 @@ impl Site {
         let paths = mem::replace(&mut self.paths, Vec::new());
 
         for path in &paths {
-            let relative = &path.path_relative_from(&self.input).unwrap();
+            let relative = path.path_relative_from(&self.configuration.input).unwrap();
 
-            if pattern.matches(relative) {
+            // TODO:
+            // the Item needs the actual path, so it can go ahead and read
+            // but it also needs to be able to have the relative path,
+            // so that routing works as intended
+
+            let conf = self.configuration.clone();
+
+            if pattern.matches(&relative) {
                 self.add_job(
                     binding.name,
                     // TODO: make Vec<Path> -> Vec<Arc<Path>> to avoid copying?
                     //       what does this mean?
-                    Item::new(Some(path.clone()), None),
+                    Item::new(conf, Some(relative), None),
                     binding.compiler.clone(),
                     &binding.dependencies);
             }

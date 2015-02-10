@@ -17,7 +17,7 @@ pub fn identity(item: &mut Item, _deps: Option<Dependencies>) {
 }
 
 pub fn set_extension(extension: &'static str) -> Box<Compile + Sync + Send + 'static> {
-    Box::new(move |item: &mut Item, deps: Option<Dependencies>| {
+    Box::new(move |item: &mut Item, _deps: Option<Dependencies>| {
         let mut cloned = item.from.clone().unwrap();
         cloned.set_extension(extension);
         item.to = Some(cloned);

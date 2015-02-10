@@ -14,6 +14,7 @@ extern crate hoedown;
 
 use diecast::{
     Site,
+    Configuration,
     Rule,
     Compiler,
     Chain,
@@ -70,8 +71,11 @@ fn main() {
         .compiler(Compiler::new(Chain::only(compiler::stub).build()))
         .depends_on(&posts);
 
+    let config =
+        Configuration::new(Path::new("tests/fixtures/input"), Path::new("output"));
+
     let site =
-        Site::new(Path::new("tests/fixtures/input"), Path::new("output"))
+        Site::new(config)
         .creating(Path::new("dummy.html"), dummy)
         .matching(glob::Pattern::new("posts/*.md").unwrap(), posts)
         .creating(Path::new("blah.html"), post_index);

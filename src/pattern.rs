@@ -27,19 +27,19 @@ pub trait Pattern {
     fn matches(&self, &Path) -> bool;
 }
 
-impl<T: ?Sized + Pattern> Pattern for Box<T> {
+impl<P> Pattern for Box<P> where P: Pattern {
     fn matches(&self, path: &Path) -> bool {
         (**self).matches(path)
     }
 }
 
-impl<'a, T: ?Sized + Pattern> Pattern for &'a T {
+impl<'a, P: ?Sized> Pattern for &'a P where P: Pattern {
     fn matches(&self, path: &Path) -> bool {
         (**self).matches(path)
     }
 }
 
-impl<'a, T: ?Sized + Pattern> Pattern for &'a mut T {
+impl<'a, P: ?Sized> Pattern for &'a mut P where P: Pattern {
     fn matches(&self, path: &Path) -> bool {
         (**self).matches(path)
     }
@@ -109,9 +109,9 @@ impl Pattern for Regex {
 /// This simply converts the string to glob::Pattern.
 /// It's much more efficient to just use the glob::Pattern
 /// to begin with.
-impl<'a> Pattern for &'a str {
+impl Pattern for str {
     fn matches(&self, p: &Path) -> bool {
-        *self == p.as_str().unwrap()
+        self == p.as_str().unwrap()
     }
 }
 

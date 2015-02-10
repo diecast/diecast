@@ -31,7 +31,7 @@ extern crate handlebars;
 extern crate "rustc-serialize" as rustc_serialize;
 
 pub use pattern::Pattern;
-pub use site::{Site, Rule};
+pub use site::{Site, Configuration, Rule};
 pub use compiler::{Compiler, Chain};
 pub use item::{Item, Dependencies};
 

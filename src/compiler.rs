@@ -13,25 +13,23 @@ pub trait Compile: Send + Sync {
     fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>);
 }
 
-impl<T: ?Sized + Compile> Compile for Box<T> {
+impl<C: ?Sized> Compile for Box<C> where C: Compile {
     fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
         (**self).compile(item, dependencies);
     }
 }
 
-impl<T: ?Sized + Compile> Compile for &'static T {
+impl<C: ?Sized> Compile for &'static C where C: Compile {
     fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
         (**self).compile(item, dependencies);
     }
 }
 
-impl<T: ?Sized + Compile> Compile for &'static mut T {
+impl<C: ?Sized> Compile for &'static mut C where C: Compile {
     fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
         (**self).compile(item, dependencies);
     }
 }
-
-
 
 impl<F> Compile for F where F: Fn(&mut Item, Option<Dependencies>) + Send + Sync {
     fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
@@ -134,13 +132,37 @@ pub fn stub(item: &mut Item, _deps: Option<Dependencies>) {
 
 /// Compiler that reads the `Item`'s body.
 pub fn read(item: &mut Item, _deps: Option<Dependencies>) {
-    item.read();
+    use std::old_io::fs::File;
+
+    if let Some(ref path) = item.from {
+        item.body = File::open(&item.configuration.input.join(path)).read_to_string().ok();
+    }
 }
 
 /// Compiler that writes the `Item`'s body.
 pub fn write(item: &mut Item, _deps: Option<Dependencies>) {
-    item.write();
+    use std::old_io::fs::{self, File};
+
+    if let Some(ref path) = item.to {
+        if let Some(ref body) = item.body {
+            let out_dir = item.configuration.output.join(path.dir_path());
+
+            if !item.configuration.output.is_ancestor_of(&out_dir) {
+                panic!("attempted to write outside of the output directory: {:?}", out_dir);
+            }
+
+            trace!("mkdir -p {:?}", out_dir);
+
+            fs::mkdir_recursive(&out_dir, ::std::old_io::USER_RWX)
+                .unwrap();
+
+            File::create(&item.configuration.output.join(path))
+                .write_str(&body)
+                .unwrap();
+        }
+    }
 }
+
 
 /// Compiler that prints the `Item`'s body.
 pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
@@ -219,7 +241,7 @@ pub fn render_markdown(item: &mut Item, _deps: Option<Dependencies>) {
 
 pub fn inject_with<T>(t: Arc<T>) -> Box<Compile + Sync + Send + 'static>
 where T: Sync + Send + 'static {
-    Box::new(move |item: &mut Item, deps: Option<Dependencies>| {
+    Box::new(move |item: &mut Item, _deps: Option<Dependencies>| {
         item.data.insert(t.clone());
     })
 }
