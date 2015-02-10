@@ -194,7 +194,7 @@ pub struct TomlMetadata(pub toml::Value);
 
 pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
     let parsed = if let Some(&Metadata(ref parsed)) = item.data.get::<Metadata>() {
-        Some(toml::Value::Table(toml::Parser::new(parsed).parse().unwrap()))
+        Some(parsed.parse().unwrap())
     } else {
         None
     };
