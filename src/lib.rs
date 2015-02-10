@@ -12,6 +12,7 @@
 #![feature(path)]
 #![feature(os)]
 #![feature(io)]
+#![feature(collections)]
 
 extern crate glob;
 extern crate anymap;

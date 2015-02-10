@@ -2,8 +2,8 @@
 
 use std::sync::{Arc, TaskPool};
 use std::sync::mpsc::{Sender, Receiver, channel};
-use std::collections::{HashMap, RingBuf};
-use std::collections::hash_map::Entry::{Vacant, Occupied};
+use std::collections::{BTreeMap, RingBuf};
+use std::collections::btree_map::Entry::{Vacant, Occupied};
 use std::fmt;
 
 use pattern::Pattern;
@@ -65,13 +65,13 @@ pub struct Site {
     paths: Vec<Path>,
 
     /// Mapping the id to its dependencies
-    bindings: HashMap<BindingId, Vec<JobId>>,
+    bindings: BTreeMap<BindingId, Vec<JobId>>,
 
     /// Mapping the name to its id
-    ids: HashMap<&'static str, BindingId>,
+    ids: BTreeMap<&'static str, BindingId>,
 
     /// Mapping the id to its name
-    names: HashMap<BindingId, &'static str>,
+    names: BTreeMap<BindingId, &'static str>,
 
     /// The jobs
     jobs: Vec<Job>,
@@ -89,13 +89,13 @@ pub struct Site {
     result_rx: Receiver<Job>,
 
     /// the dependencies as they're being built
-    staging_deps: HashMap<BindingId, Vec<Item>>,
+    staging_deps: BTreeMap<BindingId, Vec<Item>>,
 
     /// finished dependencies
-    finished_deps: HashMap<BindingId, Arc<Vec<Item>>>,
+    finished_deps: BTreeMap<BindingId, Arc<Vec<Item>>>,
 
     /// dependencies that are currently paused due to a barrier
-    paused: HashMap<BindingId, Vec<Job>>,
+    paused: BTreeMap<BindingId, Vec<Job>>,
 
     /// items whose dependencies have not been fulfilled
     waiting: Vec<Job>,
@@ -120,9 +120,9 @@ impl Site {
 
             paths: paths,
 
-            bindings: HashMap::new(),
-            ids: HashMap::new(),
-            names: HashMap::new(),
+            bindings: BTreeMap::new(),
+            ids: BTreeMap::new(),
+            names: BTreeMap::new(),
             jobs: Vec::new(),
             graph: Graph::new(),
 
@@ -130,9 +130,9 @@ impl Site {
             result_tx: result_tx,
             result_rx: result_rx,
 
-            staging_deps: HashMap::new(),
-            finished_deps: HashMap::new(),
-            paused: HashMap::new(),
+            staging_deps: BTreeMap::new(),
+            finished_deps: BTreeMap::new(),
+            paused: BTreeMap::new(),
 
             waiting: Vec::new(),
         }
@@ -212,7 +212,7 @@ impl Site {
             if let Some(ref old_deps) = jobs[0].dependencies {
                 (**old_deps).clone()
             } else {
-                HashMap::new()
+                BTreeMap::new()
             };
 
         // insert the frozen state of these jobs
@@ -299,7 +299,7 @@ impl Site {
 
         self.waiting = waiting;
 
-        let mut deps_cache = HashMap::new();
+        let mut deps_cache = BTreeMap::new();
         let mut dependents = ready.iter().map(|j| j.binding).collect::<Vec<usize>>();
 
         dependents.sort();
@@ -313,7 +313,7 @@ impl Site {
         // because this will be the first time the jobs are going to run,
         // so they won't have reached any barriers to begin with
         for dependent in dependents {
-            let mut deps = HashMap::new();
+            let mut deps = BTreeMap::new();
 
             for &dep in self.graph.dependencies_of(dependent).unwrap() {
                 trace!("adding dependency: {:?}", dep);

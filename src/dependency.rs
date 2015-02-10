@@ -1,9 +1,9 @@
 //! Dependency tracking.
 
-use std::collections::{HashMap, HashSet, RingBuf};
+use std::collections::{BTreeMap, HashSet, RingBuf};
 
-use std::collections::hash_map::Keys;
-use std::collections::hash_map::Entry::Vacant;
+use std::collections::btree_map::Keys;
+use std::collections::btree_map::Entry::Vacant;
 
 use std::fmt;
 
@@ -19,7 +19,7 @@ pub struct Graph {
     ///
     /// There's a key for every node in the graph, even if
     /// if it doesn't have any edges going out.
-    edges: HashMap<usize, HashSet<usize>>,
+    edges: BTreeMap<usize, HashSet<usize>>,
 
     /// The dependencies a node has.
     ///
@@ -30,14 +30,14 @@ pub struct Graph {
     /// e.g. the relationship that A depends on B can be represented as
     /// A -> B, so therefore the evaluation order which respects that
     /// dependency is the reverse, B -> A
-    reverse: HashMap<usize, HashSet<usize>>,
+    reverse: BTreeMap<usize, HashSet<usize>>,
 }
 
 impl Graph {
     pub fn new() -> Graph {
         Graph {
-            edges: HashMap::new(),
-            reverse: HashMap::new(),
+            edges: BTreeMap::new(),
+            reverse: BTreeMap::new(),
         }
     }
 
@@ -174,7 +174,7 @@ struct Topological<'a> {
     on_stack: HashSet<usize>,
 
     /// Trace back a path in the case of a cycle.
-    edge_to: HashMap<usize, usize>,
+    edge_to: BTreeMap<usize, usize>,
 
     /// Nodes in an order which respects dependencies.
     topological: RingBuf<usize>,
@@ -190,7 +190,7 @@ impl<'a> Topological<'a> {
             graph: graph,
             visited: HashSet::new(),
             on_stack: HashSet::new(),
-            edge_to: HashMap::new(),
+            edge_to: BTreeMap::new(),
             topological: RingBuf::new(),
             result: Ok(RingBuf::new()),
         }

@@ -3,11 +3,11 @@
 use anymap::AnyMap;
 use std::old_io::File;
 use std::fmt::{self, Debug};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 // TODO:
-pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
+pub type Dependencies = Arc<BTreeMap<&'static str, Arc<Vec<Item>>>>;
 
 /// Represents a compilation unit.
 ///
