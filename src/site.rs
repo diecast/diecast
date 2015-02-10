@@ -164,11 +164,10 @@ pub type BindingId = usize;
 pub type JobId = usize;
 
 impl Site {
-    fn dispatch_job(&self, job: Job) {
+    fn dispatch_job(&self, mut job: Job) {
         let result_tx = self.result_tx.clone();
 
         self.thread_pool.execute(move || {
-            let mut job = job;
             job.process();
             result_tx.send(job).unwrap();
         });
