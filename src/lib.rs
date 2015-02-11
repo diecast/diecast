@@ -27,9 +27,11 @@ extern crate log;
 extern crate regex_macros;
 
 extern crate hoedown;
-extern crate handlebars;
 extern crate "rustc-serialize" as rustc_serialize;
+extern crate handlebars;
+extern crate docopt;
 
+pub use diecast::Diecast;
 pub use pattern::Pattern;
 pub use site::{Site, Configuration, Rule};
 pub use compiler::{Compiler, Chain};
@@ -44,4 +46,6 @@ pub mod router;
 pub mod compiler;
 pub mod site;
 pub mod dependency;
+pub mod diecast;
+pub mod commands;
 

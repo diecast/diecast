@@ -416,7 +416,7 @@ impl Site {
         }
     }
 
-    pub fn build(mut self) {
+    pub fn build(&mut self) {
         match self.graph.resolve() {
             Ok(order) => {
                 use std::mem;

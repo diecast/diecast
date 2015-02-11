@@ -17,7 +17,8 @@ extern crate handlebars;
 extern crate "rustc-serialize" as rustc_serialize;
 
 use diecast::{
-    Site,
+    Diecast,
+    // Site,
     Configuration,
     Rule,
     Compiler,
@@ -90,11 +91,22 @@ fn main() {
             // .preview(true)
             .ignore(regex!(r"^\.|^#|~$|\.swp$"));
 
-    let site =
-        Site::new(config)
-            .matching(glob::Pattern::new("pages/*.md").unwrap(), posts);
+    // let site =
+    //     Site::new(config)
+    //         .matching(glob::Pattern::new("pages/*.md").unwrap(), posts);
 
-    site
-        .build();
+    // approach
+    //
+    // 1. Rule itself contains matching/create
+    //
+    //     Rule::matching("posts", glob::Pattern::new("pages/*.md").unwrap())
+    //     Rule::creating("post index", "index.html")
+    //
+    // 2. pass rules to Diecast
+    //
+
+    Diecast::new(config)
+        .rule(posts)
+        .run();
 }
 

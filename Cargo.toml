@@ -19,6 +19,7 @@ env_logger = "*"
 hoedown = "*"
 handlebars = "*"
 rustc-serialize = "*"
+docopt = "*"
 # iron = "*"
 
 # [dependencies.rustc-serialize]

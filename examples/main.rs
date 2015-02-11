@@ -80,5 +80,5 @@ fn main() {
         .matching(glob::Pattern::new("posts/*.md").unwrap(), posts)
         .creating(Path::new("blah.html"), post_index);
 
-    site.build();
+    // site.build();
 }
