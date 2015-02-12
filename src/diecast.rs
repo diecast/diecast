@@ -138,7 +138,9 @@ impl Diecast {
         match command {
             Build => commands::build::execute(),
             Help => help_error.exit(),
-            Clean => (),
+            Clean => {
+                // remove output dir
+            },
         }
     }
 }

@@ -14,6 +14,8 @@
 #![feature(io)]
 #![feature(collections)]
 
+#![plugin(regex_macros)]
+
 extern crate glob;
 extern crate anymap;
 extern crate regex;
@@ -23,7 +25,6 @@ extern crate toml;
 #[macro_use]
 extern crate log;
 
-#[plugin] #[no_link]
 extern crate regex_macros;
 
 extern crate hoedown;

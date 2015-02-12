@@ -1,12 +1,9 @@
 #![feature(plugin)]
 #![feature(path)]
 
-#[plugin]
+#[macro_use]
 extern crate diecast;
-#[plugin] #[no_link]
-extern crate regex_macros;
 extern crate glob;
-extern crate regex;
 #[macro_use]
 extern crate log;
 extern crate env_logger;

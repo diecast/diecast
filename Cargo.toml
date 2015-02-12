@@ -17,13 +17,16 @@ regex_macros = "*"
 log = "*"
 env_logger = "*"
 hoedown = "*"
-handlebars = "*"
+# handlebars = "*"
 rustc-serialize = "*"
 docopt = "*"
 # iron = "*"
 
 # [dependencies.rustc-serialize]
 # path = "../rustc-serialize"
+
+[dependencies.handlebars]
+path = "../handlebars-rust"
 
 [dependencies.anymap]
 path = "../anymap"
