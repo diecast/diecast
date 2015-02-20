@@ -1,6 +1,6 @@
 //! Dependency tracking.
 
-use std::collections::{BTreeMap, HashSet, RingBuf};
+use std::collections::{BTreeMap, BTreeSet, RingBuf};
 
 use std::collections::btree_map::Keys;
 use std::collections::btree_map::Entry::Vacant;
@@ -19,7 +19,7 @@ pub struct Graph {
     ///
     /// There's a key for every node in the graph, even if
     /// if it doesn't have any edges going out.
-    edges: BTreeMap<usize, HashSet<usize>>,
+    edges: BTreeMap<usize, BTreeSet<usize>>,
 
     /// The dependencies a node has.
     ///
@@ -30,7 +30,7 @@ pub struct Graph {
     /// e.g. the relationship that A depends on B can be represented as
     /// A -> B, so therefore the evaluation order which respects that
     /// dependency is the reverse, B -> A
-    reverse: BTreeMap<usize, HashSet<usize>>,
+    reverse: BTreeMap<usize, BTreeSet<usize>>,
 }
 
 impl Graph {
@@ -43,32 +43,32 @@ impl Graph {
 
     pub fn add_node(&mut self, node: usize) {
         if let Vacant(entry) = self.edges.entry(node) {
-            entry.insert(HashSet::new());
+            entry.insert(BTreeSet::new());
         }
     }
 
     /// Register a dependency constraint.
     pub fn add_edge(&mut self, a: usize, b: usize) {
         self.edges.entry(a).get()
-            .unwrap_or_else(|v| v.insert(HashSet::new()))
+            .unwrap_or_else(|v| v.insert(BTreeSet::new()))
             .insert(b);
         self.reverse.entry(b).get()
-            .unwrap_or_else(|v| v.insert(HashSet::new()))
+            .unwrap_or_else(|v| v.insert(BTreeSet::new()))
             .insert(a);
     }
 
     /// The nodes in the graph.
-    pub fn nodes(&self) -> Keys<usize, HashSet<usize>> {
+    pub fn nodes(&self) -> Keys<usize, BTreeSet<usize>> {
         self.edges.keys()
     }
 
     // TODO: this seems identical to the above?
     /// The dependents a node has.
-    pub fn dependents_of(&self, node: usize) -> Option<&HashSet<usize>> {
+    pub fn dependents_of(&self, node: usize) -> Option<&BTreeSet<usize>> {
         self.edges.get(&node)
     }
 
-    pub fn dependencies_of(&self, node: usize) -> Option<&HashSet<usize>> {
+    pub fn dependencies_of(&self, node: usize) -> Option<&BTreeSet<usize>> {
         self.reverse.get(&node)
     }
 
@@ -168,10 +168,10 @@ struct Topological<'a> {
     graph: &'a Graph,
 
     /// The nodes that have been visited so far
-    visited: HashSet<usize>,
+    visited: BTreeSet<usize>,
 
     /// Nodes that are on the path to the current node.
-    on_stack: HashSet<usize>,
+    on_stack: BTreeSet<usize>,
 
     /// Trace back a path in the case of a cycle.
     edge_to: BTreeMap<usize, usize>,
@@ -188,8 +188,8 @@ impl<'a> Topological<'a> {
     fn new(graph: &'a Graph) -> Topological<'a> {
         Topological {
             graph: graph,
-            visited: HashSet::new(),
-            on_stack: HashSet::new(),
+            visited: BTreeSet::new(),
+            on_stack: BTreeSet::new(),
             edge_to: BTreeMap::new(),
             topological: RingBuf::new(),
             result: Ok(RingBuf::new()),

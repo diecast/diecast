@@ -17,16 +17,21 @@ regex_macros = "*"
 log = "*"
 env_logger = "*"
 hoedown = "*"
-# handlebars = "*"
+handlebars = "*"
 rustc-serialize = "*"
 docopt = "*"
+toml = "*"
+# notify = "*"
 # iron = "*"
 
 # [dependencies.rustc-serialize]
 # path = "../rustc-serialize"
 
-[dependencies.handlebars]
-path = "../handlebars-rust"
+# [dependencies.hoedown]
+# path = "../hoedown"
+
+# [dependencies.handlebars]
+# path = "../handlebars-rust"
 
 [dependencies.anymap]
 path = "../anymap"
@@ -36,6 +41,6 @@ path = "../anymap"
 # [dependencies.iron]
 # git = "https://github.com/iron/iron.git"
 
-[dependencies.toml]
-git = "https://github.com/alexcrichton/toml-rs"
+# [dependencies.toml]
+# git = "https://github.com/alexcrichton/toml-rs"
 

@@ -32,9 +32,10 @@ extern crate "rustc-serialize" as rustc_serialize;
 extern crate handlebars;
 extern crate docopt;
 
-pub use diecast::Diecast;
 pub use pattern::Pattern;
-pub use site::{Site, Configuration, Rule};
+pub use site::Site;
+pub use rule::Rule;
+pub use configuration::Configuration;
 pub use compiler::{Compiler, Chain};
 pub use item::{Item, Dependencies};
 
@@ -47,6 +48,8 @@ pub mod router;
 pub mod compiler;
 pub mod site;
 pub mod dependency;
-pub mod diecast;
-pub mod commands;
+pub mod command;
+pub mod configuration;
+pub mod job;
+pub mod rule;
 

@@ -4,128 +4,20 @@ use std::sync::{Arc, TaskPool};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::collections::{BTreeMap, RingBuf};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
-use std::old_io::{fs, TempDir};
-// use std::old_io::net::ip::SocketAddr;
+use std::old_io::TempDir;
+use std::fs;
 use std::fmt;
 
 use pattern::Pattern;
+use job::Job;
 use compiler::{self, Compile, Compiler, Chain};
 use compiler::Status::{Paused, Done};
 use item::{Item, Dependencies};
 use dependency::Graph;
+use configuration::Configuration;
+use rule::{self, Rule};
 
-pub struct Job {
-    pub id: JobId,
-    pub binding: BindingId,
-
-    pub item: Item,
-    pub compiler: Compiler,
-    pub dependency_count: usize,
-    pub dependencies: Option<Dependencies>,
-}
-
-impl fmt::Debug for Job {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "#{} [{}] {:?}, depends on: {:?}, dependency_count: {}",
-               self.id,
-               self.binding,
-               self.item,
-               self.dependencies,
-               self.dependency_count)
-    }
-}
-
-impl Job {
-    pub fn new(binding: BindingId, item: Item, compiler: Compiler, id: JobId) -> Job {
-        Job {
-            id: id,
-            binding: binding,
-            item: item,
-            compiler: compiler,
-            dependency_count: 0,
-            dependencies: None,
-        }
-    }
-
-    fn process(&mut self) {
-        self.compiler.compile(&mut self.item, self.dependencies.clone());
-    }
-}
-
-/// The configuration of the build
-/// an Arc of this is given to each Item
-pub struct Configuration {
-    /// The input directory
-    pub input: Path,
-
-    /// The output directory
-    output: Path,
-
-    /// The number of cpu count
-    pub threads: usize,
-
-    // TODO: necessary?
-    // The cache directory
-    // cache: Path,
-
-    /// a global pattern used to ignore files and paths
-    ///
-    /// the following are from hakyll
-    /// e.g.
-    /// config.ignore = not!(regex!("^\.|^#|~$|\.swp$"))
-    ignore: Option<Box<Pattern + Sync + Send>>,
-
-    /// Whether we're in preview mode
-    preview_dir: Option<TempDir>,
-
-    // Socket on which to listen when in preview mode
-    // socket_addr: SocketAddr
-}
-
-impl Configuration {
-    pub fn new(input: Path, output: Path) -> Configuration {
-        Configuration {
-            input: input,
-            output: output,
-            threads: ::std::os::num_cpus(),
-            ignore: None,
-            preview_dir: None,
-        }
-    }
-
-    pub fn thread_count(mut self, count: usize) -> Configuration {
-        self.threads = count;
-        self
-    }
-
-    pub fn ignore<P>(mut self, pattern: P) -> Configuration
-    where P: Pattern + Sync + Send {
-        self.ignore = Some(Box::new(pattern));
-        self
-    }
-
-    pub fn preview(mut self, is_preview: bool) -> Configuration {
-        if self.preview_dir.is_some() == is_preview {
-            return self;
-        }
-
-        if is_preview {
-            self.preview_dir = Some(TempDir::new(self.output.filename_str().unwrap()).unwrap());
-        } else {
-            self.preview_dir = None;
-        }
-
-        self
-    }
-
-    pub fn output(&self) -> &Path {
-        if let Some(ref temp) = self.preview_dir {
-            temp.path()
-        } else {
-            &self.output
-        }
-    }
-}
+use std::path::{PathBuf, AsPath, Path};
 
 /// A Site scans the input path to find
 /// files that match the given pattern. It then
@@ -134,17 +26,14 @@ impl Configuration {
 pub struct Site {
     configuration: Arc<Configuration>,
 
-    /// The collected paths in the input directory
-    paths: Vec<Path>,
-
     /// Mapping the id to its dependencies
-    bindings: BTreeMap<BindingId, Vec<JobId>>,
+    bindings: BTreeMap<usize, Vec<usize>>,
 
     /// Mapping the name to its id
-    ids: BTreeMap<&'static str, BindingId>,
+    ids: BTreeMap<&'static str, usize>,
 
     /// Mapping the id to its name
-    names: BTreeMap<BindingId, &'static str>,
+    names: BTreeMap<usize, &'static str>,
 
     /// The jobs
     jobs: Vec<Job>,
@@ -162,40 +51,28 @@ pub struct Site {
     result_rx: Receiver<Job>,
 
     /// the dependencies as they're being built
-    staging_deps: BTreeMap<BindingId, Vec<Item>>,
+    staging_deps: BTreeMap<usize, Vec<Item>>,
 
     /// finished dependencies
-    finished_deps: BTreeMap<BindingId, Arc<Vec<Item>>>,
+    finished_deps: BTreeMap<usize, Arc<Vec<Item>>>,
 
     /// dependencies that are currently paused due to a barrier
-    paused: BTreeMap<BindingId, Vec<Job>>,
+    paused: BTreeMap<usize, Vec<Job>>,
 
     /// items whose dependencies have not been fulfilled
     waiting: Vec<Job>,
+
+    rules: Vec<Rule>,
 }
 
 impl Site {
     pub fn new(configuration: Configuration) -> Site {
-        use std::old_io::fs::PathExtensions;
-        use std::old_io::fs;
-
-        let paths =
-            fs::walk_dir(&configuration.input).unwrap()
-            .filter(|p| {
-                let is_ignored = if let Some(ref pattern) = configuration.ignore {
-                    pattern.matches(&Path::new(p.filename_str().unwrap()))
-                } else {
-                    false
-                };
-
-                p.is_file() && !is_ignored
-            })
-            .collect::<Vec<Path>>();
+        use std::fs::PathExt;
+        use std::fs;
 
         let threads = configuration.threads;
 
-        trace!("output directory is: {:?}", configuration.output());
-
+        trace!("output directory is: {:?}", configuration.output);
         trace!("using {} threads", threads);
 
         // channels for sending and receiving results
@@ -203,8 +80,6 @@ impl Site {
 
         Site {
             configuration: Arc::new(configuration),
-
-            paths: paths,
 
             bindings: BTreeMap::new(),
             ids: BTreeMap::new(),
@@ -221,11 +96,12 @@ impl Site {
             paused: BTreeMap::new(),
 
             waiting: Vec::new(),
+            rules: Vec::new(),
         }
     }
 }
 
-fn sort_jobs(jobs: &mut Vec<Job>, order: &RingBuf<BindingId>, graph: &Graph) {
+fn sort_jobs(jobs: &mut Vec<Job>, order: &RingBuf<usize>, graph: &Graph) {
     let mut boundary = 0;
 
     for &bind_id in order {
@@ -245,9 +121,6 @@ fn sort_jobs(jobs: &mut Vec<Job>, order: &RingBuf<BindingId>, graph: &Graph) {
     }
 
 }
-
-pub type BindingId = usize;
-pub type JobId = usize;
 
 impl Site {
     fn dispatch_job(&self, mut job: Job) {
@@ -294,7 +167,7 @@ impl Site {
         // create the new set of dependencies
         // if the binding already had dependencies, copy them
         let mut new_deps =
-            if let Some(ref old_deps) = jobs[0].dependencies {
+            if let Some(ref old_deps) = jobs[0].item.dependencies {
                 (**old_deps).clone()
             } else {
                 BTreeMap::new()
@@ -313,7 +186,7 @@ impl Site {
 
         // package each job with its dependencies
         for mut job in jobs {
-            job.dependencies = Some(arc_map.clone());
+            job.item.dependencies = Some(arc_map.clone());
 
             trace!("re-enqueuing: {:?}", job);
 
@@ -410,19 +283,106 @@ impl Site {
 
         // attach the dependencies and dispatch
         for mut job in ready {
-            job.dependencies = Some(deps_cache[self.names[job.binding]].clone());
+            job.item.dependencies = Some(deps_cache[self.names[job.binding]].clone());
             trace!("job now ready: {:?}", job);
             self.dispatch_job(job)
         }
     }
 
     pub fn build(&mut self) {
+        use std::fs::PathExt;
+        use std::mem;
+
+        // TODO: clean out the output directory here to avoid cruft and conflicts
+
+        let rules = mem::replace(&mut self.rules, Vec::new());
+
+        // TODO: the bindings should be performed in-order, since they
+        // might depend on dependencies that have not been registered yet
+        // causing errors
+        //
+        // the problem with this is that it ends up requiring to scan through
+        // the entire paths multiple times since a create order might be interleaved
+        // with matching orders :/
+        //
+        // perhaps allow orders to be placed in any order, but require that they be
+        // ordered by dependencies whenever it's necessary? this would require some over
+        // head though
+        //
+        // what would this entail? it seems like this would introduce dependency resolution
+        // before dependency resolution is even run?
+        //
+        // NOTE: if any order is possible, then we can't enforce that dependencies be registered
+        // 'by-reference' to avoid string errors
+        //
+        // * first process the items with no dependencies?
+
+        // TODO: separate creating and matching collections? to avoid
+        //       looping twice
+        let paths =
+            fs::walk_dir(&self.configuration.input).unwrap()
+            .filter_map(|p| {
+                let path = p.unwrap().path();
+
+                if let Some(ref pattern) = self.configuration.ignore {
+                    if pattern.matches(&Path::new(path.file_name().unwrap().to_str().unwrap())) {
+                        return None;
+                    }
+                }
+
+                if path.is_file() {
+                    Some(path.to_path_buf())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<PathBuf>>();
+
+        for rule in &rules {
+            match rule.kind {
+                rule::Kind::Creating(ref path) => {
+                    let compiler = rule.compiler.clone();
+                    let target = self.configuration.output.join(path.as_path());
+
+                    let conf = self.configuration.clone();
+
+                    self.add_job(
+                        rule.name,
+                        Item::new(conf, None, Some(target), None),
+                        compiler,
+                        &rule.dependencies);
+                },
+                rule::Kind::Matching(ref pattern) => {
+                    for path in &paths {
+                        let relative =
+                            path.relative_from(&self.configuration.input)
+                            .unwrap()
+                            .to_path_buf();
+
+                        let conf = self.configuration.clone();
+
+                        if pattern.matches(&relative) {
+                            self.add_job(
+                                rule.name,
+                                // TODO: make Vec<PathBuf> -> Vec<Arc<PathBuf>> to avoid copying?
+                                //       what does this mean?
+                                Item::new(conf, Some(relative), None, None),
+                                rule.compiler.clone(),
+                                &rule.dependencies);
+                        }
+                    }
+                },
+            }
+        }
+
+        mem::replace(&mut self.rules, rules);
+
         match self.graph.resolve() {
             Ok(order) => {
                 use std::mem;
 
                 // create the output directory
-                fs::mkdir_recursive(self.configuration.output(), ::std::old_io::USER_RWX)
+                fs::create_dir_all(&self.configuration.output)
                     .unwrap();
 
                 // put the jobs in the correct evaluation order
@@ -453,6 +413,7 @@ impl Site {
                 // jobs completed so far
                 let mut completed = 0us;
 
+                // possible to use self.result_rx.iter()?
                 while completed < total_jobs {
                     let current = self.result_rx.recv().unwrap();
 
@@ -484,10 +445,11 @@ impl Site {
                binding: &'static str,
                item: Item,
                compiler: Compiler,
-               dependencies: &Option<Vec<&'static str>>) {
+               dependencies: &[&'static str]) {
+        println!("adding job for binding: {}", binding);
         // create or get an id for this name
         let bind_count = self.ids.len();
-        let bind_index: BindingId =
+        let bind_index: usize =
             *self.ids.entry(binding).get()
                 .unwrap_or_else(|v| v.insert(bind_count));
 
@@ -514,10 +476,10 @@ impl Site {
         self.graph.add_node(bind_index);
 
         // if there are dependencies, create an edge from the dependency to this binding
-        if let &Some(ref deps) = dependencies {
-            trace!("has dependencies: {:?}", deps);
+        if !dependencies.is_empty() {
+            trace!("has dependencies: {:?}", dependencies);
 
-            for &dep in deps {
+            for &dep in dependencies {
                 let dependency_id = self.ids[dep];
                 trace!("setting dependency {} -> {}", dependency_id, bind_index);
                 self.graph.add_edge(dependency_id, bind_index);
@@ -525,96 +487,12 @@ impl Site {
         }
     }
 
-    pub fn creating(mut self, path: Path, binding: Rule) -> Site {
-        let compiler = binding.compiler;
-        let target = self.configuration.output().join(path);
-
-        let conf = self.configuration.clone();
-
-        self.add_job(
-            binding.name,
-            Item::new(conf, None, Some(target)),
-            compiler,
-            &binding.dependencies);
-
-        return self;
+    pub fn bind(&mut self, rule: Rule) {
+        self.rules.push(rule);
     }
 
-    pub fn matching<P>(mut self, pattern: P, binding: Rule) -> Site
-    where P: Pattern {
-        use std::mem;
-
-        let paths = mem::replace(&mut self.paths, Vec::new());
-
-        for path in &paths {
-            let relative = path.path_relative_from(&self.configuration.input).unwrap();
-
-            // TODO:
-            // the Item needs the actual path, so it can go ahead and read
-            // but it also needs to be able to have the relative path,
-            // so that routing works as intended
-
-            let conf = self.configuration.clone();
-
-            if pattern.matches(&relative) {
-                self.add_job(
-                    binding.name,
-                    // TODO: make Vec<Path> -> Vec<Arc<Path>> to avoid copying?
-                    //       what does this mean?
-                    Item::new(conf, Some(relative), None),
-                    binding.compiler.clone(),
-                    &binding.dependencies);
-            }
-        }
-
-        mem::replace(&mut self.paths, paths);
-
-        return self;
-    }
-}
-
-pub struct Rule {
-    pub name: &'static str,
-    pub compiler: Compiler,
-    pub dependencies: Option<Vec<&'static str>>,
-}
-
-impl Rule {
-    pub fn new(name: &'static str) -> Rule {
-        Rule {
-            name: name,
-            compiler: Compiler::new(Chain::only(compiler::stub).build()),
-            dependencies: None,
-        }
-    }
-
-    pub fn compiler(mut self, compiler: Compiler) -> Rule {
-        self.compiler = compiler;
-        return self;
-    }
-
-    pub fn depends_on<D>(mut self, dependency: D) -> Rule where D: Dependency {
-        let mut pushed = self.dependencies.unwrap_or_else(|| Vec::new());
-        pushed.push(dependency.name());
-        self.dependencies = Some(pushed);
-
-        return self;
-    }
-}
-
-pub trait Dependency {
-    fn name(&self) -> &'static str;
-}
-
-impl Dependency for &'static str {
-    fn name(&self) -> &'static str {
-        self.clone()
-    }
-}
-
-impl<'a> Dependency for &'a Rule {
-    fn name(&self) -> &'static str {
-        self.name.clone()
+    pub fn configuration(&self) -> Arc<Configuration> {
+        self.configuration.clone()
     }
 }
 

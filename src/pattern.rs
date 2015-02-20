@@ -20,6 +20,7 @@
 
 use glob;
 use regex::Regex;
+use std::path::Path;
 
 /// A kind of pattern that can be used for
 /// filtering the files in the input directory.
@@ -46,12 +47,12 @@ impl<'a, P: ?Sized> Pattern for &'a mut P where P: Pattern {
 }
 
 /// The negation of a pattern.
-pub struct NotPattern<P>
+pub struct Not<P>
 where P: Pattern {
     pattern: P
 }
 
-impl<P> Pattern for NotPattern<P>
+impl<P> Pattern for Not<P>
 where P: Pattern {
     fn matches(&self, p: &Path) -> bool {
         !self.pattern.matches(p)
@@ -59,13 +60,13 @@ where P: Pattern {
 }
 
 /// This conjunction of two patterns.
-pub struct AndPattern<P1, P2>
+pub struct And<P1, P2>
 where P1: Pattern, P2: Pattern {
     left: P1,
     right: P2
 }
 
-impl<P1, P2> Pattern for AndPattern<P1, P2>
+impl<P1, P2> Pattern for And<P1, P2>
 where P1: Pattern, P2: Pattern {
     fn matches(&self, p: &Path) -> bool {
         self.left.matches(p) && self.right.matches(p)
@@ -73,13 +74,13 @@ where P1: Pattern, P2: Pattern {
 }
 
 /// The disjunction of two patterns.
-pub struct OrPattern<P1, P2>
+pub struct Or<P1, P2>
 where P1: Pattern, P2: Pattern {
     left: P1,
     right: P2
 }
 
-impl<P1, P2> Pattern for OrPattern<P1, P2>
+impl<P1, P2> Pattern for Or<P1, P2>
 where P1: Pattern, P2: Pattern {
     fn matches(&self, p: &Path) -> bool {
         self.left.matches(p) || self.right.matches(p)
@@ -99,7 +100,7 @@ impl Pattern for Everything {
 /// Allow regular expression patterns.
 impl Pattern for Regex {
     fn matches(&self, p: &Path) -> bool {
-        self.is_match(p.as_str().unwrap())
+        self.is_match(p.to_str().unwrap())
     }
 }
 
@@ -111,41 +112,48 @@ impl Pattern for Regex {
 /// to begin with.
 impl Pattern for str {
     fn matches(&self, p: &Path) -> bool {
-        self == p.as_str().unwrap()
+        self == p.to_str().unwrap()
+    }
+}
+
+impl Pattern for Path {
+    fn matches(&self, p: &Path) -> bool {
+        self == p
     }
 }
 
 impl Pattern for glob::Pattern {
+    // TODO: glob should be updated to work on Path
     fn matches(&self, p: &Path) -> bool {
-        self.matches_path(p)
+        self.matches(p.to_str().unwrap())
     }
 }
 
 /// Contains the DSL items for easily constructing complex patterns.
 pub mod dsl {
-    use super::{Pattern, NotPattern, AndPattern, OrPattern};
+    use super::{Pattern, Not, And, Or};
 
     /// Constructs the negation of a pattern.
-    pub fn not<P>(p: P) -> NotPattern<P>
+    pub fn not<P>(p: P) -> Not<P>
     where P: Pattern {
-        NotPattern {
+        Not {
             pattern: p
         }
     }
 
     /// Constructs the conjunction of two patterns.
-    pub fn and<P1, P2>(p1: P1, p2: P2) -> AndPattern<P1, P2>
+    pub fn and<P1, P2>(p1: P1, p2: P2) -> And<P1, P2>
     where P1: Pattern, P2: Pattern {
-        AndPattern {
+        And {
             left: p1,
             right: p2
         }
     }
 
     /// Constructs the disjunction of two patterns.
-    pub fn or<P1, P2>(p1: P1, p2: P2) -> OrPattern<P1, P2>
+    pub fn or<P1, P2>(p1: P1, p2: P2) -> Or<P1, P2>
     where P1: Pattern, P2: Pattern {
-        OrPattern {
+        Or {
             left: p1,
             right: p2
         }
@@ -155,6 +163,7 @@ pub mod dsl {
 #[cfg(test)]
 mod test {
     use super::{Pattern, Everything};
+    use std::path::Path;
 
     #[test]
     fn match_everything() {

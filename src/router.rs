@@ -1,5 +1,6 @@
-use item::{Item, Dependencies};
+use item::Item;
 use compiler::Compile;
+use std::path::PathBuf;
 
 use regex;
 
@@ -11,16 +12,20 @@ use regex;
 
 /// file.txt -> file.txt
 /// gen.route(Identity)
-pub fn identity(item: &mut Item, _deps: Option<Dependencies>) {
+pub fn identity(item: &mut Item) {
     println!("routing {} with the identity router", item.from.clone().unwrap().display());
     item.to = item.from.clone();
 }
 
-pub fn set_extension(extension: &'static str) -> Box<Compile + Sync + Send + 'static> {
-    Box::new(move |item: &mut Item, _deps: Option<Dependencies>| {
-        let mut cloned = item.from.clone().unwrap();
-        cloned.set_extension(extension);
-        item.to = Some(cloned);
+pub fn set_extension(extension: &'static str) -> Box<Compile + Sync + Send> {
+    Box::new(move |item: &mut Item| {
+        if let Some(ref from) = item.from {
+            item.to = Some(from.with_extension(extension));
+        }
+        // // TODO: this should use map as_ref
+        // let mut cloned = item.from.clone().unwrap();
+        // cloned.set_extension(extension);
+        // item.to = Some(cloned);
     })
 }
 
@@ -40,7 +45,7 @@ impl SetExtension {
 }
 
 impl Compile for SetExtension {
-    fn compile(&self, item: &mut Item, _deps: Option<Dependencies>) {
+    fn compile(&self, item: &mut Item) {
         let mut cloned = item.from.clone().unwrap();
         cloned.set_extension(self.extension);
         item.to = Some(cloned);
@@ -71,12 +76,12 @@ impl Regex {
 }
 
 impl Compile for Regex {
-    fn compile(&self, item: &mut Item, _deps: Option<Dependencies>) {
+    fn compile(&self, item: &mut Item) {
         let from = item.from.clone().unwrap();
-        let path_str = from.as_str().unwrap();
+        let path_str = from.to_str().unwrap();
 
         if let Some(caps) = self.regex.captures(path_str) {
-            item.to = Some(Path::new(caps.expand(self.template)));
+            item.to = Some(PathBuf::new(&caps.expand(self.template)));
         }
     }
 }

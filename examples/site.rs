@@ -8,7 +8,6 @@
 #[macro_use]
 extern crate diecast;
 extern crate regex;
-extern crate regex_macros;
 extern crate glob;
 #[macro_use]
 extern crate log;
@@ -18,27 +17,27 @@ extern crate handlebars;
 extern crate "rustc-serialize" as rustc_serialize;
 
 use diecast::{
-    Diecast,
     // Site,
     Configuration,
     Rule,
     Compiler,
     Chain,
     Item,
-    Dependencies,
 };
 
 use diecast::router;
+use diecast::command;
 use diecast::compiler::{self, TomlMetadata};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
-use std::old_io::fs::File;
+use std::fs::File;
+use std::io::Read;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use rustc_serialize::json::{Json, ToJson};
 
-fn article_handler(item: &Item, _deps: Option<Dependencies>) -> Json {
+fn article_handler(item: &Item) -> Json {
     let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
     if let Some(&TomlMetadata(ref metadata)) = item.data.get::<TomlMetadata>() {
@@ -57,9 +56,12 @@ fn article_handler(item: &Item, _deps: Option<Dependencies>) -> Json {
 fn main() {
     env_logger::init().unwrap();
 
-    let layout =
-        File::open(&Path::new("tests/fixtures/input/layouts/article.handlebars"))
-            .read_to_string().unwrap();
+    let mut layout = String::new();
+
+    File::open(&Path::new("tests/fixtures/input/layouts/article.handlebars"))
+        .unwrap()
+        .read_to_string(&mut layout)
+        .unwrap();
 
     let mut handlebars = Handlebars::new();
     handlebars.register_template_string("article", layout).unwrap();
@@ -69,45 +71,67 @@ fn main() {
     let content_compiler =
         Compiler::new(
             Chain::new()
-                // .link(compiler::Inject::with(template_registry))
                 .link(compiler::inject_with(template_registry))
                 .link(compiler::read)
                 .link(compiler::parse_metadata)
                 .link(compiler::parse_toml)
                 .link(compiler::render_markdown)
-                // .link(router::SetExtension::new("html"))
                 .link(router::set_extension("html"))
-                // .link(compiler::RenderTemplate::new("article", article_handler))
                 .link(compiler::render_template("article", article_handler))
                 .link(compiler::print)
                 .link(compiler::write)
                 .build());
 
-    let posts =
-        Rule::new("posts")
-            .compiler(content_compiler.clone());
+    let pages =
+        Rule::matching(
+            "pages",
+            glob::Pattern::new("pages/*.md").unwrap(),
+            content_compiler.clone());
+
+    let index =
+        Rule::creating(
+            "page index",
+            "index.html",
+            Compiler::new(
+                Chain::new()
+                    .link(|item: &mut Item| {
+                        println!("getting titles");
+                        let mut titles = String::new();
+
+                        if let Some(ref dependencies) = item.dependencies {
+                            for post in dependencies["pages"].iter() {
+                                if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
+                                    println!("got metadata");
+
+                                    let title =
+                                        metadata
+                                            .lookup("title")
+                                            .unwrap()
+                                            .as_str()
+                                            .unwrap();
+
+                                    titles.push_str(&format!("> {}\n", title));
+                                }
+                            }
+                        }
+
+                        item.body = Some(titles);
+                    })
+                    .link(compiler::print)
+                    .link(compiler::write)
+                    .build()))
+            .depends_on(&pages);
 
     let config =
-        Configuration::new(Path::new("tests/fixtures/input"), Path::new("output"))
+        Configuration::new("tests/fixtures/input", "output")
             // .preview(true)
             .ignore(regex!(r"^\.|^#|~$|\.swp$"));
 
-    // let site =
-    //     Site::new(config)
-    //         .matching(glob::Pattern::new("pages/*.md").unwrap(), posts);
+    let (mut command, mut site) = command::from_args(config);
 
-    // approach
-    //
-    // 1. Rule itself contains matching/create
-    //
-    //     Rule::matching("posts", glob::Pattern::new("pages/*.md").unwrap())
-    //     Rule::creating("post index", "index.html")
-    //
-    // 2. pass rules to Diecast
-    //
+    site.bind(pages);
+    site.bind(index);
 
-    Diecast::new(config)
-        .rule(posts)
-        .run();
+    command.run(site);
 }
 

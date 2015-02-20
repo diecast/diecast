@@ -1,11 +1,13 @@
 //! Compilation unit for the `Generator`.
 
 use anymap::AnyMap;
-use std::old_io::File;
+use std::fs::File;
+use std::io::{Read, Write};
 use std::fmt::{self, Debug};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use site::Configuration;
+use configuration::Configuration;
+use std::path::PathBuf;
 
 // TODO:
 pub type Dependencies = Arc<BTreeMap<&'static str, Arc<Vec<Item>>>>;
@@ -25,11 +27,15 @@ pub type Dependencies = Arc<BTreeMap<&'static str, Arc<Vec<Item>>>>;
 pub struct Item {
     pub configuration: Arc<Configuration>,
 
-    pub from: Option<Path>,
-    pub to: Option<Path>,
+    pub from: Option<PathBuf>,
+    pub to: Option<PathBuf>,
 
+    // TODO: just make this a straight up string? empty string
+    // means no body
     /// The Item's body which will fill the target file.
     pub body: Option<String>,
+
+    pub dependencies: Option<Dependencies>,
 
     /// Any additional data (post metadata)
     ///
@@ -42,8 +48,13 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new(config: Arc<Configuration>, from: Option<Path>, to: Option<Path>) -> Item {
-        use std::old_io::fs::PathExtensions;
+    pub fn new(
+        config: Arc<Configuration>,
+        from: Option<PathBuf>,
+        to: Option<PathBuf>,
+        dependencies: Option<Dependencies>)
+    -> Item {
+        use std::fs::PathExt;
 
         if let Some(ref from) = from {
             assert!(config.input.join(from).is_file())
@@ -55,13 +66,21 @@ impl Item {
             from: from,
             to: to,
             body: None,
+            dependencies: dependencies,
             data: AnyMap::new()
         }
     }
 
     pub fn read(&mut self) {
         if let Some(ref path) = self.from {
-            self.body = File::open(&self.configuration.input.join(path)).read_to_string().ok();
+            let mut buf = String::new();
+
+            File::open(&self.configuration.input.join(path))
+                .unwrap()
+                .read_to_string(&mut buf)
+                .unwrap();
+
+            self.body = Some(buf);
         }
     }
 
@@ -69,7 +88,8 @@ impl Item {
         if let Some(ref path) = self.to {
             if let Some(ref body) = self.body {
                 File::create(path)
-                    .write_str(body)
+                    .unwrap()
+                    .write_all(body.as_bytes())
                     .unwrap();
             }
         }

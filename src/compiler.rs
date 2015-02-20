@@ -3,37 +3,37 @@
 use std::sync::Arc;
 use toml;
 
-use item::{Item, Dependencies};
+use item::Item;
 
 /// Behavior of a compiler.
 ///
 /// There's a single method that takes a mutable
 /// reference to the `Item` being compiled.
 pub trait Compile: Send + Sync {
-    fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>);
+    fn compile(&self, item: &mut Item);
 }
 
 impl<C: ?Sized> Compile for Box<C> where C: Compile {
-    fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
-        (**self).compile(item, dependencies);
+    fn compile(&self, item: &mut Item) {
+        (**self).compile(item);
     }
 }
 
 impl<C: ?Sized> Compile for &'static C where C: Compile {
-    fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
-        (**self).compile(item, dependencies);
+    fn compile(&self, item: &mut Item) {
+        (**self).compile(item);
     }
 }
 
 impl<C: ?Sized> Compile for &'static mut C where C: Compile {
-    fn compile(&self, item: &mut Item, dependencies: Option<Dependencies>) {
-        (**self).compile(item, dependencies);
+    fn compile(&self, item: &mut Item) {
+        (**self).compile(item);
     }
 }
 
-impl<F> Compile for F where F: Fn(&mut Item, Option<Dependencies>) + Send + Sync {
-    fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
-        self(item, deps);
+impl<F> Compile for F where F: Fn(&mut Item) + Send + Sync {
+    fn compile(&self, item: &mut Item) {
+        self(item);
     }
 }
 
@@ -42,7 +42,7 @@ pub enum Link {
     Barrier,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy)]
 pub enum Status {
     Paused,
     Done,
@@ -58,14 +58,14 @@ impl Chain {
     }
 
     pub fn only<C>(compiler: C) -> Chain
-    where C: Compile {
+    where C: Compile + 'static {
         Chain {
             chain: vec![Link::Compiler(Box::new(compiler) as Box<Compile + Send + Sync>)]
         }
     }
 
     pub fn link<C>(mut self, compiler: C) -> Chain
-    where C: Compile {
+    where C: Compile + 'static {
         self.chain.push(Link::Compiler(Box::new(compiler) as Box<Compile + Send + Sync>));
         self
     }
@@ -94,8 +94,8 @@ impl Clone for Compiler {
     fn clone(&self) -> Compiler {
         Compiler {
             chain: self.chain.clone(),
-            status: self.status.clone(),
-            position: self.position.clone(),
+            status: self.status,
+            position: self.position,
         }
     }
 }
@@ -109,12 +109,12 @@ impl Compiler {
         }
     }
 
-    pub fn compile(&mut self, item: &mut Item, deps: Option<Dependencies>) {
+    pub fn compile(&mut self, item: &mut Item) {
         for link in &self.chain[self.position..] {
             self.position += 1;
 
             match *link {
-                Link::Compiler(ref compiler) => compiler.compile(item, deps.clone()),
+                Link::Compiler(ref compiler) => compiler.compile(item),
                 Link::Barrier => {
                     self.status = Status::Paused;
                     return;
@@ -126,39 +126,49 @@ impl Compiler {
     }
 }
 
-pub fn stub(item: &mut Item, _deps: Option<Dependencies>) {
+pub fn stub(item: &mut Item) {
     trace!("no compiler established for: {:?}", item);
 }
 
 /// Compiler that reads the `Item`'s body.
-pub fn read(item: &mut Item, _deps: Option<Dependencies>) {
-    use std::old_io::fs::File;
+pub fn read(item: &mut Item) {
+    use std::fs::File;
+    use std::io::{Read, Write};
 
     if let Some(ref path) = item.from {
-        item.body = File::open(&item.configuration.input.join(path)).read_to_string().ok();
+        let mut buf = String::new();
+
+        File::open(&item.configuration.input.join(path))
+            .unwrap()
+            .read_to_string(&mut buf)
+            .unwrap();
+
+        item.body = Some(buf);
     }
 }
 
 /// Compiler that writes the `Item`'s body.
-pub fn write(item: &mut Item, _deps: Option<Dependencies>) {
-    use std::old_io::fs::{self, File};
+pub fn write(item: &mut Item) {
+    use std::fs::{self, File};
+    use std::io::Write;
 
     if let Some(ref path) = item.to {
         if let Some(ref body) = item.body {
-            let conf_out = item.configuration.output();
-            let target = conf_out.join(path.dir_path());
+            let conf_out = &item.configuration.output;
+            let target = conf_out.join(path.parent().unwrap());
 
-            if !conf_out.is_ancestor_of(&target) {
+            if !target.starts_with(&conf_out) {
                 panic!("attempted to write outside of the output directory: {:?}", target);
             }
 
             trace!("mkdir -p {:?}", target);
 
-            fs::mkdir_recursive(&target, ::std::old_io::USER_RWX)
-                .unwrap();
+            // TODO: this errors out if the path already exists? dumb
+            fs::create_dir_all(&target);
 
             File::create(&conf_out.join(path))
-                .write_str(&body)
+                .unwrap()
+                .write_all(body.as_bytes())
                 .unwrap();
         }
     }
@@ -166,7 +176,7 @@ pub fn write(item: &mut Item, _deps: Option<Dependencies>) {
 
 
 /// Compiler that prints the `Item`'s body.
-pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
+pub fn print(item: &mut Item) {
     use std::old_io::stdio::println;
 
     if let &Some(ref body) = &item.body {
@@ -179,7 +189,7 @@ pub fn print(item: &mut Item, _deps: Option<Dependencies>) {
 #[derive(Clone)]
 pub struct Metadata(pub String);
 
-pub fn parse_metadata(item: &mut Item, _deps: Option<Dependencies>) {
+pub fn parse_metadata(item: &mut Item) {
     if let Some(body) = item.body.take() {
         // TODO:
         // should probably allow arbitrary amount of
@@ -215,7 +225,7 @@ pub fn parse_metadata(item: &mut Item, _deps: Option<Dependencies>) {
 #[derive(Clone)]
 pub struct TomlMetadata(pub toml::Value);
 
-pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
+pub fn parse_toml(item: &mut Item) {
     let parsed = if let Some(&Metadata(ref parsed)) = item.data.get::<Metadata>() {
         Some(parsed.parse().unwrap())
     } else {
@@ -227,7 +237,7 @@ pub fn parse_toml(item: &mut Item, _deps: Option<Dependencies>) {
     }
 }
 
-pub fn render_markdown(item: &mut Item, _deps: Option<Dependencies>) {
+pub fn render_markdown(item: &mut Item) {
     use hoedown::Markdown;
     use hoedown::renderer::html;
 
@@ -240,9 +250,9 @@ pub fn render_markdown(item: &mut Item, _deps: Option<Dependencies>) {
     }
 }
 
-pub fn inject_with<T>(t: Arc<T>) -> Box<Compile + Sync + Send + 'static>
+pub fn inject_with<T>(t: Arc<T>) -> Box<Compile + Sync + Send>
 where T: Sync + Send + 'static {
-    Box::new(move |item: &mut Item, _deps: Option<Dependencies>| {
+    Box::new(move |item: &mut Item| {
         item.data.insert(t.clone());
     })
 }
@@ -264,7 +274,7 @@ impl<T> Inject<T> where T: Sync + Send + 'static {
 }
 
 impl<T> Compile for Inject<T> where T: Sync + Send + 'static {
-    fn compile(&self, item: &mut Item, _deps: Option<Dependencies>) {
+    fn compile(&self, item: &mut Item) {
         item.data.insert(self.data.clone());
     }
 }
@@ -272,12 +282,11 @@ impl<T> Compile for Inject<T> where T: Sync + Send + 'static {
 use rustc_serialize::json::Json;
 use handlebars::Handlebars;
 
-pub fn render_template<H>(name: &'static str, handler: H)
-    -> Box<Compile + Sync + Send + 'static>
-where H: Fn(&Item, Option<Dependencies>) -> Json + Sync + Send + 'static {
-    Box::new(move |item: &mut Item, deps: Option<Dependencies>| {
+pub fn render_template<H>(name: &'static str, handler: H) -> Box<Compile + Sync + Send>
+where H: Fn(&Item) -> Json + Sync + Send + 'static {
+    Box::new(move |item: &mut Item| {
         if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
-            let json = handler(item, deps);
+            let json = handler(item);
             item.body = Some(registry.render(name, &json).unwrap());
         }
     })
@@ -285,12 +294,12 @@ where H: Fn(&Item, Option<Dependencies>) -> Json + Sync + Send + 'static {
 
 pub struct RenderTemplate {
     name: &'static str,
-    handler: Box<Fn(&Item, Option<Dependencies>) -> Json + Sync + Send + 'static>,
+    handler: Box<Fn(&Item) -> Json + Sync + Send + 'static>,
 }
 
 impl RenderTemplate {
     pub fn new<H>(name: &'static str, handler: H) -> RenderTemplate
-    where H: Fn(&Item, Option<Dependencies>) -> Json + Sync + Send + 'static {
+    where H: Fn(&Item) -> Json + Sync + Send + 'static {
         RenderTemplate {
             name: name,
             handler: Box::new(handler),
@@ -299,9 +308,9 @@ impl RenderTemplate {
 }
 
 impl Compile for RenderTemplate {
-    fn compile(&self, item: &mut Item, deps: Option<Dependencies>) {
+    fn compile(&self, item: &mut Item) {
         if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
-            let json = (*self.handler)(item, deps);
+            let json = (*self.handler)(item);
             item.body = Some(registry.render(self.name, &json).unwrap());
         }
     }
