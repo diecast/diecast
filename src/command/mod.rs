@@ -2,7 +2,7 @@ use docopt::{self, Docopt};
 use configuration::Configuration;
 use rustc_serialize::{Decodable, Decoder};
 
-use self::CommandKind::*;
+use self::Kind::*;
 
 use site::Site;
 
@@ -40,22 +40,23 @@ Possible commands include:
 
 #[derive(RustcDecodable, Debug)]
 struct Options {
-    arg_command: Option<CommandKind>,
+    arg_command: Option<Kind>,
     arg_args: Vec<String>,
 }
 
 #[derive(Debug)]
-pub enum CommandKind {
+pub enum Kind {
     Build,
     Live,
     Clean,
     Help,
     Other(String),
+    None,
 }
 
-impl Decodable for CommandKind {
-    fn decode<D: Decoder>(d: &mut D) -> Result<CommandKind, D::Error> {
-        use self::CommandKind::*;
+impl Decodable for Kind {
+    fn decode<D: Decoder>(d: &mut D) -> Result<Kind, D::Error> {
+        use self::Kind::*;
 
         let s = try!(d.read_str());
 
@@ -74,7 +75,7 @@ impl Decodable for CommandKind {
 pub fn version() -> String {
     format!("diecast {}", match option_env!("CFG_VERSION") {
         Some(s) => s.to_string(),
-        None => format!("{}.{}.{}{}",
+        Option::None => format!("{}.{}.{}{}",
                         env!("CARGO_PKG_VERSION_MAJOR"),
                         env!("CARGO_PKG_VERSION_MINOR"),
                         env!("CARGO_PKG_VERSION_PATCH"),
@@ -101,17 +102,26 @@ pub fn from_args(mut configuration: Configuration) -> (Box<Command>, Site) {
             .exit();
     }
 
-    let command = match options.arg_command.unwrap() {
-        Build => Box::new(build::Build::new(&mut configuration)) as Box<Command>,
-        Live => Box::new(live::Live::new(&mut configuration)) as Box<Command>,
-        Clean => Box::new(clean::Clean::new(&mut configuration)) as Box<Command>,
+    configuration.command = options.arg_command.unwrap();
+
+    let command: Box<Command> = match configuration.command {
+        Build => Box::new(build::Build::new(&mut configuration)),
+        Live => Box::new(live::Live::new(&mut configuration)),
+        Clean => Box::new(clean::Clean::new(&mut configuration)),
         Help => {
             docopt::Error::WithProgramUsage(
                 Box::new(docopt::Error::Help),
                 USAGE.to_string())
                 .exit();
         },
-        Other(cmd) => {
+        Other(ref cmd) => {
+            // TODO:
+            //
+            // here check if cmd is a registered command?
+            //
+            // approach:
+            // * return an enum? Command(Box<Command>) or Custom(name)
+
             // here look in PATH to find program named diecast-$cmd
             // if not found, then output this message:
             println!("unknown command `{}`", cmd);
@@ -120,6 +130,9 @@ pub fn from_args(mut configuration: Configuration) -> (Box<Command>, Site) {
                 USAGE.to_string())
                 .exit();
         },
+        None => {
+            panic!("can't create a command from `None`");
+        }
     };
 
     (command, Site::new(configuration))

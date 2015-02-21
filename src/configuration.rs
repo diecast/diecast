@@ -1,6 +1,8 @@
 use std::path::{PathBuf, AsPath};
 use pattern::Pattern;
 
+use command;
+
 /// The configuration of the build
 /// an Arc of this is given to each Item
 pub struct Configuration {
@@ -9,6 +11,8 @@ pub struct Configuration {
 
     /// The output directory
     pub output: PathBuf,
+
+    pub command: command::Kind,
 
     /// The number of cpu count
     pub threads: usize,
@@ -40,6 +44,7 @@ impl Configuration {
             // TODO: setting it to error by default seems like a wart
             input: input.as_path().to_path_buf(),
             output: output.as_path().to_path_buf(),
+            command: command::Kind::None,
             threads: ::std::os::num_cpus(),
             is_verbose: false,
             ignore: None,
