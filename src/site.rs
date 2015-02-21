@@ -27,19 +27,13 @@ pub struct Site {
     configuration: Arc<Configuration>,
 
     /// Mapping the id to its dependencies
-    bindings: BTreeMap<usize, Vec<usize>>,
-
-    /// Mapping the name to its id
-    ids: BTreeMap<&'static str, usize>,
-
-    /// Mapping the id to its name
-    names: BTreeMap<usize, &'static str>,
+    bindings: BTreeMap<&'static str, Vec<usize>>,
 
     /// The jobs
     jobs: Vec<Job>,
 
     /// Dependency resolution
-    graph: Graph,
+    graph: Graph<&'static str>,
 
     /// Thread pool to process jobs
     thread_pool: TaskPool,
@@ -51,13 +45,13 @@ pub struct Site {
     result_rx: Receiver<Job>,
 
     /// the dependencies as they're being built
-    staging_deps: BTreeMap<usize, Vec<Item>>,
+    staging_deps: BTreeMap<&'static str, Vec<Item>>,
 
     /// finished dependencies
-    finished_deps: BTreeMap<usize, Arc<Vec<Item>>>,
+    finished_deps: BTreeMap<&'static str, Arc<Vec<Item>>>,
 
     /// dependencies that are currently paused due to a barrier
-    paused: BTreeMap<usize, Vec<Job>>,
+    paused: BTreeMap<&'static str, Vec<Job>>,
 
     /// items whose dependencies have not been fulfilled
     waiting: Vec<Job>,
@@ -82,8 +76,6 @@ impl Site {
             configuration: Arc::new(configuration),
 
             bindings: BTreeMap::new(),
-            ids: BTreeMap::new(),
-            names: BTreeMap::new(),
             jobs: Vec::new(),
             graph: Graph::new(),
 
@@ -101,7 +93,8 @@ impl Site {
     }
 }
 
-fn sort_jobs(jobs: &mut Vec<Job>, order: &RingBuf<usize>, graph: &Graph) {
+// TODO: audit this
+fn sort_jobs(jobs: &mut Vec<Job>, order: &RingBuf<&'static str>, graph: &Graph<&'static str>) {
     let mut boundary = 0;
 
     for &bind_id in order {
@@ -166,15 +159,10 @@ impl Site {
 
         // create the new set of dependencies
         // if the binding already had dependencies, copy them
-        let mut new_deps =
-            if let Some(ref old_deps) = jobs[0].item.dependencies {
-                (**old_deps).clone()
-            } else {
-                BTreeMap::new()
-            };
+        let mut new_deps = (*jobs[0].item.dependencies).clone();
 
         // insert the frozen state of these jobs
-        new_deps.insert(self.names[binding], {
+        new_deps.insert(binding, {
             Arc::new(jobs.iter()
                 .map(|j| j.item.clone())
                 .collect::<Vec<Item>>())
@@ -186,7 +174,7 @@ impl Site {
 
         // package each job with its dependencies
         for mut job in jobs {
-            job.item.dependencies = Some(arc_map.clone());
+            job.item.dependencies = arc_map.clone();
 
             trace!("re-enqueuing: {:?}", job);
 
@@ -258,7 +246,7 @@ impl Site {
         self.waiting = waiting;
 
         let mut deps_cache = BTreeMap::new();
-        let mut dependents = ready.iter().map(|j| j.binding).collect::<Vec<usize>>();
+        let mut dependents = ready.iter().map(|j| j.binding).collect::<Vec<&'static str>>();
 
         dependents.sort();
         dependents.dedup();
@@ -275,15 +263,15 @@ impl Site {
 
             for &dep in self.graph.dependencies_of(dependent).unwrap() {
                 trace!("adding dependency: {:?}", dep);
-                deps.insert(self.names[dep], self.finished_deps[dep].clone());
+                deps.insert(dep, self.finished_deps[dep].clone());
             }
 
-            deps_cache.insert(self.names[dependent], Arc::new(deps));
+            deps_cache.insert(dependent, Arc::new(deps));
         }
 
         // attach the dependencies and dispatch
         for mut job in ready {
-            job.item.dependencies = Some(deps_cache[self.names[job.binding]].clone());
+            job.item.dependencies = deps_cache[job.binding].clone();
             trace!("job now ready: {:?}", job);
             self.dispatch_job(job)
         }
@@ -348,7 +336,7 @@ impl Site {
 
                     self.add_job(
                         rule.name,
-                        Item::new(conf, None, Some(target), None),
+                        Item::new(conf, None, Some(target)),
                         compiler,
                         &rule.dependencies);
                 },
@@ -366,7 +354,7 @@ impl Site {
                                 rule.name,
                                 // TODO: make Vec<PathBuf> -> Vec<Arc<PathBuf>> to avoid copying?
                                 //       what does this mean?
-                                Item::new(conf, Some(relative), None, None),
+                                Item::new(conf, Some(relative), None),
                                 rule.compiler.clone(),
                                 &rule.dependencies);
                         }
@@ -446,43 +434,32 @@ impl Site {
                item: Item,
                compiler: Compiler,
                dependencies: &[&'static str]) {
-        println!("adding job for binding: {}", binding);
-        // create or get an id for this name
-        let bind_count = self.ids.len();
-        let bind_index: usize =
-            *self.ids.entry(binding).get()
-                .unwrap_or_else(|v| v.insert(bind_count));
-
-        self.names.insert(bind_index, binding);
-
         trace!("adding job for {:?}", item);
-        trace!("bind index: {}", bind_index);
 
         // create a job id
         let index = self.jobs.len();
         trace!("index: {}", index);
 
         // add the job to the list of jobs
-        self.jobs.push(Job::new(bind_index, item, compiler, index));
+        self.jobs.push(Job::new(binding, item, compiler, index));
 
         // associate the job id with the binding
-        self.bindings.entry(bind_index).get()
+        self.bindings.entry(binding).get()
             .unwrap_or_else(|v| v.insert(vec![]))
             .push(index);
 
         trace!("bindings: {:?}", self.bindings);
 
         // add the binding to the graph
-        self.graph.add_node(bind_index);
+        self.graph.add_node(binding);
 
         // if there are dependencies, create an edge from the dependency to this binding
         if !dependencies.is_empty() {
             trace!("has dependencies: {:?}", dependencies);
 
             for &dep in dependencies {
-                let dependency_id = self.ids[dep];
-                trace!("setting dependency {} -> {}", dependency_id, bind_index);
-                self.graph.add_edge(dependency_id, bind_index);
+                trace!("setting dependency {} -> {}", dep, binding);
+                self.graph.add_edge(dep, binding);
             }
         }
     }

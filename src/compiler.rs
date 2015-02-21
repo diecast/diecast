@@ -181,8 +181,6 @@ pub fn print(item: &mut Item) {
 
     if let &Some(ref body) = &item.body {
         println(body);
-    } else {
-        println("no body");
     }
 }
 

@@ -13,7 +13,7 @@ use regex;
 /// file.txt -> file.txt
 /// gen.route(Identity)
 pub fn identity(item: &mut Item) {
-    println!("routing {} with the identity router", item.from.clone().unwrap().display());
+    trace!("routing {} with the identity router", item.from.clone().unwrap().display());
     item.to = item.from.clone();
 }
 
@@ -22,10 +22,6 @@ pub fn set_extension(extension: &'static str) -> Box<Compile + Sync + Send> {
         if let Some(ref from) = item.from {
             item.to = Some(from.with_extension(extension));
         }
-        // // TODO: this should use map as_ref
-        // let mut cloned = item.from.clone().unwrap();
-        // cloned.set_extension(extension);
-        // item.to = Some(cloned);
     })
 }
 

@@ -14,12 +14,12 @@ use std::borrow::IntoCow;
 ///
 /// This graph tracks items and is able to produce an ordering
 /// of the items that respects dependency constraints.
-pub struct Graph {
+pub struct Graph<T> where T: Ord + Copy {
     /// Edges in the graph; implicitly stores nodes.
     ///
     /// There's a key for every node in the graph, even if
     /// if it doesn't have any edges going out.
-    edges: BTreeMap<usize, BTreeSet<usize>>,
+    edges: BTreeMap<T, BTreeSet<T>>,
 
     /// The dependencies a node has.
     ///
@@ -30,50 +30,51 @@ pub struct Graph {
     /// e.g. the relationship that A depends on B can be represented as
     /// A -> B, so therefore the evaluation order which respects that
     /// dependency is the reverse, B -> A
-    reverse: BTreeMap<usize, BTreeSet<usize>>,
+    reverse: BTreeMap<T, BTreeSet<T>>,
 }
 
-impl Graph {
-    pub fn new() -> Graph {
+impl<T> Graph<T> where T: Ord + Copy {
+    pub fn new() -> Graph<T> {
         Graph {
             edges: BTreeMap::new(),
             reverse: BTreeMap::new(),
         }
     }
 
-    pub fn add_node(&mut self, node: usize) {
+    pub fn add_node(&mut self, node: T) {
         if let Vacant(entry) = self.edges.entry(node) {
             entry.insert(BTreeSet::new());
         }
     }
 
     /// Register a dependency constraint.
-    pub fn add_edge(&mut self, a: usize, b: usize) {
+    pub fn add_edge(&mut self, a: T, b: T) {
         self.edges.entry(a).get()
             .unwrap_or_else(|v| v.insert(BTreeSet::new()))
             .insert(b);
+
         self.reverse.entry(b).get()
             .unwrap_or_else(|v| v.insert(BTreeSet::new()))
             .insert(a);
     }
 
     /// The nodes in the graph.
-    pub fn nodes(&self) -> Keys<usize, BTreeSet<usize>> {
+    pub fn nodes(&self) -> Keys<T, BTreeSet<T>> {
         self.edges.keys()
     }
 
     // TODO: this seems identical to the above?
     /// The dependents a node has.
-    pub fn dependents_of(&self, node: usize) -> Option<&BTreeSet<usize>> {
+    pub fn dependents_of(&self, node: T) -> Option<&BTreeSet<T>> {
         self.edges.get(&node)
     }
 
-    pub fn dependencies_of(&self, node: usize) -> Option<&BTreeSet<usize>> {
+    pub fn dependencies_of(&self, node: T) -> Option<&BTreeSet<T>> {
         self.reverse.get(&node)
     }
 
     /// The number of dependencies a node has.
-    pub fn dependency_count(&self, node: usize) -> usize {
+    pub fn dependency_count(&self, node: T) -> usize {
         self.reverse.get(&node).map(|s| s.len()).unwrap_or(0us)
     }
 
@@ -81,12 +82,12 @@ impl Graph {
     ///
     /// This essentially means: the given node plus all nodes
     /// that depend on it.
-    pub fn resolve_only(&self, node: usize) -> Result<RingBuf<usize>, RingBuf<usize>> {
+    pub fn resolve_only(&self, node: T) -> Result<RingBuf<T>, RingBuf<T>> {
         Topological::new(self).from(node)
     }
 
     /// Topological ordering of the entire graph.
-    pub fn resolve(&self) -> Result<RingBuf<usize>, RingBuf<usize>> {
+    pub fn resolve(&self) -> Result<RingBuf<T>, RingBuf<T>> {
         Topological::new(self).all()
     }
 
@@ -96,46 +97,42 @@ impl Graph {
     /// $ dot -Tpng < deps.dot > deps.png && open deps.png
     /// ```
     pub fn render<W>(&self, output: &mut W)
-    where W: Writer {
+    where W: Writer, T: Clone + fmt::Display {
         dot::render(self, output).unwrap()
     }
 }
 
-impl fmt::Debug for Graph {
+impl<T> fmt::Debug for Graph<T>
+where T: fmt::Debug {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(self.edges.fmt(f));
         Ok(())
     }
 }
 
-/// A graph edge for graphviz
-pub type Node = usize;
-pub type Edge = (usize, usize);
-
-impl<'a> dot::Labeller<'a, Node, Edge> for Graph {
+impl<'a, T> dot::Labeller<'a, T, (T, T)> for Graph<T> where T: Ord + Copy + fmt::Display {
     fn graph_id(&self) -> dot::Id<'a> {
         dot::Id::new("dependencies").unwrap()
     }
 
-    fn node_id(&self, n: &Node) -> dot::Id<'a> {
+    fn node_id(&self, n: &T) -> dot::Id<'a> {
         dot::Id::new(format!("N{}", *n)).unwrap()
     }
 
-    fn node_label(&self, n: &Node) -> dot::LabelText {
+    fn node_label(&self, n: &T) -> dot::LabelText {
         dot::LabelText::LabelStr(n.to_string().into_cow())
     }
 }
 
-impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
-    fn nodes(&self) -> dot::Nodes<'a, Node> {
-        self
-            .nodes()
+impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Copy {
+    fn nodes(&self) -> dot::Nodes<'a, T> {
+        Graph::<T>::nodes(self)
             .map(|n| *n)
-            .collect::<Vec<Node>>()
+            .collect::<Vec<T>>()
             .into_cow()
     }
 
-    fn edges(&self) -> dot::Edges<'a, Edge> {
+    fn edges(&self) -> dot::Edges<'a, (T, T)> {
         let mut edges = Vec::new();
 
         for (&source, targets) in &self.edges {
@@ -147,52 +144,47 @@ impl<'a> dot::GraphWalk<'a, Node, Edge> for Graph {
         edges.into_cow()
     }
 
-    fn source(&self, e: &Edge) -> Node {
+    fn source(&self, e: &(T, T)) -> T {
         let &(s, _) = e;
         return s;
     }
 
-    fn target(&self, e: &Edge) -> Node {
+    fn target(&self, e: &(T, T)) -> T {
         let &(_, t) = e;
         return t;
     }
 }
+
+pub type Order<T> = RingBuf<T>;
+pub type Cycle<T> = RingBuf<T>;
 
 /// Encapsulates a topological sorting algorithm.
 ///
 /// Performs a topological sorting of the provided graph
 /// via a depth-first search. This ordering is such that
 /// every node comes before the node(s) that depends on it.
-struct Topological<'a> {
+struct Topological<'a, T: 'a> where T: Ord + Copy {
     /// The graph to traverse.
-    graph: &'a Graph,
+    graph: &'a Graph<T>,
 
     /// The nodes that have been visited so far
-    visited: BTreeSet<usize>,
+    visited: BTreeSet<T>,
 
     /// Nodes that are on the path to the current node.
-    on_stack: BTreeSet<usize>,
+    on_stack: BTreeSet<T>,
 
     /// Trace back a path in the case of a cycle.
-    edge_to: BTreeMap<usize, usize>,
-
-    /// Nodes in an order which respects dependencies.
-    topological: RingBuf<usize>,
-
-    /// Either an ordering or the path of a cycle.
-    result: Result<RingBuf<usize>, RingBuf<usize>>,
+    edge_to: BTreeMap<T, T>,
 }
 
-impl<'a> Topological<'a> {
+impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy {
     /// Construct the initial algorithm state.
-    fn new(graph: &'a Graph) -> Topological<'a> {
+    fn new(graph: &'a Graph<T>) -> Topological<'a, T> {
         Topological {
             graph: graph,
             visited: BTreeSet::new(),
             on_stack: BTreeSet::new(),
             edge_to: BTreeMap::new(),
-            topological: RingBuf::new(),
-            result: Ok(RingBuf::new()),
         }
     }
 
@@ -200,22 +192,18 @@ impl<'a> Topological<'a> {
     ///
     /// This uses a recursive depth-first search, as it facilitates
     /// keeping track of a cycle, if any is present.
-    fn dfs(&mut self, node: usize) {
+    fn dfs(&mut self, node: T, out: &mut RingBuf<T>) -> Result<(), RingBuf<T>> {
         self.on_stack.insert(node);
         self.visited.insert(node);
 
         if let Some(neighbors) = self.graph.dependents_of(node) {
             for &neighbor in neighbors {
-                if self.result.is_err() {
-                    return;
-                }
-
                 // node isn't visited yet, so visit it
                 // make sure to add a breadcrumb to trace our path
                 // backwards in case there's a cycle
-                else if !self.visited.contains(&neighbor) {
+                if !self.visited.contains(&neighbor) {
                     self.edge_to.insert(neighbor, node);
-                    self.dfs(neighbor);
+                    try!(self.dfs(neighbor, out));
                 }
 
                 // cycle detected
@@ -232,34 +220,37 @@ impl<'a> Topological<'a> {
                         previous = self.edge_to.get(&found);
                     }
 
-                    self.result = Err(path);
+                    return Err(path);
                 }
             }
         }
 
         self.on_stack.remove(&node);
-        self.topological.push_front(node);
+        out.push_front(node);
+        Ok(())
     }
 
     /// recompile the dependencies of `node` and then `node` itself
-    pub fn from(mut self, node: usize) -> Result<RingBuf<usize>, RingBuf<usize>> {
-        self.dfs(node);
+    pub fn from(mut self, node: T) -> Result<Order<T>, Cycle<T>> {
+        let mut order = RingBuf::new();
 
-        self.result.and(Ok(self.topological))
+        try!(self.dfs(node, &mut order));
+
+        Ok(order)
     }
 
     /// the typical resolution algorithm, returns a topological ordering
     /// of the nodes which honors the dependencies
-    pub fn all(mut self) -> Result<RingBuf<usize>, RingBuf<usize>> {
-        trace!("graph: {:?}", self.graph);
+    pub fn all(mut self) -> Result<Order<T>, Cycle<T>> {
+        let mut order = RingBuf::new();
 
         for &node in self.graph.nodes() {
             if !self.visited.contains(&node) {
-                self.dfs(node);
+                try!(self.dfs(node, &mut order));
             }
         }
 
-        self.result.and(Ok(self.topological))
+        Ok(order)
     }
 }
 
@@ -268,7 +259,7 @@ mod test {
     use super::Graph;
     use std::old_io::File;
 
-    fn helper_graph() -> Graph {
+    fn helper_graph() -> Graph<usize> {
         let mut graph = Graph::new();
 
         graph.add_edge(8, 7);

@@ -35,7 +35,7 @@ pub struct Item {
     /// The Item's body which will fill the target file.
     pub body: Option<String>,
 
-    pub dependencies: Option<Dependencies>,
+    pub dependencies: Dependencies,
 
     /// Any additional data (post metadata)
     ///
@@ -51,8 +51,7 @@ impl Item {
     pub fn new(
         config: Arc<Configuration>,
         from: Option<PathBuf>,
-        to: Option<PathBuf>,
-        dependencies: Option<Dependencies>)
+        to: Option<PathBuf>)
     -> Item {
         use std::fs::PathExt;
 
@@ -66,7 +65,7 @@ impl Item {
             from: from,
             to: to,
             body: None,
-            dependencies: dependencies,
+            dependencies: Arc::new(BTreeMap::new()),
             data: AnyMap::new()
         }
     }

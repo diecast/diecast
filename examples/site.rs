@@ -1,7 +1,8 @@
 #![feature(plugin)]
-#![feature(path)]
+#![feature(old_path)]
 #![feature(io)]
 #![feature(fs)]
+#![feature(core)]
 
 #![plugin(regex_macros)]
 
@@ -88,38 +89,37 @@ fn main() {
             glob::Pattern::new("pages/*.md").unwrap(),
             content_compiler.clone());
 
+    let index_compiler =
+        Compiler::new(
+            Chain::new()
+            .link(|item: &mut Item| {
+                let mut titles = String::new();
+
+                // TODO: just make Dependencies be empty if there are none?
+                for post in item.dependencies["pages"].iter() {
+                    if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
+                        let title =
+                            metadata
+                            .lookup("title")
+                            .unwrap()
+                            .as_str()
+                            .unwrap();
+
+                        titles.push_str(&format!("> {}\n", title));
+                    }
+                }
+
+                item.body = Some(titles);
+            })
+            .link(compiler::print)
+            .link(compiler::write)
+            .build());
+
     let index =
         Rule::creating(
             "page index",
             "index.html",
-            Compiler::new(
-                Chain::new()
-                    .link(|item: &mut Item| {
-                        println!("getting titles");
-                        let mut titles = String::new();
-
-                        if let Some(ref dependencies) = item.dependencies {
-                            for post in dependencies["pages"].iter() {
-                                if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
-                                    println!("got metadata");
-
-                                    let title =
-                                        metadata
-                                            .lookup("title")
-                                            .unwrap()
-                                            .as_str()
-                                            .unwrap();
-
-                                    titles.push_str(&format!("> {}\n", title));
-                                }
-                            }
-                        }
-
-                        item.body = Some(titles);
-                    })
-                    .link(compiler::print)
-                    .link(compiler::write)
-                    .build()))
+            index_compiler)
             .depends_on(&pages);
 
     let config =
@@ -127,7 +127,7 @@ fn main() {
             // .preview(true)
             .ignore(regex!(r"^\.|^#|~$|\.swp$"));
 
-    let (mut command, mut site) = command::from_args(config);
+    let (command, mut site) = command::from_args(config);
 
     site.bind(pages);
     site.bind(index);

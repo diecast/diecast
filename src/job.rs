@@ -5,7 +5,7 @@ use item::{Item, Dependencies};
 
 pub struct Job {
     pub id: usize,
-    pub binding: usize,
+    pub binding: &'static str,
 
     pub item: Item,
     pub compiler: Compiler,
@@ -24,7 +24,7 @@ impl fmt::Debug for Job {
 
 impl Job {
     pub fn new(
-        binding: usize,
+        binding: &'static str,
         item: Item,
         compiler: Compiler,
         id: usize)
