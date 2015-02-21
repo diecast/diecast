@@ -5,12 +5,6 @@ use command::CommandKind;
 /// The configuration of the build
 /// an Arc of this is given to each Item
 pub struct Configuration {
-    // TODO:
-    // I think this shouldn't go here
-    // it's possible to use a configuration without
-    // running any command at all?
-    pub command: CommandKind,
-
     /// The input directory
     pub input: PathBuf,
 
@@ -45,7 +39,6 @@ impl Configuration {
     where P: AsPath, Q: AsPath {
         Configuration {
             // TODO: setting it to error by default seems like a wart
-            command: CommandKind::Other("error".to_string()),
             input: input.as_path().to_path_buf(),
             output: output.as_path().to_path_buf(),
             threads: ::std::os::num_cpus(),

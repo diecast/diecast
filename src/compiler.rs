@@ -155,7 +155,7 @@ pub fn write(item: &mut Item) {
     if let Some(ref path) = item.to {
         if let Some(ref body) = item.body {
             let conf_out = &item.configuration.output;
-            let target = conf_out.join(path.parent().unwrap());
+            let target = conf_out.join(path);
 
             if !target.starts_with(&conf_out) {
                 panic!("attempted to write outside of the output directory: {:?}", target);
@@ -163,8 +163,10 @@ pub fn write(item: &mut Item) {
 
             trace!("mkdir -p {:?}", target);
 
-            // TODO: this errors out if the path already exists? dumb
-            fs::create_dir_all(&target);
+            if let Some(parent) = target.parent() {
+                // TODO: this errors out if the path already exists? dumb
+                fs::create_dir_all(parent);
+            }
 
             File::create(&conf_out.join(path))
                 .unwrap()

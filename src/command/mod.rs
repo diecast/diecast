@@ -107,10 +107,15 @@ pub fn from_args(mut configuration: Configuration) -> (Box<Command>, Site) {
     }
 
     let command = match options.arg_command.unwrap() {
-        Build => Box::new(build::Build::new(&mut configuration)),
-        // Live => live::Live::new(configuration),
-        // Help => help_error.exit(),
-        // Clean => clean::configure(configuration),
+        Build => Box::new(build::Build::new(&mut configuration)) as Box<Command>,
+        Live => Box::new(live::Live::new(&mut configuration)) as Box<Command>,
+        Clean => Box::new(clean::Clean::new(&mut configuration)) as Box<Command>,
+        Help => {
+            docopt::Error::WithProgramUsage(
+                Box::new(docopt::Error::Help),
+                USAGE.to_string())
+                .exit();
+        },
         Other(cmd) => {
             // here look in PATH to find program named diecast-$cmd
             // if not found, then output this message:
@@ -119,8 +124,7 @@ pub fn from_args(mut configuration: Configuration) -> (Box<Command>, Site) {
                 Box::new(docopt::Error::Help),
                 USAGE.to_string())
                 .exit();
-        }
-    _ => panic!("not implemented yet"),
+        },
     };
 
     (command, Site::new(configuration))

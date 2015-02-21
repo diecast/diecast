@@ -227,7 +227,7 @@ impl Site {
             return false;
         }
 
-        // prepare dependencies for all ready dependents
+        // prepare dependencies for now-ready dependents
 
         let dependents = dependents.unwrap();
 
@@ -336,13 +336,14 @@ impl Site {
             match rule.kind {
                 rule::Kind::Creating(ref path) => {
                     let compiler = rule.compiler.clone();
-                    let target = self.configuration.output.join(path.as_path());
 
                     let conf = self.configuration.clone();
 
+                    println!("creating: {:?}", path);
+
                     self.add_job(
                         rule.name,
-                        Item::new(conf, None, Some(target)),
+                        Item::new(conf, None, Some(path.clone())),
                         compiler,
                         &rule.dependencies);
                 },
