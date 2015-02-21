@@ -458,6 +458,15 @@ impl Site {
     }
 
     pub fn bind(&mut self, rule: Rule) {
+        self.bindings.entry(rule.name).get()
+            .unwrap_or_else(|v| v.insert(vec![]));
+
+        for dependency in &rule.dependencies {
+            if !self.bindings.get(dependency).is_some() {
+                panic!("`{}` depends on unregistered rule `{}`", rule.name, dependency);
+            }
+        }
+
         self.rules.push(rule);
     }
 
