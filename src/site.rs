@@ -4,20 +4,18 @@ use std::sync::{Arc, TaskPool};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::collections::{BTreeMap, RingBuf};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
-use std::old_io::TempDir;
 use std::fs;
-use std::fmt;
 
 use pattern::Pattern;
 use job::Job;
-use compiler::{self, Compile, Compiler, Chain};
+use compiler::Compiler;
 use compiler::Status::{Paused, Done};
-use item::{Item, Dependencies};
+use item::Item;
 use dependency::Graph;
 use configuration::Configuration;
 use rule::{self, Rule};
 
-use std::path::{PathBuf, AsPath, Path};
+use std::path::{PathBuf, Path};
 
 /// A Site scans the input path to find
 /// files that match the given pattern. It then
@@ -61,9 +59,6 @@ pub struct Site {
 
 impl Site {
     pub fn new(configuration: Configuration) -> Site {
-        use std::fs::PathExt;
-        use std::fs;
-
         let threads = configuration.threads;
 
         trace!("output directory is: {:?}", configuration.output);
@@ -336,7 +331,6 @@ impl Site {
             match rule.kind {
                 rule::Kind::Creating(ref path) => {
                     let compiler = rule.compiler.clone();
-
                     let conf = self.configuration.clone();
 
                     println!("creating: {:?}", path);
@@ -405,15 +399,9 @@ impl Site {
                     self.dispatch_job(job);
                 }
 
-                // jobs completed so far
-                let mut completed = 0us;
-
                 // possible to use self.result_rx.iter()?
                 loop {
                     let current = self.result_rx.recv().unwrap();
-
-                    trace!("waiting. completed: {} total: {}", completed, total_jobs);
-                    trace!("received");
 
                     match current.compiler.status {
                         Paused => {
@@ -421,12 +409,8 @@ impl Site {
                         },
                         Done => {
                             if self.handle_done(current) {
-                                completed += 1;
                                 break;
                             }
-
-                            completed += 1;
-                            trace!("completed {}", completed);
                         },
                     }
                 }

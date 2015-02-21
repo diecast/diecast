@@ -1,11 +1,7 @@
-use docopt::{self, Docopt};
+use docopt::Docopt;
 use site::Site;
 use configuration::Configuration;
 use command::Command;
-
-use std::old_io::TempDir;
-use std::path::PathBuf;
-use std::sync::Arc;
 
 #[derive(RustcDecodable, Debug)]
 struct Options {
@@ -35,10 +31,6 @@ impl Build {
             Docopt::new(USAGE)
                 .unwrap_or_else(|e| e.exit())
                 .help(true);
-
-        let help_error = docopt::Error::WithProgramUsage(
-            Box::new(docopt::Error::Help),
-            USAGE.to_string());
 
         let options: Options = docopt.decode().unwrap_or_else(|e| {
             e.exit();

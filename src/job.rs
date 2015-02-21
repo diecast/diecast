@@ -1,7 +1,7 @@
 use std::fmt;
 
 use compiler::Compiler;
-use item::{Item, Dependencies};
+use item::Item;
 
 pub struct Job {
     pub id: usize,

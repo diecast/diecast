@@ -1,6 +1,5 @@
 use std::path::{PathBuf, AsPath};
 use pattern::Pattern;
-use command::CommandKind;
 
 /// The configuration of the build
 /// an Arc of this is given to each Item

@@ -133,7 +133,7 @@ pub fn stub(item: &mut Item) {
 /// Compiler that reads the `Item`'s body.
 pub fn read(item: &mut Item) {
     use std::fs::File;
-    use std::io::{Read, Write};
+    use std::io::Read;
 
     if let Some(ref path) = item.from {
         let mut buf = String::new();
@@ -165,7 +165,7 @@ pub fn write(item: &mut Item) {
 
             if let Some(parent) = target.parent() {
                 // TODO: this errors out if the path already exists? dumb
-                fs::create_dir_all(parent);
+                let _ = fs::create_dir_all(parent);
             }
 
             File::create(&conf_out.join(path))

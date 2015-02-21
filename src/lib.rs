@@ -11,7 +11,10 @@
 #![feature(std_misc)]
 #![feature(path)]
 #![feature(os)]
+#![feature(fs)]
 #![feature(io)]
+#![feature(old_io)]
+#![feature(old_path)]
 #![feature(collections)]
 
 #![plugin(regex_macros)]
@@ -24,8 +27,6 @@ extern crate toml;
 
 #[macro_use]
 extern crate log;
-
-extern crate regex_macros;
 
 extern crate hoedown;
 extern crate "rustc-serialize" as rustc_serialize;

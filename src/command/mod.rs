@@ -1,10 +1,6 @@
 use docopt::{self, Docopt};
-use rule::Rule;
 use configuration::Configuration;
-use std::str::FromStr;
-use std::env;
 use rustc_serialize::{Decodable, Decoder};
-use std::sync::Arc;
 
 use self::CommandKind::*;
 
@@ -59,7 +55,6 @@ pub enum CommandKind {
 
 impl Decodable for CommandKind {
     fn decode<D: Decoder>(d: &mut D) -> Result<CommandKind, D::Error> {
-        use std::ascii::AsciiExt;
         use self::CommandKind::*;
 
         let s = try!(d.read_str());

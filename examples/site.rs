@@ -54,6 +54,26 @@ fn article_handler(item: &Item) -> Json {
     Json::Object(bt)
 }
 
+fn collect_titles(item: &mut Item) {
+    let mut titles = String::new();
+
+    // TODO: just make Dependencies be empty if there are none?
+    for post in item.dependencies["pages"].iter() {
+        if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
+            let title =
+                metadata
+                .lookup("title")
+                .unwrap()
+                .as_str()
+                .unwrap();
+
+            titles.push_str(&format!("> {}\n", title));
+        }
+    }
+
+    item.body = Some(titles);
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -92,25 +112,7 @@ fn main() {
     let index_compiler =
         Compiler::new(
             Chain::new()
-            .link(|item: &mut Item| {
-                let mut titles = String::new();
-
-                // TODO: just make Dependencies be empty if there are none?
-                for post in item.dependencies["pages"].iter() {
-                    if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
-                        let title =
-                            metadata
-                            .lookup("title")
-                            .unwrap()
-                            .as_str()
-                            .unwrap();
-
-                        titles.push_str(&format!("> {}\n", title));
-                    }
-                }
-
-                item.body = Some(titles);
-            })
+            .link(collect_titles)
             .link(compiler::print)
             .link(compiler::write)
             .build());
