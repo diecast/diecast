@@ -182,9 +182,13 @@ impl Site {
         }
     }
 
-    fn handle_done(&mut self, current: Job) {
+    fn handle_done(&mut self, current: Job) -> bool {
         trace!("finished {}", current.id);
         trace!("before waiting: {:?}", self.waiting);
+
+        if self.waiting.is_empty() {
+            return true;
+        }
 
         let binding = current.binding;
         let total = self.bindings[binding].len();
@@ -205,7 +209,7 @@ impl Site {
 
         // if the binding isn't complete, nothing more to do
         if !finished {
-            return;
+            return false;
         }
 
         // binding is complete
@@ -220,7 +224,7 @@ impl Site {
 
         // no dependents
         if dependents.is_none() {
-            return;
+            return false;
         }
 
         // prepare dependencies for all ready dependents
@@ -275,6 +279,8 @@ impl Site {
             trace!("job now ready: {:?}", job);
             self.dispatch_job(job)
         }
+
+        return false;
     }
 
     pub fn build(&mut self) {
@@ -402,7 +408,7 @@ impl Site {
                 let mut completed = 0us;
 
                 // possible to use self.result_rx.iter()?
-                while completed < total_jobs {
+                loop {
                     let current = self.result_rx.recv().unwrap();
 
                     trace!("waiting. completed: {} total: {}", completed, total_jobs);
@@ -413,7 +419,11 @@ impl Site {
                             self.handle_paused(current);
                         },
                         Done => {
-                            self.handle_done(current);
+                            if self.handle_done(current) {
+                                completed += 1;
+                                break;
+                            }
+
                             completed += 1;
                             trace!("completed {}", completed);
                         },
@@ -424,8 +434,6 @@ impl Site {
                 panic!("a dependency cycle was detected: {:?}", cycle);
             },
         }
-
-        trace!("THIS IS A DEBUG MESSAGE");
     }
 
     // TODO: ensure can only add dependency on &Dependency to avoid string errors
