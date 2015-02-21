@@ -41,26 +41,10 @@ impl Rule {
         }
     }
 
-    pub fn depends_on<D>(mut self, dependency: D) -> Rule where D: Dependency {
-        self.dependencies.push(dependency.name());
+    pub fn depends_on<'a>(mut self, dependency: &'a Rule) -> Rule {
+        self.dependencies.push(dependency.name.clone());
 
         return self;
-    }
-}
-
-pub trait Dependency {
-    fn name(&self) -> &'static str;
-}
-
-impl Dependency for &'static str {
-    fn name(&self) -> &'static str {
-        self.clone()
-    }
-}
-
-impl<'a> Dependency for &'a Rule {
-    fn name(&self) -> &'static str {
-        self.name.clone()
     }
 }
 
