@@ -15,6 +15,7 @@ extern crate log;
 extern crate env_logger;
 extern crate hoedown;
 extern crate handlebars;
+extern crate toml;
 extern crate "rustc-serialize" as rustc_serialize;
 
 use diecast::{
@@ -54,11 +55,32 @@ fn article_handler(item: &Item) -> Json {
     Json::Object(bt)
 }
 
+// approach: have a wrapper compiler that only performs its inner if the condition is true
+
+fn is_draft(item: &Item) -> bool {
+    item.data.get::<TomlMetadata>()
+        .map(|meta| {
+            let &TomlMetadata(ref meta) = meta;
+            meta.lookup("draft")
+               .and_then(::toml::Value::as_bool)
+               .unwrap_or(false)
+        })
+        .unwrap_or(false)
+}
+
+fn publishable(item: &Item) -> bool {
+    !(is_draft(item) && !item.configuration.is_preview)
+}
+
 fn collect_titles(item: &mut Item) {
     let mut titles = String::new();
 
     // TODO: just make Dependencies be empty if there are none?
     for post in item.dependencies["pages"].iter() {
+        if !publishable(post) {
+            continue;
+        }
+
         if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
             let title =
                 metadata
@@ -99,8 +121,8 @@ fn main() {
                 .link(compiler::render_markdown)
                 .link(router::set_extension("html"))
                 .link(compiler::render_template("article", article_handler))
-                .link(compiler::print)
-                .link(compiler::write)
+                .link(compiler::only_if(publishable, compiler::print))
+                .link(compiler::only_if(publishable, compiler::write))
                 .build());
 
     let pages =

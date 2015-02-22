@@ -316,3 +316,13 @@ impl Compile for RenderTemplate {
     }
 }
 
+pub fn only_if<C, F>(condition: C, compiler: F) -> Box<Compile + Sync + Send>
+where C: Fn(&Item) -> bool + Sync + Send + 'static,
+      F: Fn(&mut Item) + Sync + Send + 'static {
+    Box::new(move |item: &mut Item| {
+        if condition(item) {
+            compiler(item);
+        }
+    })
+}
+

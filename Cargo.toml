@@ -23,6 +23,8 @@ docopt = "*"
 toml = "*"
 notify = "*"
 # iron = "*"
+# static = "*"
+# mount = "*"
 
 # [dependencies.rustc-serialize]
 # path = "../rustc-serialize"

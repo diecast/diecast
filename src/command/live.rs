@@ -4,6 +4,7 @@ use configuration::Configuration;
 
 use std::old_io::TempDir;
 use std::path::PathBuf;
+use std::process::Command as Server;
 
 use command::Command;
 
@@ -49,6 +50,8 @@ impl Live {
             configuration.threads = jobs;
         }
 
+        configuration.is_preview = true;
+
         let live = Live {
             temp_dir:
                 TempDir::new(
@@ -68,14 +71,27 @@ impl Command for Live {
         let (tx, rx) = channel();
         let mut w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
 
+        Server::new("python2")
+            .arg("-m")
+            .arg("SimpleHTTPServer")
+            .arg("3000")
+            .current_dir(&site.configuration().output)
+            .spawn();
+
+        // let mut mount = Mount::new();
+        // mount.mount(
+        //     "/",
+        //     Static::new(configuration.output.file_name().unwrap().to_str().unwrap()).unwrap());
+
+        // Iron::new(mount).listen((Ipv4Addr(127, 0, 0, 1), 3000)).unwrap();
+
         match w {
             Ok(mut watcher) => {
                 watcher.watch(&site.configuration().input);
 
                 site.build();
 
-                loop {
-                    let event = rx.recv().unwrap();
+                for event in rx.iter() {
                     site.build();
                 }
             },
