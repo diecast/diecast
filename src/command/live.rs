@@ -7,6 +7,9 @@ use std::path::PathBuf;
 
 use command::Command;
 
+use notify::{RecommendedWatcher, Error, Watcher};
+use std::sync::mpsc::channel;
+
 #[derive(RustcDecodable, Debug)]
 struct Options {
     flag_jobs: Option<usize>,
@@ -47,7 +50,10 @@ impl Live {
         }
 
         let live = Live {
-            temp_dir: TempDir::new(configuration.output.file_name().unwrap().to_str().unwrap()).unwrap(),
+            temp_dir:
+                TempDir::new(
+                    configuration.output.file_name().unwrap()
+                        .to_str().unwrap()).unwrap(),
         };
 
         configuration.output = PathBuf::new(live.temp_dir.path().as_str().unwrap());
@@ -59,14 +65,21 @@ impl Live {
 
 impl Command for Live {
     fn run(&self, mut site: Site) {
-        loop {
-            println!("waiting for notifications");
-            // block until changes
-            // get_notification(
+        let (tx, rx) = channel();
+        let mut w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
 
-            // rebuild site
-            site.build();
-            break;
+        match w {
+            Ok(mut watcher) => {
+                watcher.watch(&site.configuration().input);
+
+                site.build();
+
+                loop {
+                    let event = rx.recv().unwrap();
+                    site.build();
+                }
+            },
+            Err(e) => println!("Error"),
         }
     }
 }

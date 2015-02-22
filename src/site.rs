@@ -419,6 +419,15 @@ impl Site {
                 panic!("a dependency cycle was detected: {:?}", cycle);
             },
         }
+
+        // TODO: determine what is safe to keep here, if anything
+        self.jobs.clear();
+        self.bindings.clear();
+        self.graph = Graph::new();
+        self.staging_deps.clear();
+        self.finished_deps.clear();
+        self.paused.clear();
+        self.waiting.clear();
     }
 
     // TODO: ensure can only add dependency on &Dependency to avoid string errors

@@ -32,6 +32,7 @@ extern crate hoedown;
 extern crate "rustc-serialize" as rustc_serialize;
 extern crate handlebars;
 extern crate docopt;
+extern crate notify;
 
 pub use pattern::Pattern;
 pub use site::Site;
