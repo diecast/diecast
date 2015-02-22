@@ -4,13 +4,13 @@ use anymap::AnyMap;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::fmt::{self, Debug};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::sync::Arc;
 use configuration::Configuration;
 use std::path::PathBuf;
 
 // TODO:
-pub type Dependencies = Arc<BTreeMap<&'static str, Arc<Vec<Item>>>>;
+pub type Dependencies = Arc<HashMap<&'static str, Arc<Vec<Item>>>>;
 
 /// Represents a compilation unit.
 ///
@@ -65,7 +65,7 @@ impl Item {
             from: from,
             to: to,
             body: None,
-            dependencies: Arc::new(BTreeMap::new()),
+            dependencies: Arc::new(HashMap::new()),
             data: AnyMap::new()
         }
     }

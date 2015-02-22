@@ -1,9 +1,14 @@
 //! Dependency tracking.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+// FIXME: switch back to btreemap once this is fixed:
+// https://github.com/rust-lang/rust/issues/22655
 
-use std::collections::btree_map::Keys;
-use std::collections::btree_map::Entry::Vacant;
+use std::collections::{HashMap, BTreeSet, VecDeque};
+
+use std::collections::hash_map::Keys;
+use std::collections::hash_map::Entry::Vacant;
+
+use std::hash::Hash;
 
 use std::fmt;
 
@@ -14,12 +19,12 @@ use std::borrow::IntoCow;
 ///
 /// This graph tracks items and is able to produce an ordering
 /// of the items that respects dependency constraints.
-pub struct Graph<T> where T: Ord + Copy {
+pub struct Graph<T> where T: Ord + Copy + Hash {
     /// Edges in the graph; implicitly stores nodes.
     ///
     /// There's a key for every node in the graph, even if
     /// if it doesn't have any edges going out.
-    edges: BTreeMap<T, BTreeSet<T>>,
+    edges: HashMap<T, BTreeSet<T>>,
 
     /// The dependencies a node has.
     ///
@@ -30,14 +35,14 @@ pub struct Graph<T> where T: Ord + Copy {
     /// e.g. the relationship that A depends on B can be represented as
     /// A -> B, so therefore the evaluation order which respects that
     /// dependency is the reverse, B -> A
-    reverse: BTreeMap<T, BTreeSet<T>>,
+    reverse: HashMap<T, BTreeSet<T>>,
 }
 
-impl<T> Graph<T> where T: Ord + Copy {
+impl<T> Graph<T> where T: Ord + Copy + Hash {
     pub fn new() -> Graph<T> {
         Graph {
-            edges: BTreeMap::new(),
-            reverse: BTreeMap::new(),
+            edges: HashMap::new(),
+            reverse: HashMap::new(),
         }
     }
 
@@ -103,14 +108,14 @@ impl<T> Graph<T> where T: Ord + Copy {
 }
 
 impl<T> fmt::Debug for Graph<T>
-where T: fmt::Debug + Ord + Copy {
+where T: fmt::Debug + Ord + Copy + Hash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(self.edges.fmt(f));
         Ok(())
     }
 }
 
-impl<'a, T> dot::Labeller<'a, T, (T, T)> for Graph<T> where T: Ord + Copy + fmt::Display {
+impl<'a, T> dot::Labeller<'a, T, (T, T)> for Graph<T> where T: Ord + Copy + Hash + fmt::Display {
     fn graph_id(&self) -> dot::Id<'a> {
         dot::Id::new("dependencies").unwrap()
     }
@@ -124,7 +129,7 @@ impl<'a, T> dot::Labeller<'a, T, (T, T)> for Graph<T> where T: Ord + Copy + fmt:
     }
 }
 
-impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Copy {
+impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Copy + Hash {
     fn nodes(&self) -> dot::Nodes<'a, T> {
         Graph::<T>::nodes(self)
             .map(|n| *n)
@@ -163,7 +168,7 @@ pub type Cycle<T> = VecDeque<T>;
 /// Performs a topological sorting of the provided graph
 /// via a depth-first search. This ordering is such that
 /// every node comes before the node(s) that depends on it.
-struct Topological<'a, T: 'a> where T: Ord + Copy {
+struct Topological<'a, T: 'a> where T: Ord + Copy + Hash {
     /// The graph to traverse.
     graph: &'a Graph<T>,
 
@@ -174,17 +179,17 @@ struct Topological<'a, T: 'a> where T: Ord + Copy {
     on_stack: BTreeSet<T>,
 
     /// Trace back a path in the case of a cycle.
-    edge_to: BTreeMap<T, T>,
+    edge_to: HashMap<T, T>,
 }
 
-impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy {
+impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy + Hash {
     /// Construct the initial algorithm state.
     fn new(graph: &'a Graph<T>) -> Topological<'a, T> {
         Topological {
             graph: graph,
             visited: BTreeSet::new(),
             on_stack: BTreeSet::new(),
-            edge_to: BTreeMap::new(),
+            edge_to: HashMap::new(),
         }
     }
 

@@ -2,8 +2,8 @@
 
 use std::sync::{Arc, TaskPool};
 use std::sync::mpsc::{Sender, Receiver, channel};
-use std::collections::{BTreeMap, VecDeque};
-use std::collections::btree_map::Entry::{Vacant, Occupied};
+use std::collections::{HashMap, VecDeque};
+use std::collections::hash_map::Entry::{Vacant, Occupied};
 use std::fs;
 
 use pattern::Pattern;
@@ -25,7 +25,7 @@ pub struct Site {
     configuration: Arc<Configuration>,
 
     /// Mapping the id to its dependencies
-    bindings: BTreeMap<&'static str, Vec<usize>>,
+    bindings: HashMap<&'static str, Vec<usize>>,
 
     /// The jobs
     jobs: Vec<Job>,
@@ -43,13 +43,13 @@ pub struct Site {
     result_rx: Receiver<Job>,
 
     /// the dependencies as they're being built
-    staging_deps: BTreeMap<&'static str, Vec<Item>>,
+    staging_deps: HashMap<&'static str, Vec<Item>>,
 
     /// finished dependencies
-    finished_deps: BTreeMap<&'static str, Arc<Vec<Item>>>,
+    finished_deps: HashMap<&'static str, Arc<Vec<Item>>>,
 
     /// dependencies that are currently paused due to a barrier
-    paused: BTreeMap<&'static str, Vec<Job>>,
+    paused: HashMap<&'static str, Vec<Job>>,
 
     /// items whose dependencies have not been fulfilled
     waiting: Vec<Job>,
@@ -70,7 +70,7 @@ impl Site {
         Site {
             configuration: Arc::new(configuration),
 
-            bindings: BTreeMap::new(),
+            bindings: HashMap::new(),
             jobs: Vec::new(),
             graph: Graph::new(),
 
@@ -78,9 +78,9 @@ impl Site {
             result_tx: result_tx,
             result_rx: result_rx,
 
-            staging_deps: BTreeMap::new(),
-            finished_deps: BTreeMap::new(),
-            paused: BTreeMap::new(),
+            staging_deps: HashMap::new(),
+            finished_deps: HashMap::new(),
+            paused: HashMap::new(),
 
             waiting: Vec::new(),
             rules: Vec::new(),
@@ -244,7 +244,7 @@ impl Site {
 
         self.waiting = waiting;
 
-        let mut deps_cache = BTreeMap::new();
+        let mut deps_cache = HashMap::new();
         let mut dependents = ready.iter().map(|j| j.binding).collect::<Vec<&'static str>>();
 
         dependents.sort();
@@ -258,7 +258,7 @@ impl Site {
         // because this will be the first time the jobs are going to run,
         // so they won't have reached any barriers to begin with
         for dependent in dependents {
-            let mut deps = BTreeMap::new();
+            let mut deps = HashMap::new();
 
             for &dep in self.graph.dependencies_of(dependent).unwrap() {
                 trace!("adding dependency: {:?}", dep);
