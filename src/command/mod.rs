@@ -60,7 +60,7 @@ impl Decodable for Kind {
 
         let s = try!(d.read_str());
 
-        let command = match &s[] {
+        let command = match &s[..] {
             "build" => Build,
             "live" => Live,
             "clean" => Clean,

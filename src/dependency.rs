@@ -1,6 +1,6 @@
 //! Dependency tracking.
 
-use std::collections::{BTreeMap, BTreeSet, RingBuf};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use std::collections::btree_map::Keys;
 use std::collections::btree_map::Entry::Vacant;
@@ -75,19 +75,19 @@ impl<T> Graph<T> where T: Ord + Copy {
 
     /// The number of dependencies a node has.
     pub fn dependency_count(&self, node: T) -> usize {
-        self.reverse.get(&node).map(|s| s.len()).unwrap_or(0us)
+        self.reverse.get(&node).map(|s| s.len()).unwrap_or(0usize)
     }
 
     /// Topological ordering starting at the provided node.
     ///
     /// This essentially means: the given node plus all nodes
     /// that depend on it.
-    pub fn resolve_only(&self, node: T) -> Result<RingBuf<T>, RingBuf<T>> {
+    pub fn resolve_only(&self, node: T) -> Result<VecDeque<T>, VecDeque<T>> {
         Topological::new(self).from(node)
     }
 
     /// Topological ordering of the entire graph.
-    pub fn resolve(&self) -> Result<RingBuf<T>, RingBuf<T>> {
+    pub fn resolve(&self) -> Result<VecDeque<T>, VecDeque<T>> {
         Topological::new(self).all()
     }
 
@@ -103,7 +103,7 @@ impl<T> Graph<T> where T: Ord + Copy {
 }
 
 impl<T> fmt::Debug for Graph<T>
-where T: fmt::Debug {
+where T: fmt::Debug + Ord + Copy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(self.edges.fmt(f));
         Ok(())
@@ -155,8 +155,8 @@ impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Co
     }
 }
 
-pub type Order<T> = RingBuf<T>;
-pub type Cycle<T> = RingBuf<T>;
+pub type Order<T> = VecDeque<T>;
+pub type Cycle<T> = VecDeque<T>;
 
 /// Encapsulates a topological sorting algorithm.
 ///
@@ -192,7 +192,7 @@ impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy {
     ///
     /// This uses a recursive depth-first search, as it facilitates
     /// keeping track of a cycle, if any is present.
-    fn dfs(&mut self, node: T, out: &mut RingBuf<T>) -> Result<(), RingBuf<T>> {
+    fn dfs(&mut self, node: T, out: &mut VecDeque<T>) -> Result<(), VecDeque<T>> {
         self.on_stack.insert(node);
         self.visited.insert(node);
 
@@ -209,7 +209,7 @@ impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy {
                 // cycle detected
                 // trace back breadcrumbs to reconstruct the cycle's path
                 else if self.on_stack.contains(&neighbor) {
-                    let mut path = RingBuf::new();
+                    let mut path = VecDeque::new();
                     path.push_front(neighbor);
                     path.push_front(node);
 
@@ -232,7 +232,7 @@ impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy {
 
     /// recompile the dependencies of `node` and then `node` itself
     pub fn from(mut self, node: T) -> Result<Order<T>, Cycle<T>> {
-        let mut order = RingBuf::new();
+        let mut order = VecDeque::new();
 
         try!(self.dfs(node, &mut order));
 
@@ -242,7 +242,7 @@ impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy {
     /// the typical resolution algorithm, returns a topological ordering
     /// of the nodes which honors the dependencies
     pub fn all(mut self) -> Result<Order<T>, Cycle<T>> {
-        let mut order = RingBuf::new();
+        let mut order = VecDeque::new();
 
         for &node in self.graph.nodes() {
             if !self.visited.contains(&node) {

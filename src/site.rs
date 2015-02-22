@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, TaskPool};
 use std::sync::mpsc::{Sender, Receiver, channel};
-use std::collections::{BTreeMap, RingBuf};
+use std::collections::{BTreeMap, VecDeque};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
 use std::fs;
 
@@ -89,7 +89,7 @@ impl Site {
 }
 
 // TODO: audit this
-fn sort_jobs(jobs: &mut Vec<Job>, order: &RingBuf<&'static str>, graph: &Graph<&'static str>) {
+fn sort_jobs(jobs: &mut Vec<Job>, order: &VecDeque<&'static str>, graph: &Graph<&'static str>) {
     let mut boundary = 0;
 
     for &bind_id in order {
