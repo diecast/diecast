@@ -33,6 +33,10 @@ pub struct Configuration {
     /// Whether we're in preview mode
     pub is_preview: bool,
 
+    /// Whether to ignore hidden files and directories at the
+    /// top level of the output directory when cleaning it out
+    pub ignore_hidden: bool,
+
     // Socket on which to listen when in preview mode
     // socket_addr: SocketAddr
 }
@@ -49,6 +53,7 @@ impl Configuration {
             is_verbose: false,
             ignore: None,
             is_preview: false,
+            ignore_hidden: false,
         }
     }
 
@@ -63,13 +68,14 @@ impl Configuration {
         self
     }
 
-    pub fn preview(mut self, is_preview: bool) -> Configuration {
-        self.is_preview = is_preview;
+    pub fn ignore_hidden(mut self, ignore_hidden: bool) -> Configuration {
+        self.ignore_hidden = ignore_hidden;
         self
     }
 
-    pub fn is_preview(&self) -> bool {
-        self.is_preview
+    pub fn preview(mut self, is_preview: bool) -> Configuration {
+        self.is_preview = is_preview;
+        self
     }
 }
 

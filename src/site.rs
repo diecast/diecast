@@ -283,6 +283,7 @@ impl Site {
         use std::mem;
 
         // TODO: clean out the output directory here to avoid cruft and conflicts
+        self.clean();
 
         let rules = mem::replace(&mut self.rules, Vec::new());
 
@@ -481,6 +482,37 @@ impl Site {
 
     pub fn configuration(&self) -> Arc<Configuration> {
         self.configuration.clone()
+    }
+
+    pub fn clean(&self) {
+        use std::fs::PathExt;
+        use std::fs::{
+            read_dir,
+            remove_dir_all,
+            remove_file,
+        };
+
+        if !self.configuration.output.exists() {
+            return;
+        }
+
+        // TODO: maybe obey .gitignore?
+        // clear directory
+        if !self.configuration.ignore_hidden {
+            remove_dir_all(&self.configuration.output).unwrap();
+        } else {
+            for child in read_dir(&self.configuration.output).unwrap() {
+                let path = child.unwrap().path();
+
+                if path.file_name().unwrap().to_str().unwrap().char_at(0) != '.' {
+                    if path.is_dir() {
+                        remove_dir_all(&path).unwrap();
+                    } else {
+                        remove_file(&path).unwrap();
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -153,14 +153,13 @@ fn main() {
 
     let config =
         Configuration::new("tests/fixtures/input", "output")
-            // .preview(true)
             .ignore(regex!(r"^\.|^#|~$|\.swp$"));
 
-    let (command, mut site) = command::from_args(config);
+    let mut command = command::from_args(config);
 
-    site.bind(pages);
-    site.bind(index);
+    command.site().bind(pages);
+    command.site().bind(index);
 
-    command.run(site);
+    command.run();
 }
 

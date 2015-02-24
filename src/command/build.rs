@@ -19,10 +19,12 @@ Options:
     -v, --verbose       Use verbose output
 ";
 
-pub struct Build;
+pub struct Build {
+    site: Site,
+}
 
 impl Build {
-    pub fn new(configuration: &mut Configuration) -> Build {
+    pub fn new(mut configuration: Configuration) -> Build {
         // 1. merge options into configuration; options overrides config
         // 2. construct site from configuration
         // 3. build site
@@ -42,13 +44,19 @@ impl Build {
 
         configuration.is_verbose = options.flag_verbose;
 
-        Build
+        Build {
+            site: Site::new(configuration),
+        }
     }
+
 }
 
 impl Command for Build {
-    fn run(&self, mut site: Site) {
-        // let mut site = Site::new(configuration);
-        site.build();
+    fn site(&mut self) -> &mut Site {
+        &mut self.site
+    }
+
+    fn run(&mut self) {
+        self.site.build();
     }
 }

@@ -1,12 +1,6 @@
 use docopt::Docopt;
 use configuration::Configuration;
 use std::path::PathBuf;
-use std::fs::PathExt;
-use std::fs::{
-    read_dir,
-    remove_dir_all,
-    remove_file,
-};
 
 use command::Command;
 use site::Site;
@@ -30,12 +24,11 @@ This removes the output directory.
 ";
 
 pub struct Clean {
-    target: PathBuf,
-    ignore_hidden: bool,
+    site: Site,
 }
 
 impl Clean {
-    pub fn new(configuration: &mut Configuration) -> Clean {
+    pub fn new(mut configuration: Configuration) -> Clean {
         let docopt =
             Docopt::new(USAGE)
                 .unwrap_or_else(|e| e.exit())
@@ -45,37 +38,31 @@ impl Clean {
             e.exit();
         });
 
+        configuration.ignore_hidden = options.flag_ignore_hidden;
+
         Clean {
-            target: configuration.output.clone(),
-            ignore_hidden: options.flag_ignore_hidden,
+            site: Site::new(configuration),
         }
     }
+
 }
 
 impl Command for Clean {
-    fn run(&self, _site: Site) {
-        println!("removing {:?}", self.target);
+    fn site(&mut self) -> &mut Site {
+        &mut self.site
+    }
 
-        if !self.target.exists() {
-            println!("No directory to remove");
-        }
+    fn run(&mut self) {
+        use std::fs::PathExt;
 
-        // TODO: maybe obey .gitignore?
-        // clear directory
-        if !self.ignore_hidden {
-            remove_dir_all(&self.target).unwrap();
+        let target = &self.site.configuration().output;
+
+        if target.exists() {
+            println!("removing {:?}", target);
         } else {
-            for child in read_dir(&self.target).unwrap() {
-                let path = child.unwrap().path();
-
-                if path.file_name().unwrap().to_str().unwrap().char_at(0) != '.' {
-                    if path.is_dir() {
-                        remove_dir_all(&path).unwrap();
-                    } else {
-                        remove_file(&path).unwrap();
-                    }
-                }
-            }
+            println!("nothing to remove");
         }
+
+        self.site.clean();
     }
 }

@@ -11,12 +11,17 @@ pub mod clean;
 pub mod live;
 
 pub trait Command {
-    fn run(&self, site: Site);
+    fn site(&mut self) -> &mut Site;
+    fn run(&mut self);
 }
 
 impl<C: ?Sized> Command for Box<C> where C: Command {
-    fn run(&self, site: Site) {
-        (**self).run(site);
+    fn run(&mut self) {
+        (**self).run();
+    }
+
+    fn site(&mut self) -> &mut Site {
+        (**self).site()
     }
 }
 
@@ -83,7 +88,7 @@ pub fn version() -> String {
     })
 }
 
-pub fn from_args(mut configuration: Configuration) -> (Box<Command>, Site) {
+pub fn from_args(mut configuration: Configuration) -> Box<Command> {
     let docopt =
         Docopt::new(USAGE)
             .unwrap_or_else(|e| e.exit())
@@ -105,9 +110,9 @@ pub fn from_args(mut configuration: Configuration) -> (Box<Command>, Site) {
     configuration.command = options.arg_command.unwrap();
 
     let command: Box<Command> = match configuration.command {
-        Build => Box::new(build::Build::new(&mut configuration)),
-        Live => Box::new(live::Live::new(&mut configuration)),
-        Clean => Box::new(clean::Clean::new(&mut configuration)),
+        Build => Box::new(build::Build::new(configuration)),
+        Live => Box::new(live::Live::new(configuration)),
+        Clean => Box::new(clean::Clean::new(configuration)),
         Help => {
             docopt::Error::WithProgramUsage(
                 Box::new(docopt::Error::Help),
@@ -135,5 +140,5 @@ pub fn from_args(mut configuration: Configuration) -> (Box<Command>, Site) {
         }
     };
 
-    (command, Site::new(configuration))
+    command
 }

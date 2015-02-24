@@ -29,10 +29,11 @@ Options:
 
 pub struct Live {
     temp_dir: TempDir,
+    site: Site,
 }
 
 impl Live {
-    pub fn new(configuration: &mut Configuration) -> Live {
+    pub fn new(mut configuration: Configuration) -> Live {
         // 1. merge options into configuration; options overrides config
         // 2. construct site from configuration
         // 3. build site
@@ -52,22 +53,29 @@ impl Live {
 
         configuration.is_preview = true;
 
-        let live = Live {
-            temp_dir:
-                TempDir::new(
-                    configuration.output.file_name().unwrap()
-                        .to_str().unwrap()).unwrap(),
-        };
+        let temp_dir =
+            TempDir::new(
+                configuration.output.file_name().unwrap()
+                    .to_str().unwrap()).unwrap();
 
-        configuration.output = PathBuf::new(live.temp_dir.path().as_str().unwrap());
-        println!("output dir: {:?}", live.temp_dir.path());
+        configuration.output = PathBuf::new(temp_dir.path().as_str().unwrap());
 
-        live
+        println!("output dir: {:?}", configuration.output);
+
+        Live {
+            site: Site::new(configuration),
+            temp_dir: temp_dir,
+        }
     }
+
 }
 
 impl Command for Live {
-    fn run(&self, mut site: Site) {
+    fn site(&mut self) -> &mut Site {
+        &mut self.site
+    }
+
+    fn run(&mut self) {
         let (tx, rx) = channel();
         let mut w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
 
@@ -75,7 +83,7 @@ impl Command for Live {
             .arg("-m")
             .arg("SimpleHTTPServer")
             .arg("3000")
-            .current_dir(&site.configuration().output)
+            .current_dir(&self.site.configuration().output)
             .spawn();
 
         // let mut mount = Mount::new();
@@ -87,12 +95,12 @@ impl Command for Live {
 
         match w {
             Ok(mut watcher) => {
-                watcher.watch(&site.configuration().input);
+                watcher.watch(&self.site.configuration().input);
 
-                site.build();
+                self.site.build();
 
                 for event in rx.iter() {
-                    site.build();
+                    self.site.build();
                 }
             },
             Err(e) => println!("Error"),
