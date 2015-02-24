@@ -77,8 +77,9 @@ impl Command for Live {
 
     fn run(&mut self) {
         let (tx, rx) = channel();
-        let mut w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
+        let w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
 
+        // TODO: once iron gets fixed, use that instead
         Server::new("python2")
             .arg("-m")
             .arg("SimpleHTTPServer")
@@ -99,11 +100,11 @@ impl Command for Live {
 
                 self.site.build();
 
-                for event in rx.iter() {
+                for _event in rx.iter() {
                     self.site.build();
                 }
             },
-            Err(e) => println!("Error"),
+            Err(_) => println!("Error"),
         }
     }
 }

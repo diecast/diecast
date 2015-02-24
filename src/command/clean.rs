@@ -1,6 +1,5 @@
 use docopt::Docopt;
 use configuration::Configuration;
-use std::path::PathBuf;
 
 use command::Command;
 use site::Site;

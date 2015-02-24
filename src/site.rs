@@ -18,6 +18,7 @@ use configuration::Configuration;
 use rule::{self, Rule};
 
 use std::path::{PathBuf, Path};
+use std::mem;
 
 /// A Site scans the input path to find
 /// files that match the given pattern. It then
@@ -238,7 +239,7 @@ impl Site {
         trace!("finished_deps: {:?}", self.finished_deps);
 
         // swap out in order to partition
-        let waiting = ::std::mem::replace(&mut self.waiting, Vec::new());
+        let waiting = mem::replace(&mut self.waiting, Vec::new());
 
         // separate out the now-ready jobs
         let (ready, waiting): (Vec<Job>, Vec<Job>) =
@@ -280,12 +281,8 @@ impl Site {
         return false;
     }
 
-    pub fn build(&mut self) {
+    pub fn find_jobs(&mut self) {
         use std::fs::PathExt;
-        use std::mem;
-
-        // TODO: clean out the output directory here to avoid cruft and conflicts
-        self.clean();
 
         let rules = mem::replace(&mut self.rules, Vec::new());
 
@@ -368,11 +365,16 @@ impl Site {
         }
 
         mem::replace(&mut self.rules, rules);
+    }
+
+    pub fn build(&mut self) {
+        // TODO: clean out the output directory here to avoid cruft and conflicts
+        self.clean();
+
+        self.find_jobs();
 
         match self.graph.resolve() {
             Ok(order) => {
-                use std::mem;
-
                 // create the output directory
                 fs::create_dir_all(&self.configuration.output)
                     .unwrap();
@@ -424,6 +426,10 @@ impl Site {
         }
 
         // TODO: determine what is safe to keep here, if anything
+        self.reset();
+    }
+
+    fn reset(&mut self) {
         self.jobs.clear();
         self.bindings.clear();
         self.graph = Graph::new();
