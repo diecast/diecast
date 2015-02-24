@@ -33,6 +33,7 @@ extern crate "rustc-serialize" as rustc_serialize;
 extern crate handlebars;
 extern crate docopt;
 extern crate notify;
+extern crate threadpool;
 // extern crate iron;
 // extern crate "static" as static_file;
 // extern crate mount;

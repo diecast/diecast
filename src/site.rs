@@ -1,10 +1,12 @@
 //! Site generation.
 
-use std::sync::{Arc, TaskPool};
+use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::collections::{HashMap, VecDeque};
 use std::collections::hash_map::Entry::{Vacant, Occupied};
 use std::fs;
+
+use threadpool::ThreadPool;
 
 use pattern::Pattern;
 use job::Job;
@@ -34,7 +36,7 @@ pub struct Site {
     graph: Graph<&'static str>,
 
     /// Thread pool to process jobs
-    thread_pool: TaskPool,
+    thread_pool: ThreadPool,
 
     /// For worker threads to send result back to main
     result_tx: Sender<Job>,
@@ -74,7 +76,7 @@ impl Site {
             jobs: Vec::new(),
             graph: Graph::new(),
 
-            thread_pool: TaskPool::new(threads),
+            thread_pool: ThreadPool::new(threads),
             result_tx: result_tx,
             result_rx: result_rx,
 
