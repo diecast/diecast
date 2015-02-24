@@ -121,8 +121,13 @@ fn main() {
                 .link(compiler::render_markdown)
                 .link(router::set_extension("html"))
                 .link(compiler::render_template("article", article_handler))
-                .link(compiler::only_if(publishable, compiler::print))
-                .link(compiler::only_if(publishable, compiler::write))
+                .link(
+                    compiler::only_if(
+                        publishable,
+                        Chain::new()
+                            .link(compiler::print)
+                            .link(compiler::write)
+                            .build()))
                 .build());
 
     let pages =

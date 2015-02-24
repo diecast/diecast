@@ -37,6 +37,16 @@ impl<F> Compile for F where F: Fn(&mut Item) + Send + Sync {
     }
 }
 
+impl Compile for Arc<Vec<Link>> {
+    fn compile(&self, item: &mut Item) {
+        for link in self.iter() {
+            if let &Link::Compiler(ref compiler) = link {
+                (*compiler).compile(item);
+            }
+        }
+    }
+}
+
 pub enum Link {
     Compiler(Box<Compile + Send + Sync>),
     Barrier,
@@ -318,10 +328,10 @@ impl Compile for RenderTemplate {
 
 pub fn only_if<C, F>(condition: C, compiler: F) -> Box<Compile + Sync + Send>
 where C: Fn(&Item) -> bool + Sync + Send + 'static,
-      F: Fn(&mut Item) + Sync + Send + 'static {
+      F: Compile + Sync + Send + 'static {
     Box::new(move |item: &mut Item| {
         if condition(item) {
-            compiler(item);
+            compiler.compile(item);
         }
     })
 }
