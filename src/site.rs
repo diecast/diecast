@@ -314,7 +314,7 @@ impl Site {
                 let path = p.unwrap().path();
 
                 if let Some(ref pattern) = self.configuration.ignore {
-                    if pattern.matches(&Path::new(path.file_name().unwrap().to_str().unwrap())) {
+                    if pattern.matches(&Path::new(path.file_name().unwrap())) {
                         return None;
                     }
                 }
