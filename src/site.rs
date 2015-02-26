@@ -11,7 +11,7 @@ use threadpool::ThreadPool;
 use pattern::Pattern;
 use job::Job;
 use compiler::Compiler;
-use compiler::Status::{Paused, Done};
+use compiler::Status::{Continue, Pause};
 use item::Item;
 use dependency::Graph;
 use configuration::Configuration;
@@ -408,11 +408,11 @@ impl Site {
                 loop {
                     let current = self.result_rx.recv().unwrap();
 
-                    match current.compiler.status {
-                        Paused => {
+                    match current.status {
+                        Pause => {
                             self.handle_paused(current);
                         },
-                        Done => {
+                        Continue => {
                             if self.handle_done(current) {
                                 break;
                             }
