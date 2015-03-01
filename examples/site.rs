@@ -116,14 +116,44 @@ fn main() {
         Compiler::new()
             // .link((compiler::read as fn(&mut Item) -> Status))
             .link(Arc::new(|_item: &mut Item| -> Status {
-                println!("before barrier");
+                println!("{} -- before barrier 1", _item);
                 Status::Continue
             }))
             .barrier()
             .link(Arc::new(|_item: &mut Item| -> Status {
-                println!("after barrier");
+                println!("{} -- after barrier 1", _item);
+                Status::Continue
+            }))
+            .link(
+                Compiler::new()
+                    .link(Arc::new(|_item: &mut Item| -> Status {
+                        println!("{} -- before barrier 2", _item);
+                        Status::Continue
+                    }))
+                    .barrier()
+                    .link(Arc::new(|_item: &mut Item| -> Status {
+                        println!("{} -- after barrier 2", _item);
+                        println!("{} -- BARRIER DEPENDENCIES:\n{:?}", _item, _item.dependencies["pages"]);
+                        Status::Continue
+                    }))
+                    .link(
+                        Compiler::new()
+                            .link(Arc::new(|_item: &mut Item| -> Status {
+                                println!("{} -- before barrier 3", _item);
+                                Status::Continue
+                            }))
+                            .barrier()
+                            .link(Arc::new(|_item: &mut Item| -> Status {
+                                println!("{} -- after barrier 3", _item);
+                                println!("{} -- BARRIER DEPENDENCIES:\n{:?}", _item, _item.dependencies["pages"]);
+                                Status::Continue
+                            })))
+                    )
+            .link(Arc::new(|_item: &mut Item| -> Status {
+                println!("{} -- is all finished!", _item);
                 Status::Continue
             }));
+
             // .link(compiler::inject_with(template_registry))
             // // stupid bug #20468 doesn't let fns with references be Clone
             // .link((compiler::read as fn(&mut Item) -> Status))

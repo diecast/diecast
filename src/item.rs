@@ -95,6 +95,12 @@ impl Item {
     }
 }
 
+impl fmt::Display for Item {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+
 impl Debug for Item {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref path) = self.from {

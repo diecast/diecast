@@ -139,53 +139,67 @@ impl Compiler {
 
 impl Compile for Compiler {
     fn compile(&self, item: &mut Item) -> Status {
-        let itm = {
-            use std::fmt::Write;
-            let mut buf = String::new();
-            let _ = buf.write_fmt(format_args!("{:?}", item));
-            buf.shrink_to_fit();
-            buf
-        };
+        let itm = item.to_string();
+
+        let mut was_paused = item.data.get::<ChainPosition>().map(|c| !c.trail.is_empty()).unwrap_or(false);
 
         // get position from item.data
         let position: usize =
             item.data.get_mut::<ChainPosition>()
-                .and_then(|chain| { chain.trail.pop().map(|p| p + 1) })
+                .and_then(|chain| { trace!("{} -- trail is {:?}", itm, chain.trail); chain.trail.pop() })
                 .unwrap_or(0);
 
-        println!("{:?} -- restored position: {}", itm, position);
+        trace!("{} -- restored position: {}", itm, position);
 
         for (index, link) in (position ..).zip(self.chain[position ..].iter()) {
-            println!("{:?} -- position: {}, index: {}", itm, position, index);
+            trace!("{} -- position: {}, index: {}", itm, position, index);
 
             match *link {
                 Link::Barrier => {
-                    println!("{:?} barrier encountered", itm);
+                    // if we are resuming and we begin on a barrier, skip over it,
+                    // since we just performed the barrier
+                    if was_paused && index == position {
+                        trace!("{} -- was paused, resuming on a barrier, skipping to next link", itm);
+                        was_paused = false;
+                        continue;
+                    }
+
+                    trace!("{} -- barrier encountered", itm);
                     let chain_pos =
                         item.data.entry::<ChainPosition>().get()
                         .unwrap_or_else(|v| v.insert(ChainPosition { trail: Vec::new() }));
 
-                    println!("{:?} before push: {:?}", itm, chain_pos.trail);
+                    trace!("{} -- before push: {:?}", itm, chain_pos.trail);
 
                     chain_pos.trail.push(index);
 
-                    println!("{:?} after push: {:?}", itm, chain_pos.trail);
+                    trace!("{} -- after push: {:?}", itm, chain_pos.trail);
 
                     return Status::Pause;
                 },
                 Link::Normal(ref compiler) => {
+                    if was_paused {
+                        trace!("{} -- RESUMING", itm);
+                        was_paused = false;
+                    }
+
                     match compiler.compile(item) {
                         Status::Pause => {
-                            println!("compiler paused");
+                            trace!("{} -- compiler paused", itm);
                             let chain_pos =
                                 item.data.entry::<ChainPosition>().get()
                                 .unwrap_or_else(|v| v.insert(ChainPosition { trail: Vec::new() }));
 
+                            trace!("{} -- before push: {:?}", itm, chain_pos.trail);
+
                             chain_pos.trail.push(index);
+
+                            trace!("{} -- after push: {:?}", itm, chain_pos.trail);
+
                             return Status::Pause;
                         },
                         Status::Continue => {
-                            println!("{:?} -- DONE!", itm);
+                            trace!("{} -- finished a compiler, continuing", itm);
                         },
                     }
                 },
