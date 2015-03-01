@@ -42,7 +42,7 @@ pub use pattern::Pattern;
 pub use site::Site;
 pub use rule::Rule;
 pub use configuration::Configuration;
-pub use compiler::Compiler;
+pub use compiler::Chain;
 pub use item::{Item, Dependencies};
 
 #[macro_use]

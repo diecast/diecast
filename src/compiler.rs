@@ -11,7 +11,7 @@ use item::Item;
 /// There's a single method that takes a mutable
 /// reference to the `Item` being compiled.
 pub trait Compile: Send + Sync {
-    fn compile(&self, item: &mut Item) -> Status;
+    fn compile(&self, item: &mut Item);
 }
 
 pub trait Cloner {
@@ -27,7 +27,7 @@ impl<T> Cloner for T where T: Compile + Send + Sync + Clone + 'static {
 pub trait ClonableCompile: Compile + Cloner {}
 impl<T> ClonableCompile for T where T: Compile + Clone + 'static {}
 
-impl Clone for for<'a> fn(&mut Item) -> Status {
+impl Clone for for<'a> fn(&mut Item) {
     fn clone(&self) -> Self {
         *self
     }
@@ -40,19 +40,19 @@ impl Clone for Box<ClonableCompile + Send + Sync> {
 }
 
 impl<C> Compile for Arc<C> where C: Compile {
-    fn compile(&self, item: &mut Item) -> Status {
+    fn compile(&self, item: &mut Item) {
         (**self).compile(item)
     }
 }
 
 impl<C: ?Sized> Compile for Box<C> where C: Compile {
-    fn compile(&self, item: &mut Item) -> Status {
+    fn compile(&self, item: &mut Item) {
         (**self).compile(item)
     }
 }
 
 // impl<C: ?Sized> Compile for &'static C where C: Compile {
-//     fn compile(&self, item: &mut Item) -> Status {
+//     fn compile(&self, item: &mut Item) {
 //         (**self).compile(item)
 //     }
 // }
@@ -63,8 +63,8 @@ impl<C: ?Sized> Compile for Box<C> where C: Compile {
 //     }
 // }
 
-impl<F> Compile for F where F: Fn(&mut Item) -> Status + Send + Sync {
-    fn compile(&self, item: &mut Item) -> Status {
+impl<F> Compile for F where F: Fn(&mut Item) + Send + Sync {
+    fn compile(&self, item: &mut Item) {
         self(item)
     }
 }
@@ -96,13 +96,13 @@ pub enum Status {
 ///
 /// Maintains a list of compilers and executes them
 /// in the order they were added.
-pub struct Compiler {
+pub struct Chain {
     pub chain: Vec<Link>,
 }
 
-impl Clone for Compiler {
-    fn clone(&self) -> Compiler {
-        Compiler {
+impl Clone for Chain {
+    fn clone(&self) -> Chain {
+        Chain {
             chain: self.chain.clone(),
         }
     }
@@ -111,112 +111,88 @@ impl Clone for Compiler {
 #[derive(Clone)]
 pub struct ChainPosition { trail: Vec<usize> }
 
-impl Compiler {
-    pub fn new() -> Compiler {
-        Compiler {
+impl Chain {
+    pub fn new() -> Chain {
+        Chain {
             chain: vec![],
         }
     }
 
-    pub fn only<C>(compiler: C) -> Compiler
+    pub fn only<C>(compiler: C) -> Chain
     where C: Compile + Clone + 'static {
-        Compiler {
+        Chain {
             chain: vec![Link::Normal(Box::new(compiler) as Box<ClonableCompile + Send + Sync>)],
         }
     }
 
-    pub fn link<C>(mut self, compiler: C) -> Compiler
+    pub fn link<C>(mut self, compiler: C) -> Chain
     where C: Compile + Clone + 'static {
         self.chain.push(Link::Normal(Box::new(compiler) as Box<ClonableCompile + Send + Sync>));
         self
     }
 
-    pub fn barrier(mut self) -> Compiler {
+    pub fn barrier(mut self) -> Chain {
         self.chain.push(Link::Barrier);
         self
     }
 }
 
-impl Compile for Compiler {
-    fn compile(&self, item: &mut Item) -> Status {
-        let itm = item.to_string();
+pub fn is_paused(item: &Item) -> bool {
+    item.data.get::<ChainPosition>()
+        .map(|c| !c.trail.is_empty())
+        .unwrap_or(false)
+}
 
-        let mut was_paused = item.data.get::<ChainPosition>().map(|c| !c.trail.is_empty()).unwrap_or(false);
+fn save_chain_position(item: &mut Item, index: usize) {
+    item.data.entry::<ChainPosition>().get()
+        .unwrap_or_else(|v| v.insert(ChainPosition { trail: Vec::new() }))
+        .trail.push(index);
+}
 
-        // get position from item.data
-        let position: usize =
-            item.data.get_mut::<ChainPosition>()
-                .and_then(|chain| { trace!("{} -- trail is {:?}", itm, chain.trail); chain.trail.pop() })
-                .unwrap_or(0);
+fn get_chain_position(item: &mut Item) -> usize {
+    item.data.get_mut::<ChainPosition>()
+        .and_then(|chain| chain.trail.pop())
+        .unwrap_or(0)
+}
 
-        trace!("{} -- restored position: {}", itm, position);
+impl Compile for Chain {
+    fn compile(&self, item: &mut Item) {
+        let resuming = is_paused(item);
+        let position: usize = get_chain_position(item);
 
         for (index, link) in (position ..).zip(self.chain[position ..].iter()) {
-            trace!("{} -- position: {}, index: {}", itm, position, index);
-
             match *link {
                 Link::Barrier => {
                     // if we are resuming and we begin on a barrier, skip over it,
                     // since we just performed the barrier
-                    if was_paused && index == position {
-                        trace!("{} -- was paused, resuming on a barrier, skipping to next link", itm);
-                        was_paused = false;
+                    if resuming && index == position {
                         continue;
                     }
 
-                    trace!("{} -- barrier encountered", itm);
-                    let chain_pos =
-                        item.data.entry::<ChainPosition>().get()
-                        .unwrap_or_else(|v| v.insert(ChainPosition { trail: Vec::new() }));
-
-                    trace!("{} -- before push: {:?}", itm, chain_pos.trail);
-
-                    chain_pos.trail.push(index);
-
-                    trace!("{} -- after push: {:?}", itm, chain_pos.trail);
-
-                    return Status::Pause;
+                    save_chain_position(item, index);
+                    return;
                 },
                 Link::Normal(ref compiler) => {
-                    if was_paused {
-                        trace!("{} -- RESUMING", itm);
-                        was_paused = false;
-                    }
+                    compiler.compile(item);
 
-                    match compiler.compile(item) {
-                        Status::Pause => {
-                            trace!("{} -- compiler paused", itm);
-                            let chain_pos =
-                                item.data.entry::<ChainPosition>().get()
-                                .unwrap_or_else(|v| v.insert(ChainPosition { trail: Vec::new() }));
-
-                            trace!("{} -- before push: {:?}", itm, chain_pos.trail);
-
-                            chain_pos.trail.push(index);
-
-                            trace!("{} -- after push: {:?}", itm, chain_pos.trail);
-
-                            return Status::Pause;
-                        },
-                        Status::Continue => {
-                            trace!("{} -- finished a compiler, continuing", itm);
-                        },
+                    if is_paused(item) {
+                        save_chain_position(item, index);
+                        return;
                     }
                 },
             }
         }
 
-        return Status::Continue;
+        return;
     }
 }
 
-pub fn stub(item: &mut Item) -> Status {
+pub fn stub(item: &mut Item) {
     trace!("no compiler established for: {:?}", item);
-    Status::Continue
 }
 
 /// Compiler that reads the `Item`'s body.
-pub fn read(item: &mut Item) -> Status {
+pub fn read(item: &mut Item) {
     use std::fs::File;
     use std::io::Read;
 
@@ -230,12 +206,10 @@ pub fn read(item: &mut Item) -> Status {
 
         item.body = Some(buf);
     }
-
-    Status::Continue
 }
 
 /// Compiler that writes the `Item`'s body.
-pub fn write(item: &mut Item) -> Status {
+pub fn write(item: &mut Item) {
     use std::fs::{self, File};
     use std::io::Write;
 
@@ -261,26 +235,22 @@ pub fn write(item: &mut Item) -> Status {
                 .unwrap();
         }
     }
-
-    Status::Continue
 }
 
 
 /// Compiler that prints the `Item`'s body.
-pub fn print(item: &mut Item) -> Status {
+pub fn print(item: &mut Item) {
     use std::old_io::stdio::println;
 
     if let &Some(ref body) = &item.body {
         println(body);
     }
-
-    Status::Continue
 }
 
 #[derive(Clone)]
 pub struct Metadata(pub String);
 
-pub fn parse_metadata(item: &mut Item) -> Status {
+pub fn parse_metadata(item: &mut Item) {
     if let Some(body) = item.body.take() {
         // TODO:
         // should probably allow arbitrary amount of
@@ -302,23 +272,21 @@ pub fn parse_metadata(item: &mut Item) -> Status {
 
             if let Some(body) = captures.name("body") {
                 item.body = Some(body.to_string());
-                return Status::Continue;
+                return;
             } else {
                 item.body = None;
-                return Status::Continue;
+                return;
             }
         }
 
         item.body = Some(body);
     }
-
-    Status::Continue
 }
 
 #[derive(Clone)]
 pub struct TomlMetadata(pub toml::Value);
 
-pub fn parse_toml(item: &mut Item) -> Status {
+pub fn parse_toml(item: &mut Item) {
     let parsed = if let Some(&Metadata(ref parsed)) = item.data.get::<Metadata>() {
         Some(parsed.parse().unwrap())
     } else {
@@ -328,11 +296,9 @@ pub fn parse_toml(item: &mut Item) -> Status {
     if let Some(parsed) = parsed {
         item.data.insert(TomlMetadata(parsed));
     }
-
-    Status::Continue
 }
 
-pub fn render_markdown(item: &mut Item) -> Status {
+pub fn render_markdown(item: &mut Item) {
     use hoedown::Markdown;
     use hoedown::renderer::html;
 
@@ -343,15 +309,12 @@ pub fn render_markdown(item: &mut Item) -> Status {
         item.data.insert(buffer);
         item.body = Some(body);
     }
-
-    Status::Continue
 }
 
 pub fn inject_with<T>(t: Arc<T>) -> Arc<Box<Compile + Sync + Send>>
 where T: Sync + Send + 'static {
-    Arc::new(Box::new(move |item: &mut Item| -> Status {
+    Arc::new(Box::new(move |item: &mut Item| {
         item.data.insert(t.clone());
-        Status::Continue
     }))
 }
 
@@ -372,9 +335,8 @@ impl<T> Inject<T> where T: Sync + Send + Clone + 'static {
 }
 
 impl<T> Compile for Inject<T> where T: Sync + Send + Clone + 'static {
-    fn compile(&self, item: &mut Item) -> Status {
+    fn compile(&self, item: &mut Item) {
         item.data.insert(self.data.clone());
-        Status::Continue
     }
 }
 
@@ -383,13 +345,11 @@ use handlebars::Handlebars;
 
 pub fn render_template<H>(name: &'static str, handler: H) -> Arc<Box<Compile + Sync + Send>>
 where H: Fn(&Item) -> Json + Sync + Send + 'static {
-    Arc::new(Box::new(move |item: &mut Item| -> Status {
+    Arc::new(Box::new(move |item: &mut Item| {
         if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
             let json = handler(item);
             item.body = Some(registry.render(name, &json).unwrap());
         }
-
-        Status::Continue
     }))
 }
 
@@ -409,25 +369,21 @@ impl RenderTemplate {
 }
 
 impl Compile for RenderTemplate {
-    fn compile(&self, item: &mut Item) -> Status {
+    fn compile(&self, item: &mut Item) {
         if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
             let json = (*self.handler)(item);
             item.body = Some(registry.render(self.name, &json).unwrap());
         }
-
-        Status::Continue
     }
 }
 
 pub fn only_if<C, F>(condition: C, mut compiler: F) -> Arc<Box<Compile + Sync + Send>>
 where C: Fn(&Item) -> bool + Sync + Send + 'static,
       F: Compile + Sync + Send + 'static {
-    Arc::new(Box::new(move |item: &mut Item| -> Status {
+    Arc::new(Box::new(move |item: &mut Item| {
         if condition(item) {
             return compiler.compile(item);
         }
-
-        Status::Continue
     }))
 }
 
@@ -437,7 +393,7 @@ where C: Fn(&Item) -> bool + Sync + Send + 'static,
 // }
 
 // impl Compile for RenderTemplate {
-//     fn compile(&self, item: &mut Item) -> Status {
+//     fn compile(&self, item: &mut Item) {
 //     }
 // }
 

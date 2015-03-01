@@ -10,7 +10,7 @@ use threadpool::ThreadPool;
 
 use pattern::Pattern;
 use job::Job;
-use compiler::Compiler;
+use compiler::Chain;
 use compiler::Status::{Continue, Pause};
 use item::Item;
 use dependency::Graph;
@@ -408,15 +408,12 @@ impl Site {
                 loop {
                     let current = self.result_rx.recv().unwrap();
 
-                    match current.status {
-                        Pause => {
-                            self.handle_paused(current);
-                        },
-                        Continue => {
-                            if self.handle_done(current) {
-                                break;
-                            }
-                        },
+                    if current.is_paused {
+                        self.handle_paused(current);
+                    } else {
+                        if self.handle_done(current) {
+                            break;
+                        }
                     }
                 }
             },
@@ -443,7 +440,7 @@ impl Site {
     fn add_job(&mut self,
                binding: &'static str,
                item: Item,
-               compiler: Compiler,
+               compiler: Chain,
                dependencies: &[&'static str]) {
         trace!("adding job for {:?}", item);
 

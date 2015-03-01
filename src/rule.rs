@@ -1,6 +1,6 @@
 use std::path::{PathBuf, AsPath};
 
-use compiler::Compiler;
+use compiler::Chain;
 use pattern::Pattern;
 
 // need:
@@ -16,12 +16,12 @@ pub enum Kind {
 pub struct Rule {
     pub name: &'static str,
     pub kind: Kind,
-    pub compiler: Compiler,
+    pub compiler: Chain,
     pub dependencies: Vec<&'static str>,
 }
 
 impl Rule {
-    pub fn matching<P>(name: &'static str, pattern: P, compiler: Compiler) -> Rule
+    pub fn matching<P>(name: &'static str, pattern: P, compiler: Chain) -> Rule
     where P: Pattern + 'static {
         Rule {
             name: name,
@@ -31,7 +31,7 @@ impl Rule {
         }
     }
 
-    pub fn creating<P: ?Sized>(name: &'static str, path: &P, compiler: Compiler) -> Rule
+    pub fn creating<P: ?Sized>(name: &'static str, path: &P, compiler: Chain) -> Rule
     where P: AsPath {
         Rule {
             name: name,

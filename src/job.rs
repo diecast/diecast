@@ -1,6 +1,6 @@
 use std::fmt;
 
-use compiler::{Compiler, Compile, Status};
+use compiler::{Chain, Compile, is_paused};
 use item::Item;
 
 pub struct Job {
@@ -8,20 +8,20 @@ pub struct Job {
     pub binding: &'static str,
 
     pub item: Item,
-    pub compiler: Compiler,
+    pub compiler: Chain,
     pub dependency_count: usize,
 
-    pub status: Status,
+    pub is_paused: bool,
 }
 
 impl fmt::Debug for Job {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "#{} [{}] {:?}, dependency_count: {} status: {:?}",
+        write!(f, "#{} [{}] {:?}, dependency_count: {} is_paused: {}",
                self.id,
                self.binding,
                self.item,
                self.dependency_count,
-               self.status)
+               self.is_paused)
     }
 }
 
@@ -29,7 +29,7 @@ impl Job {
     pub fn new(
         binding: &'static str,
         item: Item,
-        compiler: Compiler,
+        compiler: Chain,
         id: usize)
     -> Job {
         Job {
@@ -38,12 +38,14 @@ impl Job {
             item: item,
             compiler: compiler,
             dependency_count: 0,
-            status: Status::Continue,
+            is_paused: false,
         }
     }
 
     pub fn process(&mut self) {
-        self.status = self.compiler.compile(&mut self.item);
+        self.compiler.compile(&mut self.item);
+
+        self.is_paused = is_paused(&self.item);
     }
 }
 

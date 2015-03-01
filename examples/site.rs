@@ -22,7 +22,7 @@ use diecast::{
     // Site,
     Configuration,
     Rule,
-    Compiler,
+    Chain,
     Item,
 };
 
@@ -71,7 +71,7 @@ fn publishable(item: &Item) -> bool {
     !(is_draft(item) && !item.configuration.is_preview)
 }
 
-fn collect_titles(item: &mut Item) -> Status {
+fn collect_titles(item: &mut Item) {
     let mut titles = String::new();
 
     // TODO: just make Dependencies be empty if there are none?
@@ -93,8 +93,6 @@ fn collect_titles(item: &mut Item) -> Status {
     }
 
     item.body = Some(titles);
-
-    Status::Continue
 }
 
 fn main() {
@@ -113,62 +111,49 @@ fn main() {
     let template_registry = Arc::new(handlebars);
 
     let content_compiler =
-        Compiler::new()
-            // .link((compiler::read as fn(&mut Item) -> Status))
-            .link(Arc::new(|_item: &mut Item| -> Status {
+        Chain::new()
+            // .link((compiler::read as fn(&mut Item)))
+            .link(Arc::new(|_item: &mut Item| {
                 println!("{} -- before barrier 1", _item);
-                Status::Continue
             }))
             .barrier()
-            .link(Arc::new(|_item: &mut Item| -> Status {
+            .link(Arc::new(|_item: &mut Item| {
                 println!("{} -- after barrier 1", _item);
-                Status::Continue
+                println!("{} -- before barrier 1b", _item);
+            }))
+            .barrier()
+            .link(Arc::new(|_item: &mut Item| {
+                println!("{} -- after barrier 1b", _item);
             }))
             .link(
-                Compiler::new()
-                    .link(Arc::new(|_item: &mut Item| -> Status {
+                Chain::new()
+                    .link(Arc::new(|_item: &mut Item| {
                         println!("{} -- before barrier 2", _item);
-                        Status::Continue
                     }))
                     .barrier()
-                    .link(Arc::new(|_item: &mut Item| -> Status {
+                    .link(Arc::new(|_item: &mut Item| {
                         println!("{} -- after barrier 2", _item);
                         println!("{} -- BARRIER DEPENDENCIES:\n{:?}", _item, _item.dependencies["pages"]);
-                        Status::Continue
-                    }))
-                    .link(
-                        Compiler::new()
-                            .link(Arc::new(|_item: &mut Item| -> Status {
-                                println!("{} -- before barrier 3", _item);
-                                Status::Continue
-                            }))
-                            .barrier()
-                            .link(Arc::new(|_item: &mut Item| -> Status {
-                                println!("{} -- after barrier 3", _item);
-                                println!("{} -- BARRIER DEPENDENCIES:\n{:?}", _item, _item.dependencies["pages"]);
-                                Status::Continue
-                            })))
-                    )
-            .link(Arc::new(|_item: &mut Item| -> Status {
+                    })))
+            .link(Arc::new(|_item: &mut Item| {
                 println!("{} -- is all finished!", _item);
-                Status::Continue
             }));
 
             // .link(compiler::inject_with(template_registry))
             // // stupid bug #20468 doesn't let fns with references be Clone
-            // .link((compiler::read as fn(&mut Item) -> Status))
-            // .link((compiler::parse_metadata as fn(&mut Item) -> Status))
-            // .link((compiler::parse_toml as fn(&mut Item) -> Status))
-            // .link((compiler::render_markdown as fn(&mut Item) -> Status))
+            // .link((compiler::read as fn(&mut Item)))
+            // .link((compiler::parse_metadata as fn(&mut Item)))
+            // .link((compiler::parse_toml as fn(&mut Item)))
+            // .link((compiler::render_markdown as fn(&mut Item)))
             // .link(router::set_extension("html"))
             // .link(compiler::render_template("article", article_handler))
-            // .link(compiler::only_if(publishable, (compiler::print as fn(&mut Item) -> Status)))
-            // .link(compiler::only_if(publishable, (compiler::write as fn(&mut Item) -> Status)));
+            // .link(compiler::only_if(publishable, (compiler::print as fn(&mut Item))))
+            // .link(compiler::only_if(publishable, (compiler::write as fn(&mut Item))));
 
             // .link(
             //     compiler::only_if(
             //         publishable,
-            //         Compiler::new()
+            //         Chain::new()
             //             .link(compiler::print)
             //             .link(compiler::write)));
 
@@ -179,10 +164,10 @@ fn main() {
             content_compiler.clone());
 
     let index_compiler =
-        Compiler::new()
-            .link((collect_titles as fn(&mut Item) -> Status))
-            .link((compiler::print as fn(&mut Item) -> Status))
-            .link((compiler::write as fn(&mut Item) -> Status));
+        Chain::new()
+            .link((collect_titles as fn(&mut Item)))
+            .link((compiler::print as fn(&mut Item)))
+            .link((compiler::write as fn(&mut Item)));
 
     let index =
         Rule::creating(

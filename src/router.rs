@@ -20,12 +20,10 @@ pub fn identity(item: &mut Item) {
 }
 
 pub fn set_extension(extension: &'static str) -> Arc<Box<Compile + Sync + Send>> {
-    Arc::new(Box::new(move |item: &mut Item| -> Status {
+    Arc::new(Box::new(move |item: &mut Item| {
         if let Some(ref from) = item.from {
             item.to = Some(from.with_extension(extension));
         }
-
-        Status::Continue
     }))
 }
 
@@ -45,12 +43,10 @@ impl SetExtension {
 }
 
 impl Compile for SetExtension {
-    fn compile(&self, item: &mut Item) -> Status {
+    fn compile(&self, item: &mut Item) {
         let mut cloned = item.from.clone().unwrap();
         cloned.set_extension(self.extension);
         item.to = Some(cloned);
-
-        Status::Continue
     }
 }
 
@@ -79,15 +75,13 @@ impl Regex {
 }
 
 impl Compile for Regex {
-    fn compile(&self, item: &mut Item) -> Status {
+    fn compile(&self, item: &mut Item) {
         let from = item.from.clone().unwrap();
         let path_str = from.to_str().unwrap();
 
         if let Some(caps) = self.regex.captures(path_str) {
             item.to = Some(PathBuf::new(&caps.expand(self.template)));
         }
-
-        Status::Continue
     }
 }
 
