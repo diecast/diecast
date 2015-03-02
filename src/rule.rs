@@ -1,6 +1,7 @@
 use std::path::{PathBuf, AsPath};
+use std::sync::Arc;
 
-use compiler::Chain;
+use compiler::Compile;
 use pattern::Pattern;
 
 // need:
@@ -16,27 +17,27 @@ pub enum Kind {
 pub struct Rule {
     pub name: &'static str,
     pub kind: Kind,
-    pub compiler: Chain,
+    pub compiler: Arc<Box<Compile>>,
     pub dependencies: Vec<&'static str>,
 }
 
 impl Rule {
-    pub fn matching<P>(name: &'static str, pattern: P, compiler: Chain) -> Rule
-    where P: Pattern + 'static {
+    pub fn matching<P, C>(name: &'static str, pattern: P, compiler: C) -> Rule
+    where P: Pattern + 'static, C: Compile + 'static {
         Rule {
             name: name,
             kind: Kind::Matching(Box::new(pattern)),
-            compiler: compiler,
+            compiler: Arc::new(Box::new(compiler)),
             dependencies: vec![],
         }
     }
 
-    pub fn creating<P: ?Sized>(name: &'static str, path: &P, compiler: Chain) -> Rule
-    where P: AsPath {
+    pub fn creating<P: ?Sized, C>(name: &'static str, path: &P, compiler: C) -> Rule
+    where P: AsPath, C: Compile + 'static {
         Rule {
             name: name,
             kind: Kind::Creating(path.as_path().to_path_buf()),
-            compiler: compiler,
+            compiler: Arc::new(Box::new(compiler)),
             dependencies: vec![],
         }
     }

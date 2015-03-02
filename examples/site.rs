@@ -28,7 +28,7 @@ use diecast::{
 
 use diecast::router;
 use diecast::command;
-use diecast::compiler::{self, Status, TomlMetadata};
+use diecast::compiler::{self, TomlMetadata};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -71,7 +71,7 @@ fn publishable(item: &Item) -> bool {
     !(is_draft(item) && !item.configuration.is_preview)
 }
 
-fn collect_titles(item: &mut Item) {
+fn collect_titles(item: &mut Item) -> compiler::Result {
     let mut titles = String::new();
 
     // TODO: just make Dependencies be empty if there are none?
@@ -93,6 +93,7 @@ fn collect_titles(item: &mut Item) {
     }
 
     item.body = Some(titles);
+    Ok(())
 }
 
 fn main() {
@@ -112,50 +113,47 @@ fn main() {
 
     let content_compiler =
         Chain::new()
-            // .link((compiler::read as fn(&mut Item)))
-            .link(Arc::new(|_item: &mut Item| {
-                println!("{} -- before barrier 1", _item);
-            }))
-            .barrier()
-            .link(Arc::new(|_item: &mut Item| {
-                println!("{} -- after barrier 1", _item);
-                println!("{} -- before barrier 1b", _item);
-            }))
-            .barrier()
-            .link(Arc::new(|_item: &mut Item| {
-                println!("{} -- after barrier 1b", _item);
-            }))
+            .link(compiler::inject_with(template_registry))
+            .link(compiler::read)
+            .link(compiler::parse_metadata)
+            .link(compiler::parse_toml)
+            .link(compiler::render_markdown)
+            .link(router::set_extension("html"))
+            .link(compiler::render_template("article", article_handler))
             .link(
-                Chain::new()
-                    .link(Arc::new(|_item: &mut Item| {
-                        println!("{} -- before barrier 2", _item);
-                    }))
-                    .barrier()
-                    .link(Arc::new(|_item: &mut Item| {
-                        println!("{} -- after barrier 2", _item);
-                        println!("{} -- BARRIER DEPENDENCIES:\n{:?}", _item, _item.dependencies["pages"]);
-                    })))
-            .link(Arc::new(|_item: &mut Item| {
-                println!("{} -- is all finished!", _item);
-            }));
-
-            // .link(compiler::inject_with(template_registry))
-            // // stupid bug #20468 doesn't let fns with references be Clone
-            // .link((compiler::read as fn(&mut Item)))
-            // .link((compiler::parse_metadata as fn(&mut Item)))
-            // .link((compiler::parse_toml as fn(&mut Item)))
-            // .link((compiler::render_markdown as fn(&mut Item)))
-            // .link(router::set_extension("html"))
-            // .link(compiler::render_template("article", article_handler))
-            // .link(compiler::only_if(publishable, (compiler::print as fn(&mut Item))))
-            // .link(compiler::only_if(publishable, (compiler::write as fn(&mut Item))));
-
-            // .link(
-            //     compiler::only_if(
-            //         publishable,
-            //         Chain::new()
-            //             .link(compiler::print)
-            //             .link(compiler::write)));
+                compiler::only_if(
+                    publishable,
+                    Chain::new()
+                        .link(compiler::print)
+                        .link(|item: &mut Item| -> compiler::Result { println!("before barrier"); Ok(()) })
+                        // FIXME: MAJOR PROBLEM
+                        // this barrier expects all items in the binding to pass, but the very
+                        // nature of `only_if` is that not all items will pass through it
+                        //
+                        // approaches:
+                        //
+                        // 1. instead of compile::only_if, create a new binding that matches items
+                        //    based on some condition
+                        //
+                        // 2. the barrier shouldn't operate on the entire binding
+                        //    but then how would the items know how long to wait?
+                        //
+                        //    I think `only_if` should create some sort of sub-group
+                        //    as each item goes through it, it adds itself to the sub-group.
+                        //    when an item encounters a barrier, it uses that for reference?
+                        //    but then how would you know when all items have passed? what if
+                        //    one compiler is stuck and hasn't reached the only_if?
+                        //
+                        //    perhaps this should be done by continuously "narrowing" via barrier
+                        //    for example, in the first only_if in a chain, it would add the item
+                        //    to a sub-group, then perform a barrier. this would ensure that all
+                        //    items are correctly registered in the sub-group. all sub-sequent
+                        //    barriers in a chain in the only_if would be based on this parent
+                        //    sub-group
+                        //
+                        // .barrier()
+                        .link(|item: &mut Item| -> compiler::Result { println!("after barrier"); Ok(()) })
+                        .link(compiler::write)));
 
     let pages =
         Rule::matching(
@@ -165,9 +163,9 @@ fn main() {
 
     let index_compiler =
         Chain::new()
-            .link((collect_titles as fn(&mut Item)))
-            .link((compiler::print as fn(&mut Item)))
-            .link((compiler::write as fn(&mut Item)));
+            .link(collect_titles)
+            .link(compiler::print)
+            .link(compiler::write);
 
     let index =
         Rule::creating(

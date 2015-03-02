@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use item::Item;
-use compiler::{Compile, Status};
+use compiler::{self, Compile};
 use std::path::PathBuf;
 
 use regex;
@@ -19,12 +19,14 @@ pub fn identity(item: &mut Item) {
     item.to = item.from.clone();
 }
 
-pub fn set_extension(extension: &'static str) -> Arc<Box<Compile + Sync + Send>> {
-    Arc::new(Box::new(move |item: &mut Item| {
+pub fn set_extension(extension: &'static str) -> Box<Compile + Sync + Send> {
+    Box::new(move |item: &mut Item| -> compiler::Result {
         if let Some(ref from) = item.from {
             item.to = Some(from.with_extension(extension));
         }
-    }))
+
+        Ok(())
+    })
 }
 
 /// file.txt -> file.html
@@ -43,10 +45,11 @@ impl SetExtension {
 }
 
 impl Compile for SetExtension {
-    fn compile(&self, item: &mut Item) {
+    fn compile(&self, item: &mut Item) -> compiler::Result {
         let mut cloned = item.from.clone().unwrap();
         cloned.set_extension(self.extension);
         item.to = Some(cloned);
+        Ok(())
     }
 }
 
@@ -75,13 +78,15 @@ impl Regex {
 }
 
 impl Compile for Regex {
-    fn compile(&self, item: &mut Item) {
+    fn compile(&self, item: &mut Item) -> compiler::Result {
         let from = item.from.clone().unwrap();
         let path_str = from.to_str().unwrap();
 
         if let Some(caps) = self.regex.captures(path_str) {
             item.to = Some(PathBuf::new(&caps.expand(self.template)));
         }
+
+        Ok(())
     }
 }
 

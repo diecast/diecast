@@ -1,6 +1,7 @@
 use std::fmt;
+use std::sync::Arc;
 
-use compiler::{Chain, Compile, is_paused};
+use compiler::{Compile, is_paused};
 use item::Item;
 
 pub struct Job {
@@ -8,7 +9,7 @@ pub struct Job {
     pub binding: &'static str,
 
     pub item: Item,
-    pub compiler: Chain,
+    pub compiler: Arc<Box<Compile>>,
     pub dependency_count: usize,
 
     pub is_paused: bool,
@@ -29,7 +30,7 @@ impl Job {
     pub fn new(
         binding: &'static str,
         item: Item,
-        compiler: Chain,
+        compiler: Arc<Box<Compile>>,
         id: usize)
     -> Job {
         Job {
@@ -45,6 +46,7 @@ impl Job {
     pub fn process(&mut self) {
         self.compiler.compile(&mut self.item);
 
+        // TODO: we're still special-casing Chain here, doesn't matter?
         self.is_paused = is_paused(&self.item);
     }
 }

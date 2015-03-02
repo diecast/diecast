@@ -3,10 +3,10 @@
 // FIXME: switch back to btreemap once this is fixed:
 // https://github.com/rust-lang/rust/issues/22655
 
-use std::collections::{HashMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use std::collections::hash_map::Keys;
-use std::collections::hash_map::Entry::Vacant;
+use std::collections::btree_map::Keys;
+use std::collections::btree_map::Entry::Vacant;
 
 use std::hash::Hash;
 
@@ -24,7 +24,7 @@ pub struct Graph<T> where T: Ord + Copy + Hash {
     ///
     /// There's a key for every node in the graph, even if
     /// if it doesn't have any edges going out.
-    edges: HashMap<T, BTreeSet<T>>,
+    edges: BTreeMap<T, BTreeSet<T>>,
 
     /// The dependencies a node has.
     ///
@@ -35,14 +35,14 @@ pub struct Graph<T> where T: Ord + Copy + Hash {
     /// e.g. the relationship that A depends on B can be represented as
     /// A -> B, so therefore the evaluation order which respects that
     /// dependency is the reverse, B -> A
-    reverse: HashMap<T, BTreeSet<T>>,
+    reverse: BTreeMap<T, BTreeSet<T>>,
 }
 
 impl<T> Graph<T> where T: Ord + Copy + Hash {
     pub fn new() -> Graph<T> {
         Graph {
-            edges: HashMap::new(),
-            reverse: HashMap::new(),
+            edges: BTreeMap::new(),
+            reverse: BTreeMap::new(),
         }
     }
 
@@ -179,7 +179,7 @@ struct Topological<'a, T: 'a> where T: Ord + Copy + Hash {
     on_stack: BTreeSet<T>,
 
     /// Trace back a path in the case of a cycle.
-    edge_to: HashMap<T, T>,
+    edge_to: BTreeMap<T, T>,
 }
 
 impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy + Hash {
@@ -189,7 +189,7 @@ impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy + Hash {
             graph: graph,
             visited: BTreeSet::new(),
             on_stack: BTreeSet::new(),
-            edge_to: HashMap::new(),
+            edge_to: BTreeMap::new(),
         }
     }
 

@@ -2,16 +2,15 @@
 
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver, channel};
-use std::collections::{HashMap, VecDeque};
-use std::collections::hash_map::Entry::{Vacant, Occupied};
+use std::collections::{BTreeMap, VecDeque};
+use std::collections::btree_map::Entry::{Vacant, Occupied};
 use std::fs;
 
 use threadpool::ThreadPool;
 
 use pattern::Pattern;
 use job::Job;
-use compiler::Chain;
-use compiler::Status::{Continue, Pause};
+use compiler::Compile;
 use item::Item;
 use dependency::Graph;
 use configuration::Configuration;
@@ -28,7 +27,7 @@ pub struct Site {
     configuration: Arc<Configuration>,
 
     /// Mapping the id to its dependencies
-    bindings: HashMap<&'static str, Vec<usize>>,
+    bindings: BTreeMap<&'static str, Vec<usize>>,
 
     /// The jobs
     jobs: Vec<Job>,
@@ -46,13 +45,13 @@ pub struct Site {
     result_rx: Receiver<Job>,
 
     /// the dependencies as they're being built
-    staging_deps: HashMap<&'static str, Vec<Item>>,
+    staging_deps: BTreeMap<&'static str, Vec<Item>>,
 
     /// finished dependencies
-    finished_deps: HashMap<&'static str, Arc<Vec<Item>>>,
+    finished_deps: BTreeMap<&'static str, Arc<Vec<Item>>>,
 
     /// dependencies that are currently paused due to a barrier
-    paused: HashMap<&'static str, Vec<Job>>,
+    paused: BTreeMap<&'static str, Vec<Job>>,
 
     /// items whose dependencies have not been fulfilled
     waiting: Vec<Job>,
@@ -73,7 +72,7 @@ impl Site {
         Site {
             configuration: Arc::new(configuration),
 
-            bindings: HashMap::new(),
+            bindings: BTreeMap::new(),
             jobs: Vec::new(),
             graph: Graph::new(),
 
@@ -81,9 +80,9 @@ impl Site {
             result_tx: result_tx,
             result_rx: result_rx,
 
-            staging_deps: HashMap::new(),
-            finished_deps: HashMap::new(),
-            paused: HashMap::new(),
+            staging_deps: BTreeMap::new(),
+            finished_deps: BTreeMap::new(),
+            paused: BTreeMap::new(),
 
             waiting: Vec::new(),
             rules: Vec::new(),
@@ -135,8 +134,7 @@ impl Site {
         // paused jobs for this binding
         // and return whether all jobs have been paused
         let finished = {
-            let jobs = self.paused.entry(binding).get()
-                           .unwrap_or_else(|v| v.insert(vec![]));
+            let jobs = self.paused.entry(binding).get().unwrap_or_else(|v| v.insert(vec![]));
             jobs.push(current);
             jobs.len() == total
         };
@@ -247,7 +245,7 @@ impl Site {
 
         self.waiting = waiting;
 
-        let mut deps_cache = HashMap::new();
+        let mut deps_cache = BTreeMap::new();
         let mut dependents = ready.iter().map(|j| j.binding).collect::<Vec<&'static str>>();
 
         dependents.sort();
@@ -261,7 +259,7 @@ impl Site {
         // because this will be the first time the jobs are going to run,
         // so they won't have reached any barriers to begin with
         for dependent in dependents {
-            let mut deps = HashMap::new();
+            let mut deps = BTreeMap::new();
 
             for &dep in self.graph.dependencies_of(dependent).unwrap() {
                 trace!("adding dependency: {:?}", dep);
@@ -440,7 +438,7 @@ impl Site {
     fn add_job(&mut self,
                binding: &'static str,
                item: Item,
-               compiler: Chain,
+               compiler: Arc<Box<Compile>>,
                dependencies: &[&'static str]) {
         trace!("adding job for {:?}", item);
 
