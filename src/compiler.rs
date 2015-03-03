@@ -2,12 +2,23 @@
 
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::fmt;
+use std::error::FromError;
 
 use toml;
 
 use item::Item;
 
-pub type Result = ::std::result::Result<(), Box<::std::error::Error>>;
+pub trait Error: ::std::error::Error {}
+pub type Result = ::std::result::Result<(), Box<Error>>;
+
+impl<E> Error for E where E: ::std::error::Error {}
+
+impl<E> FromError<E> for Box<Error> where E: Error + 'static {
+    fn from_error(e: E) -> Box<Error> {
+        Box::new(e)
+    }
+}
 
 /// Behavior of a compiler.
 ///
@@ -411,40 +422,33 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
 
         let compiler = self.compiler.clone();
 
-        // eww, guess I'll at least make this a data member to avoid
-        // rebuilding it each time
-        //
-        // this needs to be an arc afaik cause in `run_it` it's passed
-        // to a chain, and if it weren't an arc then it'd move it
-        // which would make `run_it` an FnOnce instead of the Fn we need
-        let pop_it =
-            Arc::new(move |item: &mut Item| -> Result {
-                let is_pushed_2 = is_pushed_2.clone();
-                let mut is_pushed_2 = is_pushed_2.lock().unwrap();
+        let chain =
+            Chain::new()
+                .link(compiler.clone())
+                .barrier()
+                .link(move |item: &mut Item| -> Result {
+                    let is_pushed_2 = is_pushed_2.clone();
+                    let mut is_pushed_2 = is_pushed_2.lock().unwrap();
 
-                // will pop the barrier count at the end of the conditional compiler
-                // if it hasn't been popped yet
-                if *is_pushed_2 {
-                    let barriers = item.data.get_mut::<Barriers>().unwrap();
-                    let mut counts = barriers.counts.lock().unwrap();
-                    counts.pop();
+                    // will pop the barrier count at the end of the conditional compiler
+                    // if it hasn't been popped yet
+                    if *is_pushed_2 {
+                        let barriers = item.data.get_mut::<Barriers>().unwrap();
+                        let mut counts = barriers.counts.lock().unwrap();
+                        counts.pop();
 
-                    *is_pushed_2 = false;
-                }
+                        *is_pushed_2 = false;
+                    }
 
-                Ok(())
-            });
+                    Ok(())
+                });
 
         // this is also nasty to have to build this here, but w/e
         let run_it =
             move |item: &mut Item| -> Result {
                 if satisfied {
                     // perhaps make this a member to avoid rebuilding it each time?
-                    return Chain::new()
-                        .link(compiler.clone())
-                        .barrier()
-                        .link(pop_it.clone())
-                        .compile(item);
+                    return chain.compile(item);
                 }
 
                 Ok(())

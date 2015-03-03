@@ -9,7 +9,7 @@ use std::fs;
 use threadpool::ThreadPool;
 
 use pattern::Pattern;
-use job::Job;
+use job::{self, Job};
 use compiler::{self, Compile};
 use item::Item;
 use dependency::Graph;
@@ -39,10 +39,10 @@ pub struct Site {
     thread_pool: ThreadPool,
 
     /// For worker threads to send result back to main
-    result_tx: Sender<Job>,
+    result_tx: Sender<Result<Job, job::Error>>,
 
     /// For main thread to receive results
-    result_rx: Receiver<Job>,
+    result_rx: Receiver<Result<Job, job::Error>>,
 
     /// the dependencies as they're being built
     staging_deps: BTreeMap<&'static str, Vec<Item>>,
@@ -109,7 +109,6 @@ fn sort_jobs(jobs: &mut Vec<Job>, order: &VecDeque<&'static str>, graph: &Graph<
             idx += 1;
         }
     }
-
 }
 
 impl Site {
@@ -117,8 +116,7 @@ impl Site {
         let result_tx = self.result_tx.clone();
 
         self.thread_pool.execute(move || {
-            job.process();
-            result_tx.send(job).unwrap();
+            job.process(result_tx);
         });
     }
 
@@ -379,6 +377,7 @@ impl Site {
 
         self.find_jobs();
 
+        // TODO: use resolve_from for partial builds?
         match self.graph.resolve() {
             Ok(order) => {
                 // create the output directory
@@ -410,15 +409,19 @@ impl Site {
                     self.dispatch_job(job);
                 }
 
-                // possible to use self.result_rx.iter()?
                 loop {
-                    let current = self.result_rx.recv().unwrap();
-
-                    if current.is_paused {
-                        self.handle_paused(current);
-                    } else {
-                        if self.handle_done(current) {
-                            break;
+                    match self.result_rx.recv().unwrap() {
+                        Ok(job) => {
+                            if job.is_paused {
+                                self.handle_paused(job);
+                            } else {
+                                if self.handle_done(job) {
+                                    break;
+                                }
+                            }
+                        },
+                        Err(job::Error) => {
+                            panic!("a job failed. stopping everything");
                         }
                     }
                 }
