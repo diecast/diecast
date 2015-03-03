@@ -392,6 +392,7 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
     ready: Arc<AtomicUsize>,
     // this ensures that the stack is only pushed/popped once per OnlyIf
     is_pushed: Arc<Mutex<bool>>,
+    is_popped: Arc<Mutex<bool>>,
 }
 
 impl<B, C> OnlyIf<B, C>
@@ -403,6 +404,7 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
             compiler: Arc::new(compiler),
             ready: Arc::new(AtomicUsize::new(0)),
             is_pushed: Arc::new(Mutex::new(false)),
+            is_popped: Arc::new(Mutex::new(false)),
         }
     }
 }
@@ -417,8 +419,8 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
         let ready_1 = self.ready.clone();
         let ready_2 = self.ready.clone();
 
-        let is_pushed_1 = self.is_pushed.clone();
-        let is_pushed_2 = self.is_pushed.clone();
+        let is_pushed = self.is_pushed.clone();
+        let is_popped = self.is_popped.clone();
 
         let compiler = self.compiler.clone();
 
@@ -427,17 +429,17 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
                 .link(compiler.clone())
                 .barrier()
                 .link(move |item: &mut Item| -> Result {
-                    let is_pushed_2 = is_pushed_2.clone();
-                    let mut is_pushed_2 = is_pushed_2.lock().unwrap();
+                    let is_popped = is_popped.clone();
+                    let mut is_popped = is_popped.lock().unwrap();
 
                     // will pop the barrier count at the end of the conditional compiler
                     // if it hasn't been popped yet
-                    if *is_pushed_2 {
+                    if !*is_popped {
                         let barriers = item.data.get_mut::<Barriers>().unwrap();
                         let mut counts = barriers.counts.lock().unwrap();
                         counts.pop();
 
-                        *is_pushed_2 = false;
+                        *is_popped = true;
                     }
 
                     Ok(())
@@ -471,11 +473,11 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
                     return Ok(())
                 }
 
-                let is_pushed_1 = is_pushed_1.clone();
-                let mut is_pushed_1 = is_pushed_1.lock().unwrap();
+                let is_pushed = is_pushed.clone();
+                let mut is_pushed = is_pushed.lock().unwrap();
 
                 // if the new barrier count hasn't been pushed, push it
-                if !*is_pushed_1 {
+                if !*is_pushed {
                     let max_count = ready_2.load(Ordering::SeqCst);
 
                     let barriers = item.data.entry::<Barriers>().get()
@@ -486,7 +488,7 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
                     let mut counts = barriers.counts.lock().unwrap();
                     counts.push(max_count);
 
-                    *is_pushed_1 = true;
+                    *is_pushed = true;
                 }
 
                 Ok(())

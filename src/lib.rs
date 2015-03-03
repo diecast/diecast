@@ -16,6 +16,8 @@
 #![feature(old_io)]
 #![feature(old_path)]
 #![feature(collections)]
+#![feature(unsafe_destructor)]
+
 
 #![plugin(regex_macros)]
 
@@ -33,7 +35,7 @@ extern crate "rustc-serialize" as rustc_serialize;
 extern crate handlebars;
 extern crate docopt;
 extern crate notify;
-extern crate threadpool;
+extern crate libc;
 // extern crate iron;
 // extern crate "static" as static_file;
 // extern crate mount;
@@ -59,3 +61,6 @@ pub mod configuration;
 pub mod job;
 pub mod rule;
 
+fn exit(code: usize) -> ! {
+    unsafe { libc::exit(code as libc::c_int) }
+}

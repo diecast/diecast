@@ -79,6 +79,8 @@ impl Command for Live {
         let (tx, rx) = channel();
         let w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
 
+        println!("cur dir: {:?}", self.site.configuration().output);
+
         // TODO: once iron gets fixed, use that instead
         Server::new("python2")
             .arg("-m")

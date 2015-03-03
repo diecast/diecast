@@ -6,10 +6,10 @@ use std::collections::{BTreeMap, VecDeque};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
 use std::fs;
 
-use threadpool::ThreadPool;
+// use threadpool::ThreadPool;
 
 use pattern::Pattern;
-use job::{self, Job};
+use job::{self, Job, ThreadPool};
 use compiler::{self, Compile};
 use item::Item;
 use dependency::Graph;
@@ -76,7 +76,7 @@ impl Site {
             jobs: Vec::new(),
             graph: Graph::new(),
 
-            thread_pool: ThreadPool::new(threads),
+            thread_pool: ThreadPool::new(threads, result_tx.clone()),
             result_tx: result_tx,
             result_rx: result_rx,
 
@@ -420,8 +420,13 @@ impl Site {
                                 }
                             }
                         },
-                        Err(job::Error) => {
-                            panic!("a job failed. stopping everything");
+                        Err(job::Error::Err) => {
+                            println!("a job returned an error. stopping everything");
+                            ::exit(1);
+                        },
+                        Err(job::Error::Panic) => {
+                            println!("a job panicked. stopping everything");
+                            ::exit(1);
                         }
                     }
                 }
@@ -512,18 +517,14 @@ impl Site {
 
         // TODO: maybe obey .gitignore?
         // clear directory
-        if !self.configuration.ignore_hidden {
-            remove_dir_all(&self.configuration.output).unwrap();
-        } else {
-            for child in read_dir(&self.configuration.output).unwrap() {
-                let path = child.unwrap().path();
+        for child in read_dir(&self.configuration.output).unwrap() {
+            let path = child.unwrap().path();
 
-                if path.file_name().unwrap().to_str().unwrap().char_at(0) != '.' {
-                    if path.is_dir() {
-                        remove_dir_all(&path).unwrap();
-                    } else {
-                        remove_file(&path).unwrap();
-                    }
+            if !self.configuration.ignore_hidden || path.file_name().unwrap().to_str().unwrap().char_at(0) != '.' {
+                if path.is_dir() {
+                    remove_dir_all(&path).unwrap();
+                } else {
+                    remove_file(&path).unwrap();
                 }
             }
         }

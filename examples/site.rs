@@ -113,28 +113,26 @@ fn main() {
 
     let content_compiler =
         Chain::new()
-            .link(compiler::read)
-            .link(|item: &mut Item| -> compiler::Result {
-                println!("returning an error");
-                try!(File::open("lol"));
-                Ok(())
-            });
-            // .link(compiler::inject_with(template_registry))
             // .link(compiler::read)
-            // .link(compiler::parse_metadata)
-            // .link(compiler::parse_toml)
-            // .link(compiler::render_markdown)
-            // .link(router::set_extension("html"))
-            // .link(compiler::render_template("article", article_handler))
-            // .link(
-            //     compiler::only_if(
-            //         publishable,
-            //         Chain::new()
-            //             .link(compiler::print)
-            //             .link(|item: &mut Item| -> compiler::Result { println!("before barrier"); Ok(()) })
-            //             .barrier()
-            //             .link(|item: &mut Item| -> compiler::Result { println!("after barrier"); Ok(()) })
-            //             .link(compiler::write)));
+            // .link(|item: &mut Item| -> compiler::Result {
+            //     println!("returning an error");
+            //     // File::open("lol").unwrap();
+            //     try!(File::open("lol"));
+            //     Ok(())
+            // });
+            .link(compiler::inject_with(template_registry))
+            .link(compiler::read)
+            .link(compiler::parse_metadata)
+            .link(compiler::parse_toml)
+            .link(compiler::render_markdown)
+            .link(router::set_extension("html"))
+            .link(compiler::render_template("article", article_handler))
+            .link(
+                compiler::only_if(
+                    publishable,
+                    Chain::new()
+                        .link(compiler::print)
+                        .link(compiler::write)));
 
     let pages =
         Rule::matching(
