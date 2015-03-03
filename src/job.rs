@@ -44,6 +44,7 @@ impl Job {
     }
 
     pub fn process(&mut self) {
+        // FIXME: this should actually be returned
         self.compiler.compile(&mut self.item);
 
         // TODO: we're still special-casing Chain here, doesn't matter?

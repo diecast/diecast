@@ -10,7 +10,7 @@ use threadpool::ThreadPool;
 
 use pattern::Pattern;
 use job::Job;
-use compiler::Compile;
+use compiler::{self, Compile};
 use item::Item;
 use dependency::Graph;
 use configuration::Configuration;
@@ -127,8 +127,18 @@ impl Site {
 
         let binding = current.binding;
 
+        // FIXME: this should use job.item.data.get::<Barriers>().unwrap().counts.last()
         // total number of jobs in the binding
-        let total = self.bindings[binding].len();
+        // let total = self.bindings[binding].len();
+        let total =
+            current.item.data.get::<compiler::Barriers>()
+                .and_then(|bars| {
+                    let mut counts = bars.counts.lock().unwrap();
+                    counts.last().cloned()
+                })
+                .unwrap_or_else(|| self.bindings[binding].len());
+
+        println!("barrier limit for {} is {}", current.item, total);
 
         // add this paused job to the collection of
         // paused jobs for this binding
@@ -139,9 +149,7 @@ impl Site {
             jobs.len() == total
         };
 
-        trace!("paused so far ({}): {:?}",
-               self.paused[binding].len(),
-               self.paused[binding]);
+        trace!("paused so far ({}): {:?}", self.paused[binding].len(), self.paused[binding]);
         trace!("total to pause: {}", total);
         trace!("finished: {}", finished);
 

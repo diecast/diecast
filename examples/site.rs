@@ -126,32 +126,7 @@ fn main() {
                     Chain::new()
                         .link(compiler::print)
                         .link(|item: &mut Item| -> compiler::Result { println!("before barrier"); Ok(()) })
-                        // FIXME: MAJOR PROBLEM
-                        // this barrier expects all items in the binding to pass, but the very
-                        // nature of `only_if` is that not all items will pass through it
-                        //
-                        // approaches:
-                        //
-                        // 1. instead of compile::only_if, create a new binding that matches items
-                        //    based on some condition
-                        //
-                        // 2. the barrier shouldn't operate on the entire binding
-                        //    but then how would the items know how long to wait?
-                        //
-                        //    I think `only_if` should create some sort of sub-group
-                        //    as each item goes through it, it adds itself to the sub-group.
-                        //    when an item encounters a barrier, it uses that for reference?
-                        //    but then how would you know when all items have passed? what if
-                        //    one compiler is stuck and hasn't reached the only_if?
-                        //
-                        //    perhaps this should be done by continuously "narrowing" via barrier
-                        //    for example, in the first only_if in a chain, it would add the item
-                        //    to a sub-group, then perform a barrier. this would ensure that all
-                        //    items are correctly registered in the sub-group. all sub-sequent
-                        //    barriers in a chain in the only_if would be based on this parent
-                        //    sub-group
-                        //
-                        // .barrier()
+                        .barrier()
                         .link(|item: &mut Item| -> compiler::Result { println!("after barrier"); Ok(()) })
                         .link(compiler::write)));
 
