@@ -1,7 +1,7 @@
 use std::fmt;
 use std::mem;
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender, SendError, Receiver, RecvError};
 use std::thread::{self, JoinGuard};
 
 use compiler::{self, Compile, is_paused};
@@ -45,7 +45,6 @@ impl Job {
     }
 
     pub fn process(mut self, tx: Sender<Result<Job, Error>>) {
-        // FIXME: this should actually be returned
         match self.compiler.compile(&mut self.item) {
             Ok(()) => {
                 // TODO: we're still special-casing Chain here, doesn't matter?
@@ -66,28 +65,14 @@ pub enum Error {
     Panic,
 }
 
-trait FnBox {
-    fn call_box(self: Box<Self>);
-}
-
-impl<F: FnOnce()> FnBox for F {
-    fn call_box(self: Box<F>) {
-        (*self)()
-    }
-}
-
-type Thunk<'a> = Box<FnBox + Send + 'a>;
-
-struct Sentinel<'a> {
-    jobs: &'a Arc<Mutex<Receiver<Thunk<'static>>>>,
+struct Sentinel {
     tx: Sender<Result<Job, Error>>,
     active: bool
 }
 
-impl<'a> Sentinel<'a> {
-    fn new(jobs: &'a Arc<Mutex<Receiver<Thunk<'static>>>>, tx: Sender<Result<Job, Error>>) -> Sentinel<'a> {
+impl Sentinel {
+    fn new(tx: Sender<Result<Job, Error>>) -> Sentinel {
         Sentinel {
-            jobs: jobs,
             tx: tx,
             active: true
         }
@@ -100,103 +85,81 @@ impl<'a> Sentinel<'a> {
 }
 
 #[unsafe_destructor]
-impl<'a> Drop for Sentinel<'a> {
+impl Drop for Sentinel {
     fn drop(&mut self) {
         if self.active {
             match self.tx.send(Err(Error::Panic)) {
                 Ok(_) => (), // will close down everything
                 Err(_) => (), // already pannicked once
             }
-            // spawn_in_pool(self.jobs.clone(), self.tx.clone())
         }
     }
 }
 
-/// A thread pool used to execute functions in parallel.
-///
-/// Spawns `n` worker threads and replenishes the pool if any worker threads
-/// panic.
-///
-/// # Example
-///
-/// ```rust
-/// use threadpool::ThreadPool;
-/// use std::sync::mpsc::channel;
-///
-/// let pool = ThreadPool::new(4);
-///
-/// let (tx, rx) = channel();
-/// for i in 0..8 {
-///     let tx = tx.clone();
-///     pool.execute(move|| {
-///         tx.send(i).unwrap();
-///     });
-/// }
-///
-/// assert_eq!(rx.iter().take(8).fold(0, |a, b| a + b), 28);
-/// ```
-pub struct ThreadPool {
+pub struct Pool {
     // How the threadpool communicates with subthreads.
     //
     // This is the only such Sender, so when it is dropped all subthreads will
     // quit.
-    jobs: Sender<Thunk<'static>>,
-    tx: Sender<Result<Job, Error>>,
+    enqueue: Sender<Job>,
+    dequeue: Receiver<Result<Job, Error>>,
 }
 
-impl ThreadPool {
+impl Pool {
     /// Spawns a new thread pool with `threads` threads.
     ///
     /// # Panics
     ///
     /// This function will panic if `threads` is 0.
-    pub fn new(threads: usize, tx_: Sender<Result<Job, Error>>) -> ThreadPool {
+    pub fn new(threads: usize) -> Pool {
         assert!(threads >= 1);
 
-        println!("threadpool with {} threads", threads);
-
-        let (tx, rx) = channel::<Thunk<'static>>();
+        let (enqueue, rx) = channel::<Job>();
         let rx = Arc::new(Mutex::new(rx));
+        let (tx, dequeue) = channel::<Result<Job, Error>>();
 
         // Threadpool threads
         for _ in 0..threads {
-            spawn_in_pool(rx.clone(), tx_.clone());
+            let rx = rx.clone();
+            let tx = tx.clone();
+
+            thread::spawn(move || {
+                // Will spawn a new thread on panic unless it is cancelled.
+                let sentinel = Sentinel::new(tx.clone());
+
+                loop {
+                    let message = {
+                        // Only lock jobs for the time it takes
+                        // to get a job, not run it.
+                        let lock = rx.lock().unwrap();
+                        lock.recv()
+                    };
+
+                    match message {
+                        Ok(job) => {
+                            job.process(tx.clone());
+                        },
+
+                        // The Taskpool was dropped.
+                        Err(..) => break
+                    }
+                }
+
+                sentinel.cancel();
+            });
         }
 
-        ThreadPool { jobs: tx, tx: tx_ }
-    }
-
-    /// Executes the function `job` on a thread in the pool.
-    pub fn execute<F>(&self, job: F)
-        where F : FnOnce() + Send + 'static
-    {
-        self.jobs.send(Box::new(move || job())).unwrap();
-    }
-}
-
-fn spawn_in_pool(jobs: Arc<Mutex<Receiver<Thunk<'static>>>>, tx: Sender<Result<Job, Error>>) {
-    thread::spawn(move || {
-        // Will spawn a new thread on panic unless it is cancelled.
-        let sentinel = Sentinel::new(&jobs, tx);
-
-        loop {
-            let message = {
-                // Only lock jobs for the time it takes
-                // to get a job, not run it.
-                let lock = jobs.lock().unwrap();
-                lock.recv()
-            };
-
-            match message {
-                Ok(job) => {
-                    job.call_box();
-                },
-
-                // The Taskpool was dropped.
-                Err(..) => break
-            }
+        Pool {
+            enqueue: enqueue,
+            dequeue: dequeue,
         }
+    }
 
-        sentinel.cancel();
-    });
+    pub fn enqueue(&self, job: Job) -> Result<(), SendError<Job>> {
+        self.enqueue.send(job)
+    }
+
+    pub fn dequeue(&self) -> Result<Result<Job, Error>, RecvError> {
+        self.dequeue.recv()
+    }
 }

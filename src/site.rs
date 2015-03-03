@@ -6,10 +6,10 @@ use std::collections::{BTreeMap, VecDeque};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
 use std::fs;
 
-// use threadpool::ThreadPool;
+// use threadpool::job::Pool;
 
 use pattern::Pattern;
-use job::{self, Job, ThreadPool};
+use job::{self, Job};
 use compiler::{self, Compile};
 use item::Item;
 use dependency::Graph;
@@ -36,7 +36,7 @@ pub struct Site {
     graph: Graph<&'static str>,
 
     /// Thread pool to process jobs
-    thread_pool: ThreadPool,
+    job_pool: job::Pool,
 
     /// For worker threads to send result back to main
     result_tx: Sender<Result<Job, job::Error>>,
@@ -76,7 +76,7 @@ impl Site {
             jobs: Vec::new(),
             graph: Graph::new(),
 
-            thread_pool: ThreadPool::new(threads, result_tx.clone()),
+            job_pool: job::Pool::new(threads),
             result_tx: result_tx,
             result_rx: result_rx,
 
@@ -113,11 +113,7 @@ fn sort_jobs(jobs: &mut Vec<Job>, order: &VecDeque<&'static str>, graph: &Graph<
 
 impl Site {
     fn dispatch_job(&self, mut job: Job) {
-        let result_tx = self.result_tx.clone();
-
-        self.thread_pool.execute(move || {
-            job.process(result_tx);
-        });
+        self.job_pool.enqueue(job).unwrap();
     }
 
     fn handle_paused(&mut self, current: Job) {
@@ -337,8 +333,6 @@ impl Site {
                     let compiler = rule.compiler.clone();
                     let conf = self.configuration.clone();
 
-                    println!("creating: {:?}", path);
-
                     self.add_job(
                         rule.name,
                         Item::new(conf, None, Some(path.clone())),
@@ -410,7 +404,7 @@ impl Site {
                 }
 
                 loop {
-                    match self.result_rx.recv().unwrap() {
+                    match self.job_pool.dequeue().unwrap() {
                         Ok(job) => {
                             if job.is_paused {
                                 self.handle_paused(job);
