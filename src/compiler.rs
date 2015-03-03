@@ -371,9 +371,16 @@ pub struct Barriers {
 pub struct OnlyIf<B, C>
 where B: Fn(&Item) -> bool + Sync + Send + 'static,
       C: Compile + Sync + Send + 'static {
+    // only run `compiler` if this condition holds true
     condition:  Arc<B>,
+    // compiler to conditionally run
     compiler: Arc<C>,
+    // count of items that satisfy predicate,
+    // so that subsequent barriers nested within the above `compiler`
+    // only block on this amount of items
     ready: Arc<AtomicUsize>,
+    // this ensures that the stack is only pushed/popped once per OnlyIf
+    // TODO: could/should these be a CondVar?
     is_pushed: Arc<Mutex<bool>>,
     is_popped: Arc<Mutex<bool>>,
 }
@@ -396,8 +403,9 @@ impl<B, C> Compile for OnlyIf<B, C>
 where B: Fn(&Item) -> bool + Sync + Send + 'static,
       C: Compile + Sync + Send + 'static {
     fn compile(&self, item: &mut Item) -> Result {
-        let satisfied = (*self.condition)(item);
+        let satisfied = (self.condition)(item);
 
+        // this kinda sucks but w/e
         let ready_1 = self.ready.clone();
         let ready_2 = self.ready.clone();
 
@@ -405,20 +413,21 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
         let is_popped = self.is_popped.clone();
 
         let compiler = self.compiler.clone();
+
+        // eww, guess I'll at least make this a data member to avoid
+        // rebuilding it each time
+        //
+        // this needs to be an arc afaik cause in `run_it` it's passed
+        // to a chain, and if it weren't an arc then it'd move it
+        // which would make `run_it` an FnOnce instead of the Fn we need
         let pop_it =
             Arc::new(move |item: &mut Item| -> Result {
                 let is_popped = is_popped.clone();
                 let mut is_popped = is_popped.lock().unwrap();
 
+                // will pop the barrier count at the end of the conditional compiler
+                // if it hasn't been popped yet
                 if !*is_popped {
-                    // unwrap should be fine here since we ensured it exists
-                    // FIXME: although, I guess it could be possible that
-                    // an intermediate compiler removed it
-                    // probably a losing battle to attempt to handle all
-                    // of that, so better to just panic imo
-
-                    println!("{} -- popped count", item);
-
                     let barriers = item.data.get_mut::<Barriers>().unwrap();
                     let mut counts = barriers.counts.lock().unwrap();
                     counts.pop();
@@ -429,10 +438,11 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
                 Ok(())
             });
 
+        // this is also nasty to have to build this here, but w/e
         let run_it =
             move |item: &mut Item| -> Result {
                 if satisfied {
-                    println!("{} -- running compiler because pred satisfied", item);
+                    // perhaps make this a member to avoid rebuilding it each time?
                     return Chain::new()
                         .link(compiler.clone())
                         .barrier()
@@ -440,59 +450,37 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
                         .compile(item);
                 }
 
-                println!("{} -- didn't run compiler cause !pred", item);
                 Ok(())
             };
 
         Chain::new()
+            // count items that satisfy the predicate
             .link(move |item: &mut Item| -> Result {
                 if !satisfied {
-                    println!("{} -- did not satisfy the predicate", item);
                     return Ok(())
                 }
 
-                // TODO
-                // need to ensure that this is actually a clone of the original
-                // and not a completely new one each time
                 let new_count = ready_1.fetch_add(1, Ordering::SeqCst);
-                println!("#{}: {} -- has reached the barrier", new_count, item);
                 Ok(())
             })
-            // allow all passed items to inc count
-            // FIXME
-            // this barrier wont work for the same reason we're
-            // trying to fix it!
-            //
-            // now all satisfied items will have incremented it
             .barrier()
             // push count
             .link(move |item: &mut Item| -> Result {
                 if !satisfied {
-                    println!("{} -- not pushing count cause !pred", item);
                     return Ok(())
                 }
 
-                println!("{} -- pushing count", item);
-
-                // TODO: audit ordering
-                // TODO: audit use of comparison to 0
-                // what if no items matched?
-                // well in that case we wouldn't even be running this
-                // code, because `satisfied` sould be false
-                let max_count = ready_2.load(Ordering::SeqCst);
                 let is_pushed = is_pushed.clone();
-
                 let mut is_pushed = is_pushed.lock().unwrap();
 
-                // NOTE:
-                // it isn't necessary to wrap the Barriers count in a mutex I think
-                // since, sure, we'd have atomic access to the vec but we wouldn't know
-                // if it had been set yet or not
+                // if the new barrier count hasn't been pushed, push it
                 if !*is_pushed {
-                    println!("{} -- pushed count", item);
+                    let max_count = ready_2.load(Ordering::SeqCst);
 
                     let barriers = item.data.entry::<Barriers>().get()
-                        .unwrap_or_else(|v| v.insert(Barriers { counts: Arc::new(Mutex::new(Vec::new())) }));
+                        .unwrap_or_else(|v| {
+                            v.insert(Barriers { counts: Arc::new(Mutex::new(Vec::new())) })
+                        });
 
                     let mut counts = barriers.counts.lock().unwrap();
                     counts.push(max_count);
@@ -502,22 +490,14 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
 
                 Ok(())
             })
+            // run compiler then pop barrier stack
             .link(run_it)
-            // done compiling, reset barrier count
-            // should only happen once all have finished
-            // another barrier needed?
-            //
-            // NOTE
-            // by the time this barrier runs, the new update count should be set
-            // so there's no need for dual atomics?
-            //
-            // FIXME
-            // this barrier still uses the new count, but will still
-            // be triggered by items that didn't match the predicate
+            // run this compiler chain
             .compile(item)
     }
 }
 
+// helper function. `OnlyIf` itself is not exposed cause who wants to type that
 pub fn only_if<C, F>(condition: C, compiler: F) -> OnlyIf<C, F>
 where C: Fn(&Item) -> bool + Sync + Send + 'static,
       F: Compile + Sync + Send + 'static {
