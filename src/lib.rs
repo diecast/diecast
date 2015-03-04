@@ -12,6 +12,7 @@
 #![feature(os)]
 #![feature(fs)]
 #![feature(io)]
+#![feature(std_misc)]
 #![feature(old_io)]
 #![feature(old_path)]
 #![feature(collections)]

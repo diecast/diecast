@@ -4,9 +4,14 @@ use configuration::Configuration;
 
 use std::old_io::TempDir;
 use std::path::PathBuf;
+use std::fs::PathExt;
 use std::process::Command as Server;
+use std::thread;
 
 use command::Command;
+
+use std::time::duration::Duration;
+use time::SteadyTime;
 
 use notify::{RecommendedWatcher, Error, Watcher};
 use std::sync::mpsc::channel;
@@ -79,8 +84,6 @@ impl Command for Live {
         let (tx, rx) = channel();
         let w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
 
-        println!("cur dir: {:?}", self.site.configuration().output);
-
         // TODO: once iron gets fixed, use that instead
         Server::new("python2")
             .arg("-m")
@@ -96,23 +99,28 @@ impl Command for Live {
 
         // Iron::new(mount).listen((Ipv4Addr(127, 0, 0, 1), 3000)).unwrap();
 
+        let mut last_event = SteadyTime::now();
+        let debounce = Duration::milliseconds(100);
+
         match w {
             Ok(mut watcher) => {
                 match watcher.watch(&self.site.configuration().input) {
-                    Ok(_) => (),
+                    Ok(_) => { },
                     Err(e) => panic!(e),
                 }
 
                 self.site.build();
 
-                println!("loop starting");
-
                 for event in rx.iter() {
-                    println!("got event for {:?}", event.path);
+                    let current_time = SteadyTime::now();
+                    let delta = current_time - last_event;
+
+                    trace!("got event for {:?}", event.path);
+                    trace!("delta is {}", delta);
 
                     if let Some(ref pattern) = self.site.configuration().ignore {
-                        if event.path.map(|p| pattern.matches(&p)).unwrap_or(false) {
-                            println!("is ignored file; skipping");
+                        if event.path.as_ref().map(|p| pattern.matches(p)).unwrap_or(false) {
+                            trace!("is ignored file; skipping");
                             continue;
                         }
                     }
@@ -120,29 +128,43 @@ impl Command for Live {
                     match event.op {
                         Ok(op) => {
                             match op {
-                                ::notify::op::CHMOD => println!("Operation: chmod"),
-                                ::notify::op::CREATE => println!("Operation: create"),
-                                ::notify::op::REMOVE => println!("Operation: remove"),
-                                ::notify::op::RENAME => println!("Operation: rename"),
-                                ::notify::op::WRITE => println!("Operation: write"),
-                                _ => println!("Operation: unknown"),
+                                ::notify::op::CHMOD => trace!("Operation: chmod"),
+                                ::notify::op::CREATE => trace!("Operation: create"),
+                                ::notify::op::REMOVE => trace!("Operation: remove"),
+                                ::notify::op::RENAME => trace!("Operation: rename"),
+                                ::notify::op::WRITE => trace!("Operation: write"),
+                                _ => trace!("Operation: unknown"),
                             }
                         },
                         Err(e) => {
                             match e {
-                                ::notify::Error::Generic(e) => println!("Error: {}", e),
-                                ::notify::Error::Io(e) => println!("Error: {:?}", e),
-                                ::notify::Error::NotImplemented => println!("Error: Not Implemented"),
-                                ::notify::Error::PathNotFound => println!("Error: Path Not Found"),
-                                ::notify::Error::WatchNotFound => println!("Error: Watch Not Found"),
+                                ::notify::Error::Generic(e) => trace!("Error: {}", e),
+                                ::notify::Error::Io(e) => trace!("Error: {:?}", e),
+                                ::notify::Error::NotImplemented => trace!("Error: Not Implemented"),
+                                ::notify::Error::PathNotFound => trace!("Error: Path Not Found"),
+                                ::notify::Error::WatchNotFound => trace!("Error: Watch Not Found"),
                             }
+                            panic!("notification error");
+                        }
+                    }
+
+                    if delta < debounce {
+                        trace!("within debounce span; skipping");
+                        continue;
+                    }
+
+                    trace!("new event; setting new time ({} → {})", last_event, current_time);
+                    last_event = current_time;
+
+                    if let Some(ref path) = event.path {
+                        while !path.exists() {
+                            thread::park_timeout(Duration::milliseconds(10));
                         }
                     }
 
                     // TODO
                     // this would probably become something like self.site.update();
                     self.site.build();
-                    println!("processed event");
                 }
             },
             Err(_) => println!("Error"),

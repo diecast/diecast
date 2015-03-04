@@ -351,11 +351,14 @@ impl Site {
 
     pub fn build(&mut self) {
         // TODO: clean out the output directory here to avoid cruft and conflicts
+        trace!("cleaning out directory");
         self.clean();
 
+        trace!("finding jobs");
         self.find_jobs();
 
         // TODO: use resolve_from for partial builds?
+        trace!("resolving graph");
         match self.graph.resolve() {
             Ok(order) => {
                 // create the output directory

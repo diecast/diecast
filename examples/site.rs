@@ -81,14 +81,9 @@ fn collect_titles(item: &mut Item) -> compiler::Result {
         }
 
         if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
-            let title =
-                metadata
-                .lookup("title")
-                .unwrap()
-                .as_str()
-                .unwrap();
-
-            titles.push_str(&format!("> {}\n", title));
+            if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
+                titles.push_str(&format!("> {}\n", title));
+            }
         }
     }
 
