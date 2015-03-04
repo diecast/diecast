@@ -357,6 +357,11 @@ impl Site {
         trace!("finding jobs");
         self.find_jobs();
 
+        if self.jobs.is_empty() {
+            println!("none of the rules matched any items. there is nothing to do");
+            return;
+        }
+
         // TODO: use resolve_from for partial builds?
         trace!("resolving graph");
         match self.graph.resolve() {
@@ -461,6 +466,12 @@ impl Site {
             trace!("has dependencies: {:?}", dependencies);
 
             for &dep in dependencies {
+                // TODO: contains_key?
+                if !self.bindings.get(dep).map(|d| !d.is_empty()).unwrap_or(false) {
+                    println!("`{}` depends on `{}`, but `{}` contains no items to satisfy that dependency", binding, dep, binding);
+                    ::exit(1);
+                }
+
                 trace!("setting dependency {} -> {}", dep, binding);
                 self.graph.add_edge(dep, binding);
             }
@@ -473,7 +484,8 @@ impl Site {
 
         for dependency in &rule.dependencies {
             if !self.bindings.get(dependency).is_some() {
-                panic!("`{}` depends on unregistered rule `{}`", rule.name, dependency);
+                println!("`{}` depends on unregistered rule `{}`", rule.name, dependency);
+                ::exit(1);
             }
         }
 
