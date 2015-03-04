@@ -1,10 +1,9 @@
 use std::fmt;
-use std::mem;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, SendError, Receiver, RecvError};
-use std::thread::{self, JoinGuard};
+use std::thread;
 
-use compiler::{self, Compile, is_paused};
+use compiler::{Compile, is_paused};
 use item::Item;
 
 pub struct Job {

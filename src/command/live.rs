@@ -98,12 +98,51 @@ impl Command for Live {
 
         match w {
             Ok(mut watcher) => {
-                watcher.watch(&self.site.configuration().input);
+                match watcher.watch(&self.site.configuration().input) {
+                    Ok(_) => (),
+                    Err(e) => panic!(e),
+                }
 
                 self.site.build();
 
-                for _event in rx.iter() {
+                println!("loop starting");
+
+                for event in rx.iter() {
+                    println!("got event for {:?}", event.path);
+
+                    if let Some(ref pattern) = self.site.configuration().ignore {
+                        if event.path.map(|p| pattern.matches(&p)).unwrap_or(false) {
+                            println!("is ignored file; skipping");
+                            continue;
+                        }
+                    }
+
+                    match event.op {
+                        Ok(op) => {
+                            match op {
+                                ::notify::op::CHMOD => println!("Operation: chmod"),
+                                ::notify::op::CREATE => println!("Operation: create"),
+                                ::notify::op::REMOVE => println!("Operation: remove"),
+                                ::notify::op::RENAME => println!("Operation: rename"),
+                                ::notify::op::WRITE => println!("Operation: write"),
+                                _ => println!("Operation: unknown"),
+                            }
+                        },
+                        Err(e) => {
+                            match e {
+                                ::notify::Error::Generic(e) => println!("Error: {}", e),
+                                ::notify::Error::Io(e) => println!("Error: {:?}", e),
+                                ::notify::Error::NotImplemented => println!("Error: Not Implemented"),
+                                ::notify::Error::PathNotFound => println!("Error: Path Not Found"),
+                                ::notify::Error::WatchNotFound => println!("Error: Watch Not Found"),
+                            }
+                        }
+                    }
+
+                    // TODO
+                    // this would probably become something like self.site.update();
                     self.site.build();
+                    println!("processed event");
                 }
             },
             Err(_) => println!("Error"),

@@ -1,7 +1,6 @@
 //! Site generation.
 
 use std::sync::Arc;
-use std::sync::mpsc::{Sender, Receiver, channel};
 use std::collections::{BTreeMap, VecDeque};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
 use std::fs;
@@ -38,12 +37,6 @@ pub struct Site {
     /// Thread pool to process jobs
     job_pool: job::Pool,
 
-    /// For worker threads to send result back to main
-    result_tx: Sender<Result<Job, job::Error>>,
-
-    /// For main thread to receive results
-    result_rx: Receiver<Result<Job, job::Error>>,
-
     /// the dependencies as they're being built
     staging_deps: BTreeMap<&'static str, Vec<Item>>,
 
@@ -66,9 +59,6 @@ impl Site {
         trace!("output directory is: {:?}", configuration.output);
         trace!("using {} threads", threads);
 
-        // channels for sending and receiving results
-        let (result_tx, result_rx) = channel();
-
         Site {
             configuration: Arc::new(configuration),
 
@@ -77,8 +67,6 @@ impl Site {
             graph: Graph::new(),
 
             job_pool: job::Pool::new(threads),
-            result_tx: result_tx,
-            result_rx: result_rx,
 
             staging_deps: BTreeMap::new(),
             finished_deps: BTreeMap::new(),
@@ -112,10 +100,6 @@ fn sort_jobs(jobs: &mut Vec<Job>, order: &VecDeque<&'static str>, graph: &Graph<
 }
 
 impl Site {
-    fn dispatch_job(&self, mut job: Job) {
-        self.job_pool.enqueue(job).unwrap();
-    }
-
     fn handle_paused(&mut self, current: Job) {
         trace!("paused {}", current.id);
 
@@ -127,7 +111,7 @@ impl Site {
         let total =
             current.item.data.get::<compiler::Barriers>()
                 .and_then(|bars| {
-                    let mut counts = bars.counts.lock().unwrap();
+                    let counts = bars.counts.lock().unwrap();
                     counts.last().cloned()
                 })
                 .unwrap_or_else(|| self.bindings[binding].len());
@@ -176,7 +160,7 @@ impl Site {
 
             trace!("re-enqueuing: {:?}", job);
 
-            self.dispatch_job(job);
+            self.job_pool.enqueue(job).unwrap();
         }
     }
 
@@ -275,7 +259,7 @@ impl Site {
         for mut job in ready {
             job.item.dependencies = deps_cache[job.binding].clone();
             trace!("job now ready: {:?}", job);
-            self.dispatch_job(job)
+            self.job_pool.enqueue(job).unwrap();
         }
 
         return false;
@@ -400,7 +384,7 @@ impl Site {
 
                 // dispatch the jobs that are ready
                 for job in ready {
-                    self.dispatch_job(job);
+                    self.job_pool.enqueue(job).unwrap();
                 }
 
                 loop {

@@ -8,7 +8,6 @@
 #![feature(plugin)]
 #![feature(core)]
 #![feature(rustc_private)]
-#![feature(std_misc)]
 #![feature(path)]
 #![feature(os)]
 #![feature(fs)]
@@ -36,6 +35,7 @@ extern crate handlebars;
 extern crate docopt;
 extern crate notify;
 extern crate libc;
+extern crate time;
 // extern crate iron;
 // extern crate "static" as static_file;
 // extern crate mount;

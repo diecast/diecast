@@ -2,7 +2,6 @@
 
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::fmt;
 use std::error::FromError;
 
 use toml;
@@ -458,12 +457,12 @@ where B: Fn(&Item) -> bool + Sync + Send + 'static,
 
         Chain::new()
             // count items that satisfy the predicate
-            .link(move |item: &mut Item| -> Result {
+            .link(move |_item: &mut Item| -> Result {
                 if !satisfied {
                     return Ok(())
                 }
 
-                let new_count = ready_1.fetch_add(1, Ordering::SeqCst);
+                ready_1.fetch_add(1, Ordering::SeqCst);
                 Ok(())
             })
             .barrier()

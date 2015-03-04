@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use item::Item;
 use compiler::{self, Compile};
 use std::path::PathBuf;

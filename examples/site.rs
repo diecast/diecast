@@ -75,7 +75,7 @@ fn collect_titles(item: &mut Item) -> compiler::Result {
     let mut titles = String::new();
 
     // TODO: just make Dependencies be empty if there are none?
-    for post in item.dependencies["pages"].iter() {
+    for post in item.dependencies.get("posts").expect("no 'posts' dependency").iter() {
         if !publishable(post) {
             continue;
         }
@@ -113,31 +113,24 @@ fn main() {
 
     let content_compiler =
         Chain::new()
+            .link(compiler::inject_with(template_registry))
             .link(compiler::read)
-            .link(|item: &mut Item| -> compiler::Result {
-                println!("returning an error");
-                // File::open("lol").unwrap();
-                try!(File::open("lol"));
-                Ok(())
-            });
-            // .link(compiler::inject_with(template_registry))
-            // .link(compiler::read)
-            // .link(compiler::parse_metadata)
-            // .link(compiler::parse_toml)
-            // .link(compiler::render_markdown)
-            // .link(router::set_extension("html"))
-            // .link(compiler::render_template("article", article_handler))
-            // .link(
-            //     compiler::only_if(
-            //         publishable,
-            //         Chain::new()
-            //             .link(compiler::print)
-            //             .link(compiler::write)));
+            .link(compiler::parse_metadata)
+            .link(compiler::parse_toml)
+            .link(compiler::render_markdown)
+            .link(router::set_extension("html"))
+            .link(compiler::render_template("article", article_handler))
+            .link(
+                compiler::only_if(
+                    publishable,
+                    Chain::new()
+                        // .link(compiler::print)
+                        .link(compiler::write)));
 
-    let pages =
+    let posts =
         Rule::matching(
-            "pages",
-            glob::Pattern::new("pages/*.md").unwrap(),
+            "posts",
+            glob::Pattern::new("posts/dots.markdown").unwrap(),
             content_compiler.clone());
 
     let index_compiler =
@@ -148,18 +141,18 @@ fn main() {
 
     let index =
         Rule::creating(
-            "page index",
+            "post index",
             "index.html",
             index_compiler)
-            .depends_on(&pages);
+            .depends_on(&posts);
 
     let config =
-        Configuration::new("tests/fixtures/input", "output")
-            .ignore(regex!(r"^\.|^#|~$|\.swp$"));
+        Configuration::new("tests/fixtures/hakyll", "output")
+            .ignore(regex!(r"^\.|^#|~$|\.swp$|4913"));
 
     let mut command = command::from_args(config);
 
-    command.site().bind(pages);
+    command.site().bind(posts);
     command.site().bind(index);
 
     command.run();
