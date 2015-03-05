@@ -125,7 +125,7 @@ fn main() {
     let posts =
         Rule::matching(
             "posts",
-            glob::Pattern::new("posts/dots.lols").unwrap(),
+            glob::Pattern::new("posts/dots.markdown").unwrap(),
             content_compiler.clone());
 
     let index_compiler =

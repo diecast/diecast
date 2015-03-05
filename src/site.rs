@@ -1,7 +1,7 @@
 //! Site generation.
 
 use std::sync::Arc;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::collections::btree_map::Entry::{Vacant, Occupied};
 use std::fs;
 
@@ -29,7 +29,9 @@ pub struct Site {
     bindings: BTreeMap<&'static str, Vec<usize>>,
 
     /// The jobs
-    jobs: Vec<Job>,
+    jobs: BTreeMap<&'static str, Vec<Job>>,
+
+    job_count: usize,
 
     /// Dependency resolution
     graph: Graph<&'static str>,
@@ -63,7 +65,8 @@ impl Site {
             configuration: Arc::new(configuration),
 
             bindings: BTreeMap::new(),
-            jobs: Vec::new(),
+            jobs: BTreeMap::new(),
+            job_count: 0,
             graph: Graph::new(),
 
             job_pool: job::Pool::new(threads),
@@ -79,24 +82,24 @@ impl Site {
 }
 
 // TODO: audit this
-fn sort_jobs(jobs: &mut Vec<Job>, order: &VecDeque<&'static str>, graph: &Graph<&'static str>) {
-    let mut boundary = 0;
+fn sort_jobs(mut jobs: BTreeMap<&'static str, Vec<Job>>,
+             order: &VecDeque<&'static str>,
+             graph: &Graph<&'static str>)
+   -> Vec<Job> {
+    let mut out = Vec::new();
 
     for &bind_id in order {
-        let mut idx = boundary;
+        // let dep_count = graph.dependency_count(bind_id);
 
-        while idx < jobs.len() {
-            let current_binding = jobs[idx].binding;
+        // out.extend(jobs.remove(bind_id).unwrap());
 
-            if current_binding == bind_id {
-                jobs[idx].dependency_count = graph.dependency_count(current_binding);
-                jobs.swap(boundary, idx);
-                boundary += 1;
-            }
-
-            idx += 1;
+        for job in jobs.remove(bind_id).unwrap() {
+            // job.dependency_count = dep_count;
+            out.push(job);
         }
     }
+
+    return out;
 }
 
 impl Site {
@@ -357,7 +360,7 @@ impl Site {
         trace!("finding jobs");
         self.find_jobs();
 
-        if self.jobs.is_empty() {
+        if self.job_count == 0 {
             println!("there is nothing to do");
             return;
         }
@@ -369,14 +372,9 @@ impl Site {
                 // create the output directory
                 fs::create_dir_all(&self.configuration.output).unwrap();
 
-                // put the jobs in the correct evaluation order
-                sort_jobs(&mut self.jobs, &order, &self.graph);
+                let mut jobs = mem::replace(&mut self.jobs, BTreeMap::new());
 
                 // swap out the jobs in order to consume them
-                let mut ordered = mem::replace(&mut self.jobs, Vec::new());
-
-                trace!("ordered: {:?}", ordered);
-
                 // satisfy dependents of empty rules
                 // 1. iterate through bindings to find empty vecs
                 // 2. create arc<empty vec> for key of #1
@@ -384,52 +382,62 @@ impl Site {
                 // 4. insert #2 into deps of #3
                 // 5. decrement dep count
 
-                println!("jobs: {:?}", ordered);
+                println!("jobs: {:?}", jobs);
 
                 let empty_deps: Arc<Vec<Item>> = Arc::new(Vec::new());
+                // TODO: this requires that we always insert at least a name for job map?
+                let empty_map =
+                    jobs.iter()
+                    .filter(|&(_, jobs)| jobs.is_empty())
+                    .map(|(&name, _)| {
+                        let mut bt = BTreeMap::new();
+                        bt.insert(name, empty_deps.clone());
 
-                // TODO: this seems terribly inefficient
-                for (&name, jobs) in &self.bindings {
-                    if !jobs.is_empty() {
-                        continue;
-                    }
+                        // TODO: hack to put it here?
+                        self.finished_deps.insert(name, empty_deps.clone());
 
-                    println!("{} is an empty binding", name);
+                        (name, Arc::new(bt))
+                    })
+                    .collect::<BTreeMap<&'static str, ::item::Dependencies>>();
 
-                    self.finished_deps.insert(name, empty_deps.clone());
+                let empty_binds = empty_map.keys().cloned().collect::<BTreeSet<&'static str>>();
 
-                    let dependents = self.graph.dependents_of(name);
+                for (name, jobs) in &mut jobs {
+                    let mut dep_count = self.graph.dependency_count(name);
 
-                    if dependents.is_none() {
-                        continue;
-                    }
+                    let empty_dep = if let Some(deps) = self.graph.dependencies_of(name) {
+                        let mut empty_deps = deps.intersection(&empty_binds).peekable();
+                        let has_empty_deps = empty_deps.peek().is_some();
 
-                    println!("it also has dependents");
-
-                    // TODO:
-                    // if graph stored job ids instead we wouldnt need this nested for?
-                    // i think we would
-                    for &dependent in dependents.unwrap() {
-                        println!("checking dependent: {}", dependent);
-
-                        for job in &mut ordered {
-                            if job.binding == dependent {
-                                println!("job id ({}) is a dependent", job.id);
-
-                                job.dependency_count -= 1;
-
-                                println!("its dependency count is now {}", job.dependency_count);
-
-                                if job.dependency_count == 0 {
-                                    println!("it only consisted of this empty dependency; inserting dependencies");
-                                    let mut deps = BTreeMap::new();
-                                    deps.insert(name, empty_deps.clone());
-                                    job.item.dependencies = Arc::new(deps);
-                                }
-                            }
+                        if dep_count == 1 && has_empty_deps {
+                            dep_count -= 1;
+                            Some(empty_map[*empty_deps.next().unwrap()].clone())
+                        } else if has_empty_deps {
+                            dep_count -= empty_deps.count();
+                            None
+                        } else {
+                            None
                         }
+                    } else {
+                        None
+                    };
+
+                    for job in jobs {
+                        job.dependency_count = dep_count;
+
+                        if let Some(ref dep) = empty_dep {
+                            job.item.dependencies = dep.clone();
+                        }
+                        // for empty_dep in empty_deps {
+                        //     job.dependency_count -= 1;
+                        // }
                     }
                 }
+
+                // put the jobs in the correct evaluation order
+                let mut ordered = sort_jobs(jobs, &order, &self.graph);
+
+                trace!("ordered: {:?}", ordered);
 
                 // total number of jobs
                 let total_jobs = ordered.len();
@@ -499,11 +507,14 @@ impl Site {
         trace!("adding job for {:?}", item);
 
         // create a job id
-        let index = self.jobs.len();
+        self.job_count += 1;
+        let index = self.job_count;
         trace!("index: {}", index);
 
         // add the job to the list of jobs
-        self.jobs.push(Job::new(binding, item, compiler, index));
+        self.jobs.entry(binding).get()
+            .unwrap_or_else(|v| v.insert(vec![]))
+            .push(Job::new(binding, item, compiler, index));
 
         // associate the job id with the binding
         self.bindings.entry(binding).get()
@@ -528,6 +539,9 @@ impl Site {
     }
 
     pub fn bind(&mut self, rule: Rule) {
+        self.jobs.entry(rule.name).get()
+            .unwrap_or_else(|v| v.insert(vec![]));
+
         self.bindings.entry(rule.name).get()
             .unwrap_or_else(|v| v.insert(vec![]));
 

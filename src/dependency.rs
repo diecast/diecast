@@ -77,6 +77,8 @@ impl<T> Graph<T> where T: Ord + Copy + Hash {
         self.edges.get(&node)
     }
 
+    // TODO: this and the above should just return an empty btreeset if no deps
+    // can't cause it's a reference, argh
     pub fn dependencies_of(&self, node: T) -> Option<&BTreeSet<T>> {
         self.reverse.get(&node)
     }
