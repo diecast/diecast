@@ -28,6 +28,9 @@ pub struct Site {
     /// Mapping the id to its dependencies
     bindings: BTreeMap<&'static str, Vec<usize>>,
 
+    /// Mapping the id to its dependencies
+    dependency_counts: BTreeMap<&'static str, usize>,
+
     /// The jobs
     jobs: BTreeMap<&'static str, Vec<Job>>,
 
@@ -49,7 +52,7 @@ pub struct Site {
     paused: BTreeMap<&'static str, Vec<Job>>,
 
     /// items whose dependencies have not been fulfilled
-    waiting: Vec<Job>,
+    waiting: Vec<&'static str>,
 
     rules: Vec<Rule>,
 }
@@ -65,6 +68,7 @@ impl Site {
             configuration: Arc::new(configuration),
 
             bindings: BTreeMap::new(),
+            dependency_counts: BTreeMap::new(),
             jobs: BTreeMap::new(),
             job_count: 0,
             graph: Graph::new(),
@@ -79,27 +83,6 @@ impl Site {
             rules: Vec::new(),
         }
     }
-}
-
-// TODO: audit this
-fn sort_jobs(mut jobs: BTreeMap<&'static str, Vec<Job>>,
-             order: &VecDeque<&'static str>,
-             graph: &Graph<&'static str>)
-   -> Vec<Job> {
-    let mut out = Vec::new();
-
-    for &bind_id in order {
-        // let dep_count = graph.dependency_count(bind_id);
-
-        // out.extend(jobs.remove(bind_id).unwrap());
-
-        for job in jobs.remove(bind_id).unwrap() {
-            // job.dependency_count = dep_count;
-            out.push(job);
-        }
-    }
-
-    return out;
 }
 
 impl Site {
@@ -216,23 +199,24 @@ impl Site {
 
         let dependents = dependents.unwrap();
 
-        // decrement the dependency count of dependents in the waiting queue
-        for job in &mut self.waiting {
-            if dependents.contains(&job.binding) {
-                job.dependency_count -= 1;
+        let mut ready = Vec::new();
+
+        for name in self.bindings.keys() {
+            if dependents.contains(name) {
+                let count = self.dependency_counts.get_mut(name).unwrap();
+                *count -= 1;
+
+                // TODO: just check if it's 1
+                if *count == 0 {
+                    for job in self.jobs.remove(name).unwrap() {
+                        // self.job_pool.enqueue(job).unwrap();
+                        ready.push(job);
+                    }
+                }
             }
         }
 
         trace!("finished_deps: {:?}", self.finished_deps);
-
-        // swap out in order to partition
-        let waiting = mem::replace(&mut self.waiting, Vec::new());
-
-        // separate out the now-ready jobs
-        let (ready, waiting): (Vec<Job>, Vec<Job>) =
-            waiting.into_iter().partition(|ref job| job.dependency_count == 0);
-
-        self.waiting = waiting;
 
         let mut deps_cache = BTreeMap::new();
         let mut dependents = ready.iter().map(|j| j.binding).collect::<Vec<&'static str>>();
@@ -422,38 +406,23 @@ impl Site {
                         None
                     };
 
-                    for job in jobs {
-                        job.dependency_count = dep_count;
+                    self.dependency_counts.insert(name, dep_count);
 
-                        if let Some(ref dep) = empty_dep {
+                    if let Some(ref dep) = empty_dep {
+                        for job in jobs {
                             job.item.dependencies = dep.clone();
                         }
-                        // for empty_dep in empty_deps {
-                        //     job.dependency_count -= 1;
-                        // }
                     }
                 }
 
-                // put the jobs in the correct evaluation order
-                let mut ordered = sort_jobs(jobs, &order, &self.graph);
-
-                trace!("ordered: {:?}", ordered);
-
-                // total number of jobs
-                let total_jobs = ordered.len();
-
-                // determine which jobs are ready
-                let (ready, waiting): (Vec<Job>, Vec<Job>) =
-                   ordered.into_iter().partition(|ref job| job.dependency_count == 0);
-
-                self.waiting = waiting;
-
-                trace!("jobs: {}", total_jobs);
-                trace!("ready: {:?}", ready);
-
-                // dispatch the jobs that are ready
-                for job in ready {
-                    self.job_pool.enqueue(job).unwrap();
+                for name in self.bindings.keys().cloned() {
+                    if self.dependency_counts[name] == 0 {
+                        if let Some(jobs) = jobs.remove(name) {
+                            for job in jobs {
+                                self.job_pool.enqueue(job).unwrap();
+                            }
+                        }
+                    }
                 }
 
                 loop {

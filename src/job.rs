@@ -12,7 +12,6 @@ pub struct Job {
 
     pub item: Item,
     pub compiler: Arc<Box<Compile>>,
-    pub dependency_count: usize,
 
     pub is_paused: bool,
 }
@@ -38,7 +37,6 @@ impl Job {
             binding: binding,
             item: item,
             compiler: compiler,
-            dependency_count: 0,
             is_paused: false,
         }
     }
