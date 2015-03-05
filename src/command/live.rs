@@ -105,7 +105,7 @@ impl Command for Live {
         match w {
             Ok(mut watcher) => {
                 match watcher.watch(&self.site.configuration().input) {
-                    Ok(_) => { },
+                    Ok(_) => {},
                     Err(e) => panic!(e),
                 }
 
@@ -144,7 +144,8 @@ impl Command for Live {
                                 ::notify::Error::PathNotFound => trace!("Error: Path Not Found"),
                                 ::notify::Error::WatchNotFound => trace!("Error: Watch Not Found"),
                             }
-                            panic!("notification error");
+                            println!("notification error");
+                            ::exit(1);
                         }
                     }
 

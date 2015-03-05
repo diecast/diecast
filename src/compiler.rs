@@ -200,7 +200,10 @@ pub fn write(item: &mut Item) -> Result {
             let target = conf_out.join(path);
 
             if !target.starts_with(&conf_out) {
-                panic!("attempted to write outside of the output directory: {:?}", target);
+                // TODO
+                // should probably return a proper T: Error?
+                println!("attempted to write outside of the output directory: {:?}", target);
+                panic!();
             }
 
             trace!("mkdir -p {:?}", target);

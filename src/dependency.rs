@@ -46,6 +46,9 @@ impl<T> Graph<T> where T: Ord + Copy + Hash {
         }
     }
 
+    // TODO: is this even necessary? add_edge adds node if didn't exist
+    // yes it is, because add_edge is explicitly for creating dependencies
+    // even if something has no dependencies, we still want it in graph?
     pub fn add_node(&mut self, node: T) {
         if let Vacant(entry) = self.edges.entry(node) {
             entry.insert(BTreeSet::new());

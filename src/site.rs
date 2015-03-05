@@ -358,7 +358,7 @@ impl Site {
         self.find_jobs();
 
         if self.jobs.is_empty() {
-            println!("none of the rules matched any items. there is nothing to do");
+            println!("there is nothing to do");
             return;
         }
 
@@ -367,16 +367,69 @@ impl Site {
         match self.graph.resolve() {
             Ok(order) => {
                 // create the output directory
-                fs::create_dir_all(&self.configuration.output)
-                    .unwrap();
+                fs::create_dir_all(&self.configuration.output).unwrap();
 
                 // put the jobs in the correct evaluation order
                 sort_jobs(&mut self.jobs, &order, &self.graph);
 
                 // swap out the jobs in order to consume them
-                let ordered = mem::replace(&mut self.jobs, Vec::new());
+                let mut ordered = mem::replace(&mut self.jobs, Vec::new());
 
                 trace!("ordered: {:?}", ordered);
+
+                // satisfy dependents of empty rules
+                // 1. iterate through bindings to find empty vecs
+                // 2. create arc<empty vec> for key of #1
+                // 3. iterate through dependents of #1
+                // 4. insert #2 into deps of #3
+                // 5. decrement dep count
+
+                println!("jobs: {:?}", ordered);
+
+                let empty_deps: Arc<Vec<Item>> = Arc::new(Vec::new());
+
+                // TODO: this seems terribly inefficient
+                for (&name, jobs) in &self.bindings {
+                    if !jobs.is_empty() {
+                        continue;
+                    }
+
+                    println!("{} is an empty binding", name);
+
+                    self.finished_deps.insert(name, empty_deps.clone());
+
+                    let dependents = self.graph.dependents_of(name);
+
+                    if dependents.is_none() {
+                        continue;
+                    }
+
+                    println!("it also has dependents");
+
+                    // TODO:
+                    // if graph stored job ids instead we wouldnt need this nested for?
+                    // i think we would
+                    for &dependent in dependents.unwrap() {
+                        println!("checking dependent: {}", dependent);
+
+                        for job in &mut ordered {
+                            if job.binding == dependent {
+                                println!("job id ({}) is a dependent", job.id);
+
+                                job.dependency_count -= 1;
+
+                                println!("its dependency count is now {}", job.dependency_count);
+
+                                if job.dependency_count == 0 {
+                                    println!("it only consisted of this empty dependency; inserting dependencies");
+                                    let mut deps = BTreeMap::new();
+                                    deps.insert(name, empty_deps.clone());
+                                    job.item.dependencies = Arc::new(deps);
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // total number of jobs
                 let total_jobs = ordered.len();
@@ -418,7 +471,8 @@ impl Site {
                 }
             },
             Err(cycle) => {
-                panic!("a dependency cycle was detected: {:?}", cycle);
+                println!("a dependency cycle was detected: {:?}", cycle);
+                ::exit(1);
             },
         }
 
@@ -453,6 +507,7 @@ impl Site {
 
         // associate the job id with the binding
         self.bindings.entry(binding).get()
+            // TODO: audit this line; this should never happen thanks to bind()
             .unwrap_or_else(|v| v.insert(vec![]))
             .push(index);
 
@@ -466,12 +521,6 @@ impl Site {
             trace!("has dependencies: {:?}", dependencies);
 
             for &dep in dependencies {
-                // TODO: contains_key?
-                if !self.bindings.get(dep).map(|d| !d.is_empty()).unwrap_or(false) {
-                    println!("`{}` depends on `{}`, but `{}` contains no items to satisfy that dependency", binding, dep, binding);
-                    ::exit(1);
-                }
-
                 trace!("setting dependency {} -> {}", dep, binding);
                 self.graph.add_edge(dep, binding);
             }
@@ -483,7 +532,7 @@ impl Site {
             .unwrap_or_else(|v| v.insert(vec![]));
 
         for dependency in &rule.dependencies {
-            if !self.bindings.get(dependency).is_some() {
+            if !self.bindings.contains_key(dependency) {
                 println!("`{}` depends on unregistered rule `{}`", rule.name, dependency);
                 ::exit(1);
             }

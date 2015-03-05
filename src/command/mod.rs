@@ -136,7 +136,7 @@ pub fn from_args(mut configuration: Configuration) -> Box<Command> {
                 .exit();
         },
         None => {
-            panic!("can't create a command from `None`");
+            unreachable!();
         }
     };
 
