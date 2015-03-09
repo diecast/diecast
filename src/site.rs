@@ -69,16 +69,14 @@ impl Site {
             .collect::<Vec<PathBuf>>();
 
         for rule in &rules {
+            let mut binding: Vec<Item> = vec![];
+
             match rule.kind {
                 rule::Kind::Creating(ref path) => {
                     let compiler = rule.compiler.clone();
                     let conf = self.configuration.clone();
 
-                    self.manager.add_job(
-                        rule.name,
-                        Item::new(conf, None, Some(path.clone())),
-                        compiler,
-                        &rule.dependencies);
+                    binding.push(Item::new(conf, None, Some(path.clone())));
                 },
                 rule::Kind::Matching(ref pattern) => {
                     for path in &paths {
@@ -90,15 +88,13 @@ impl Site {
                         let conf = self.configuration.clone();
 
                         if pattern.matches(&relative) {
-                            self.manager.add_job(
-                                rule.name,
-                                Item::new(conf, Some(relative), None),
-                                rule.compiler.clone(),
-                                &rule.dependencies);
+                            binding.push(Item::new(conf, Some(relative), None));
                         }
                     }
                 },
             }
+
+            self.manager.add(rule.name, rule.compiler.clone(), &rule.dependencies, binding);
         }
 
         mem::replace(&mut self.rules, rules);

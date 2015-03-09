@@ -187,16 +187,6 @@ pub struct Manager {
     /// a map of bindings to the list of jobs that haven't been processed yet
     waiting: BTreeMap<&'static str, Vec<Job>>,
 
-    /// TODO: probably make this a flat vec?
-    /// a queue of jobs that are ready
-    ///
-    /// while let Some(jobs) = manager.ready() {
-    ///     for job in jobs {
-    ///         pool.enqueue(jobs)
-    ///     }
-    /// }
-    ready: VecDeque<Vec<Job>>,
-
     /// the dependencies as they're being built
     staging: BTreeMap<&'static str, Vec<Item>>,
 
@@ -228,7 +218,6 @@ impl Manager {
             dependencies: BTreeMap::new(),
             order: VecDeque::new(),
             waiting: BTreeMap::new(),
-            ready: VecDeque::new(),
             staging: BTreeMap::new(),
             finished: BTreeMap::new(),
             paused: BTreeMap::new(),
@@ -237,62 +226,63 @@ impl Manager {
         }
     }
 
-    pub fn add_job(&mut self,
-           binding: &'static str,
-           item: Item,
-           compiler: Arc<Box<Compile>>,
-           dependencies: &[&'static str]) {
-        self.count += 1;
+    pub fn add(&mut self,
+               binding: &'static str,
+               compiler: Arc<Box<Compile>>,
+               dependencies: &[&'static str],
+               items: Vec<Item>) {
+        self.waiting.insert(binding, vec![]);
+        self.item_count.insert(binding, items.len());
 
-        let job = Job::new(binding, item, compiler, self.count);
+        for item in items {
+            self.count += 1;
 
-        self.waiting.entry(binding).get().unwrap_or_else(|v| v.insert(vec![])).push(job);
-        *self.item_count.entry(binding).get().unwrap_or_else(|v| v.insert(0)) += 1;
+            let job =
+                Job::new(
+                    binding,
+                    item,
+                    compiler.clone(),
+                    self.count);
 
-        // TODO: this will be set to the correct number after graph resolution?
-        self.dependencies.insert(binding, 0);
+            self.waiting.get_mut(binding).unwrap().push(job);
 
-        self.graph.add_node(binding);
+            // TODO: this will be set to the correct number after graph resolution?
+            self.dependencies.insert(binding, 0);
 
-        if !dependencies.is_empty() {
-            trace!("has dependencies: {:?}", dependencies);
+            self.graph.add_node(binding);
 
-            for &dep in dependencies {
-                trace!("setting dependency {} -> {}", dep, binding);
-                self.graph.add_edge(dep, binding);
+            if !dependencies.is_empty() {
+                trace!("has dependencies: {:?}", dependencies);
+
+                for &dep in dependencies {
+                    trace!("setting dependency {} -> {}", dep, binding);
+                    self.graph.add_edge(dep, binding);
+                }
             }
         }
     }
 
     fn satisfy(&mut self, binding: &'static str) {
-        let dependents = self.graph.dependents_of(binding);
-
-        if dependents.is_none() {
-            return;
-        }
-
-        let dependents = dependents.unwrap();
-
-        for name in self.waiting.keys() {
-            if dependents.contains(name) {
-                let count = self.dependencies.get_mut(name).unwrap();
-                *count -= 1;
+        if let Some(dependents) = self.graph.dependents_of(binding) {
+            for name in self.item_count.keys() {
+                if dependents.contains(name) {
+                    *self.dependencies.entry(name).get().unwrap_or_else(|v| v.insert(0)) -= 1;
+                }
             }
         }
     }
 
-    fn ready<'a>(&'a mut self) -> Drain<'a, Vec<Job>> {
+    fn ready(&mut self) -> VecDeque<(&'static str, Vec<Job>)> {
         let order = mem::replace(&mut self.order, VecDeque::new());
         let (ready, waiting): (VecDeque<&'static str>, VecDeque<&'static str>) =
             order.into_iter().partition(|&binding| self.dependencies[binding] == 0);
 
         self.order = waiting;
 
-        for name in ready {
-            self.ready.push_back(self.waiting.remove(name).unwrap());
-        }
+        trace!("the remaining order is {:?}", self.order);
+        trace!("the ready bindings are {:?}", ready);
 
-        self.ready.drain()
+        ready.iter().map(|&name| (name, self.waiting.remove(name).unwrap())).collect()
     }
 
     pub fn execute(&mut self) {
@@ -303,85 +293,21 @@ impl Manager {
 
         match self.graph.resolve() {
             Ok(order) => {
-                // swap out the jobs in order to consume them
-                // satisfy dependents of empty rules
-                // 1. iterate through bindings to find empty vecs
-                // 2. create arc<empty vec> for key of #1
-                // 3. iterate through dependents of #1
-                // 4. insert #2 into deps of #3
-                // 5. decrement dep count
+                self.order = order;
 
-                let mut jobs = mem::replace(&mut self.waiting, BTreeMap::new());
+                println!("jobs: {:?}", self.waiting);
 
-                println!("jobs: {:?}", jobs);
+                trace!("setting dependency counts");
+                self.set_dependency_counts();
 
-                let empty_deps: Arc<Vec<Item>> = Arc::new(Vec::new());
-                // TODO: this requires that we always insert at least a name for job map?
-                let empty_map =
-                    jobs.iter()
-                    .filter(|&(_, jobs)| jobs.is_empty())
-                    .map(|(&name, _)| {
-                        let mut bt = BTreeMap::new();
-                        bt.insert(name, empty_deps.clone());
+                trace!("enqueueing ready jobs");
+                self.enqueue_ready();
 
-                        // TODO: hack to put it here?
-                        self.finished.insert(name, empty_deps.clone());
-
-                        (name, Arc::new(bt))
-                    })
-                    .collect::<BTreeMap<&'static str, ::item::Dependencies>>();
-
-                let empty_binds = empty_map.keys().cloned().collect::<BTreeSet<&'static str>>();
-
-                // set the dependency counts
-                for (name, jobs) in &mut jobs {
-                    let mut dep_count = self.graph.dependency_count(name);
-
-                    let empty_dep = if let Some(deps) = self.graph.dependencies_of(name) {
-                        let mut empty_deps = deps.intersection(&empty_binds).peekable();
-                        let has_empty_deps = empty_deps.peek().is_some();
-
-                        if dep_count == 1 && has_empty_deps {
-                            dep_count -= 1;
-                            Some(empty_map[*empty_deps.next().unwrap()].clone())
-                        } else if has_empty_deps {
-                            dep_count -= empty_deps.count();
-                            None
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-
-                    self.dependencies.insert(name, dep_count);
-
-                    if let Some(ref dep) = empty_dep {
-                        for job in jobs {
-                            job.item.dependencies = dep.clone();
-                        }
-                    }
-                }
-
-                // for jobs in self.manager.ready() {
-                //     for job in jobs {
-                //         self.pool.enqueue(job).unwrap();
-                //     }
-                // }
-
-                for name in order {
-                    if self.dependencies[name] == 0 {
-                        if let Some(jobs) = jobs.remove(name) {
-                            for job in jobs {
-                                self.pool.enqueue(job).unwrap();
-                            }
-                        }
-                    }
-                }
-
+                trace!("looping");
                 loop {
                     match self.pool.dequeue().unwrap() {
                         Ok(job) => {
+                            trace!("received job from pool");
                             if job.is_paused {
                                 self.handle_paused(job);
                             } else {
@@ -416,7 +342,6 @@ impl Manager {
         self.item_count.clear();
         self.order.clear();
         self.waiting.clear();
-        self.ready.clear();
         self.staging.clear();
         self.finished.clear();
         self.paused.clear();
@@ -525,69 +450,76 @@ impl Manager {
             self.staging.remove(&binding).unwrap()
         }));
 
-        let dependents = self.graph.dependents_of(binding);
-
-        // no dependents
-        if dependents.is_none() {
-            return false;
-        }
-
-        // prepare dependencies for now-ready dependents
-
-        let dependents = dependents.unwrap();
-
-        let mut ready = Vec::new();
-
-        for name in self.item_count.keys() {
-            if dependents.contains(name) {
-                let count = self.dependencies.get_mut(name).unwrap();
-                *count -= 1;
-
-                // TODO: just check if it's 1
-                if *count == 0 {
-                    for job in self.waiting.remove(name).unwrap() {
-                        // self.job_pool.enqueue(job).unwrap();
-                        ready.push(job);
-                    }
-                }
-            }
-        }
-
-        trace!("finished: {:?}", self.finished);
-
-        let mut deps_cache = BTreeMap::new();
-        let mut dependents = ready.iter().map(|j| j.binding).collect::<Vec<&'static str>>();
-
-        dependents.sort();
-        dependents.dedup();
-
-        // this creates a cache of binding -> dependencies
-        // this way multiple jobs that are part of the same binding
-        // dont end up reconstructing the dependencies each time
-        //
-        // there's no need to add the save states due to barriers here,
-        // because this will be the first time the jobs are going to run,
-        // so they won't have reached any barriers to begin with
-        for dependent in dependents {
-            let mut deps = BTreeMap::new();
-
-            for &dep in self.graph.dependencies_of(dependent).unwrap() {
-                trace!("adding dependency: {:?}", dep);
-                deps.insert(dep, self.finished[dep].clone());
-            }
-
-            deps_cache.insert(dependent, Arc::new(deps));
-        }
-
-        // attach the dependencies and dispatch
-        for mut job in ready {
-            job.item.dependencies = deps_cache[job.binding].clone();
-            trace!("job now ready: {:?}", job);
-            self.pool.enqueue(job).unwrap();
-        }
+        self.satisfy(binding);
+        self.enqueue_ready();
 
         return false;
     }
 
+    fn set_dependency_counts(&mut self) {
+        let empty = Arc::new(Vec::new());
+
+        let mut waiting = mem::replace(&mut self.waiting, BTreeMap::new());
+
+        // TODO: consolidate with satisfy()?
+        // loop again because now all dependencies are set
+        for (name, jobs) in &waiting {
+            let count = self.graph.dependency_count(name);
+            trace!("{} has {} dependencies", name, count);
+
+            // this contortion allows us to use a single loop instead of looping once
+            // to set the dependencies then looping again to do all of this
+            // the way this works is that the current binding gets its dependency count
+            // added to a potentially-existing dependency count
+            // this way, the dependency count can go negative due to the code below,
+            // but once that binding gets run through this it will add the dependency
+            // count to it, essentially having the same effect
+            *self.dependencies.entry(name).get().unwrap_or_else(|v| v.insert(0)) += count;
+
+            trace!("item count of {}: {:?}", name, self.item_count.get(name).cloned());
+
+            if jobs.is_empty() {
+                trace!("{} is an empty dependency", name);
+                self.finished.insert(name, empty.clone());
+
+                trace!("decrementing dep count of dependents");
+                self.satisfy(name);
+            }
+        }
+
+        self.waiting = mem::replace(&mut waiting, BTreeMap::new());
+    }
+
+    fn enqueue_ready(&mut self) {
+        // prepare dependencies for now-ready dependents
+        let mut deps_cache = BTreeMap::new();
+
+        for (name, jobs) in self.ready() {
+            if jobs.is_empty() {
+                continue;
+            }
+
+            trace!("{} is ready", name);
+
+            if let Vacant(entry) = deps_cache.entry(name) {
+                let mut deps = BTreeMap::new();
+
+                if let Some(ds) = self.graph.dependencies_of(name) {
+                    for &dep in ds {
+                        trace!("adding dependency: {:?}", dep);
+                        deps.insert(dep, self.finished[dep].clone());
+                    }
+                }
+
+                entry.insert(Arc::new(deps));
+            }
+
+            for mut job in jobs {
+                job.item.dependencies = deps_cache[job.binding].clone();
+                trace!("job now ready: {:?}", job);
+                self.pool.enqueue(job).unwrap();
+            }
+        }
+    }
 }
 
