@@ -20,7 +20,8 @@
 
 use glob;
 use regex::Regex;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::collections::HashSet;
 
 /// A kind of pattern that can be used for
 /// filtering the files in the input directory.
@@ -119,6 +120,13 @@ impl Pattern for str {
 impl Pattern for Path {
     fn matches(&self, p: &Path) -> bool {
         self == p
+    }
+}
+
+impl Pattern for HashSet<PathBuf> {
+    fn matches(&self, p: &Path) -> bool {
+        // FIXME: upon https://github.com/rust-lang/rust/issues/23261
+        self.contains(&p.to_path_buf())
     }
 }
 

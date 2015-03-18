@@ -1,5 +1,6 @@
-use std::path::{PathBuf, AsPath};
+use std::path::{Path, PathBuf};
 use pattern::Pattern;
+use std::convert::AsRef;
 
 use command;
 
@@ -43,11 +44,11 @@ pub struct Configuration {
 
 impl Configuration {
     pub fn new<P: ?Sized, Q: ?Sized>(input: &P, output: &Q) -> Configuration
-    where P: AsPath, Q: AsPath {
+    where P: AsRef<Path>, Q: AsRef<Path> {
         Configuration {
             // TODO: setting it to error by default seems like a wart
-            input: input.as_path().to_path_buf(),
-            output: output.as_path().to_path_buf(),
+            input: input.as_ref().to_path_buf(),
+            output: output.as_ref().to_path_buf(),
             command: command::Kind::None,
             threads: ::std::os::num_cpus(),
             is_verbose: false,

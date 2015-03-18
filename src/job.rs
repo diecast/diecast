@@ -1,67 +1,42 @@
-use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, SendError, Receiver, RecvError};
+use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::thread;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::collections::btree_map::Entry::{Vacant, Occupied};
-use std::collections::vec_deque::Drain;
 use std::mem;
+use std::fmt;
 
-use compiler::{self, Compile, is_paused};
-use item::Item;
+use binding::{self, Bind};
 use dependency::Graph;
 use rule::Rule;
+use compiler;
 
 pub struct Job {
-    pub id: usize,
-
-    // TODO: not a fan of this being here. maybe global rwlock lookup-table?
-    pub binding: &'static str,
-
-    pub item: Item,
-    pub compiler: Arc<Box<Compile>>,
-
-    pub is_paused: bool,
+    pub bind: Bind,
+    pub compiler: Arc<Box<binding::Handler + Sync + Send>>,
 }
 
 impl fmt::Debug for Job {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}. [{}]: {:?}",
-               self.id,
-               self.binding,
-               self.item)
+        write!(f, "[{}]", self.bind.data.read().unwrap().name)
     }
 }
 
 impl Job {
-    pub fn new(
-        binding: &'static str,
-        item: Item,
-        compiler: Arc<Box<Compile>>,
-        id: usize)
-    -> Job {
+    pub fn new<C>(bind: Bind, compiler: C) -> Job
+    where C: binding::Handler + Sync + Send + 'static {
         Job {
-            id: id,
-            binding: binding,
-            item: item,
-            compiler: compiler,
-            is_paused: false,
+            bind: bind,
+            compiler: Arc::new(Box::new(compiler)),
         }
     }
 
-    pub fn process(mut self, tx: Sender<Result<Job, Error>>) {
-        match self.compiler.compile(&mut self.item) {
-            Ok(()) => {
-                // TODO: we're still special-casing Chain here, doesn't matter?
-                self.is_paused = is_paused(&self.item);
+    pub fn into_bind(self) -> Bind {
+        self.bind
+    }
 
-                tx.send(Ok(self)).unwrap()
-            },
-            Err(e) => {
-                println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", self, e);
-                tx.send(Err(Error::Err)).unwrap();
-            }
-        }
+    pub fn process(&mut self) -> compiler::Result {
+        // <Compiler as binding::Handler>::handle(&self.compiler, &mut self.bind)
+        self.compiler.handle(&mut self.bind)
     }
 }
 
@@ -102,10 +77,6 @@ impl Drop for Sentinel {
 }
 
 pub struct Pool {
-    // How the threadpool communicates with subthreads.
-    //
-    // This is the only such Sender, so when it is dropped all subthreads will
-    // quit.
     enqueue: Sender<Job>,
     dequeue: Receiver<Result<Job, Error>>,
 }
@@ -125,12 +96,11 @@ impl Pool {
         let (tx, dequeue) = channel::<Result<Job, Error>>();
 
         // Threadpool threads
-        for _ in 0..threads {
+        for _ in 0 .. threads {
             let rx = rx.clone();
             let tx = tx.clone();
 
             thread::spawn(move || {
-                // Will spawn a new thread on panic unless it is cancelled.
                 let sentinel = Sentinel::new(tx.clone());
 
                 loop {
@@ -142,8 +112,18 @@ impl Pool {
                     };
 
                     match message {
-                        Ok(job) => {
-                            job.process(tx.clone());
+                        Ok(mut job) => {
+                            trace!("dequeued {:?}", job);
+
+                            match job.process() {
+                                Ok(()) => {
+                                    tx.send(Ok(job)).unwrap()
+                                },
+                                Err(e) => {
+                                    println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", job, e);
+                                    tx.send(Err(Error::Err)).unwrap();
+                                }
+                            }
                         },
 
                         // The Taskpool was dropped.
@@ -171,30 +151,16 @@ impl Pool {
 }
 
 pub struct Manager {
-    graph: Graph<&'static str>,
-
-    /// TODO: should this probably also include the Path and other info?
-    ///       or perhaps have reverse-map of path -> binding? idk
-    /// number of items found
-    item_count: BTreeMap<&'static str, usize>,
+    graph: Graph<String>,
 
     /// the dependency count of each binding
-    dependencies: BTreeMap<&'static str, usize>,
-
-    /// the order that the bindings have to be evaluated in
-    order: VecDeque<&'static str>,
+    dependencies: BTreeMap<String, usize>,
 
     /// a map of bindings to the list of jobs that haven't been processed yet
-    waiting: BTreeMap<&'static str, Vec<Job>>,
-
-    /// the dependencies as they're being built
-    staging: BTreeMap<&'static str, Vec<Item>>,
+    waiting: VecDeque<Job>,
 
     /// finished dependencies
-    finished: BTreeMap<&'static str, Arc<Vec<Item>>>,
-
-    /// dependencies that are currently paused due to a barrier
-    paused: BTreeMap<&'static str, Vec<Job>>,
+    finished: BTreeMap<String, Arc<Bind>>,
 
     /// Thread pool to process jobs
     pool: Pool,
@@ -214,75 +180,122 @@ impl Manager {
     pub fn new(threads: usize) -> Manager {
         Manager {
             graph: Graph::new(),
-            item_count: BTreeMap::new(),
             dependencies: BTreeMap::new(),
-            order: VecDeque::new(),
-            waiting: BTreeMap::new(),
-            staging: BTreeMap::new(),
+            waiting: VecDeque::new(),
             finished: BTreeMap::new(),
-            paused: BTreeMap::new(),
             pool: Pool::new(threads),
             count: 0,
         }
     }
 
-    pub fn add(&mut self,
-               binding: &'static str,
-               compiler: Arc<Box<Compile>>,
-               dependencies: &[&'static str],
-               items: Vec<Item>) {
-        self.waiting.insert(binding, vec![]);
-        self.item_count.insert(binding, items.len());
+    pub fn add(&mut self, bind: Bind, rule: &Rule) {
+        let binding = bind.data.read().unwrap().name.clone();
 
-        for item in items {
-            self.count += 1;
+        // TODO: this still necessary?
+        // it's only used to determine if anything will actually be done
+        // operate on a binding-level
+        self.count += 1;
 
-            let job =
-                Job::new(
-                    binding,
-                    item,
-                    compiler.clone(),
-                    self.count);
+        let compiler = rule.get_compiler();
 
-            self.waiting.get_mut(binding).unwrap().push(job);
+        // if there's no compiler then no need to dispatch a job
+        // or anything like that
+        if let &Some(ref compiler) = compiler {
+            self.waiting.push_front(Job::new(bind, compiler.clone()));
+        }
 
-            // TODO: this will be set to the correct number after graph resolution?
-            self.dependencies.insert(binding, 0);
+        self.graph.add_node(binding.clone());
 
-            self.graph.add_node(binding);
+        let dependencies = rule.dependencies();
 
-            if !dependencies.is_empty() {
-                trace!("has dependencies: {:?}", dependencies);
+        if !dependencies.is_empty() {
+            trace!("has dependencies: {:?}", dependencies);
 
-                for &dep in dependencies {
-                    trace!("setting dependency {} -> {}", dep, binding);
-                    self.graph.add_edge(dep, binding);
-                }
+            for dep in dependencies {
+                trace!("setting dependency {} -> {}", dep, binding);
+                self.graph.add_edge(dep.clone(), binding.clone());
             }
+        }
+
+        if compiler.is_none() {
+            self.satisfy(&binding);
+            self.enqueue_ready();
         }
     }
 
-    fn satisfy(&mut self, binding: &'static str) {
+    // TODO: will need Borrow bound
+    fn satisfy(&mut self, binding: &str) {
         if let Some(dependents) = self.graph.dependents_of(binding) {
-            for name in self.item_count.keys() {
-                if dependents.contains(name) {
+            let names = self.dependencies.keys().cloned().collect::<Vec<String>>();
+            for name in names {
+                if dependents.contains(&name) {
                     *self.dependencies.entry(name).get().unwrap_or_else(|v| v.insert(0)) -= 1;
                 }
             }
         }
     }
 
-    fn ready(&mut self) -> VecDeque<(&'static str, Vec<Job>)> {
-        let order = mem::replace(&mut self.order, VecDeque::new());
-        let (ready, waiting): (VecDeque<&'static str>, VecDeque<&'static str>) =
-            order.into_iter().partition(|&binding| self.dependencies[binding] == 0);
+    fn ready(&mut self) -> VecDeque<Job> {
+        let waiting = mem::replace(&mut self.waiting, VecDeque::new());
 
-        self.order = waiting;
+        let (ready, waiting): (VecDeque<Job>, VecDeque<Job>) =
+            waiting.into_iter()
+               .partition(|job| self.dependencies[&job.bind.data.read().unwrap().name] == 0);
 
-        trace!("the remaining order is {:?}", self.order);
+        self.waiting = waiting;
+
+        trace!("the remaining order is {:?}", self.waiting);
         trace!("the ready bindings are {:?}", ready);
 
-        ready.iter().map(|&name| (name, self.waiting.remove(name).unwrap())).collect()
+        ready
+    }
+
+    pub fn sort_jobs(&mut self, order: VecDeque<String>) {
+        let mut job_map =
+            mem::replace(&mut self.waiting, VecDeque::new())
+            .into_iter()
+            .map(|job| {
+                let name = job.bind.data.read().unwrap().name.to_string();
+                (name, job)
+            })
+            .collect::<HashMap<String, Job>>();
+
+        // put the jobs into the order provided
+        let ordered =
+            order.into_iter()
+            .map(|name| {
+                let job = job_map.remove(&name).unwrap();
+
+                // set dep counts
+                let name = job.bind.data.read().unwrap().name.clone();
+                let empty =
+                    Arc::new(
+                        Bind::new(
+                            name.clone(),
+                            job.bind.data.read().unwrap().configuration.clone()));
+
+                let count = self.graph.dependency_count(&name);
+                trace!("{} has {} dependencies", name, count);
+
+                *self.dependencies.entry(name.clone()).get().unwrap_or_else(|v| v.insert(0)) += count;
+
+                if job.bind.items.is_empty() {
+                    trace!("{} is an empty dependency", name);
+                    self.finished.insert(name.clone(), empty.clone());
+
+                    // this can go negative but it balances out once the dep
+                    // is processed by the above
+                    trace!("decrementing dep count of dependents");
+                    self.satisfy(&name);
+                }
+
+                return job;
+            })
+        .collect::<VecDeque<Job>>();
+
+        mem::replace(&mut self.waiting, ordered);
+
+        assert!(job_map.is_empty(), "not all jobs were sorted!");
     }
 
     pub fn execute(&mut self) {
@@ -293,12 +306,9 @@ impl Manager {
 
         match self.graph.resolve() {
             Ok(order) => {
-                self.order = order;
+                self.sort_jobs(order);
 
                 println!("jobs: {:?}", self.waiting);
-
-                trace!("setting dependency counts");
-                self.set_dependency_counts();
 
                 trace!("enqueueing ready jobs");
                 self.enqueue_ready();
@@ -308,12 +318,8 @@ impl Manager {
                     match self.pool.dequeue().unwrap() {
                         Ok(job) => {
                             trace!("received job from pool");
-                            if job.is_paused {
-                                self.handle_paused(job);
-                            } else {
-                                if self.handle_done(job) {
-                                    break;
-                                }
+                            if self.handle_done(job) {
+                                break;
                             }
                         },
                         Err(Error::Err) => {
@@ -339,186 +345,66 @@ impl Manager {
     // TODO: audit
     fn reset(&mut self) {
         self.graph = Graph::new();
-        self.item_count.clear();
-        self.order.clear();
         self.waiting.clear();
-        self.staging.clear();
         self.finished.clear();
-        self.paused.clear();
         self.count = 0;
     }
 
-    fn handle_paused(&mut self, current: Job) {
-        trace!("paused {}", current.id);
-
-        let binding = current.binding;
-
-        // FIXME: this should use job.item.data.get::<Barriers>().unwrap().counts.last()
-        // total number of jobs in the binding
-        // let total = self.bindings[binding].len();
-        let total =
-            current.item.data.get::<compiler::Barriers>()
-                .and_then(|bars| {
-                    let counts = bars.counts.lock().unwrap();
-                    counts.last().cloned()
-                })
-                .unwrap_or_else(|| self.item_count[binding]);
-
-        println!("barrier limit for {} is {}", current.item, total);
-
-        // add this paused job to the collection of
-        // paused jobs for this binding
-        // and return whether all jobs have been paused
-        let finished = {
-            let jobs = self.paused.entry(binding).get().unwrap_or_else(|v| v.insert(vec![]));
-            jobs.push(current);
-            jobs.len() == total
-        };
-
-        trace!("paused so far ({}): {:?}", self.paused[binding].len(), self.paused[binding]);
-        trace!("total to pause: {}", total);
-        trace!("finished: {}", finished);
-
-        // there are still more jobs that haven't hit the barrier
-        if !finished {
-            return;
-        }
-
-        // get paused jobs to begin re-dispatching them
-        let jobs = self.paused.remove(&binding).unwrap();
-
-        // create the new set of dependencies
-        // if the binding already had dependencies, copy them
-        let mut new_deps = (*jobs[0].item.dependencies).clone();
-
-        // insert the frozen state of these jobs
-        new_deps.insert(binding, {
-            Arc::new(jobs.iter()
-                .map(|j| j.item.clone())
-                .collect::<Vec<Item>>())
-        });
-
-        trace!("checking dependencies of \"{}\"", binding);
-
-        let arc_map = Arc::new(new_deps);
-
-        // package each job with its dependencies
-        for mut job in jobs {
-            job.item.dependencies = arc_map.clone();
-
-            trace!("re-enqueuing: {:?}", job);
-
-            self.pool.enqueue(job).unwrap();
-        }
-    }
-
     fn handle_done(&mut self, current: Job) -> bool {
-        trace!("finished {}", current.id);
+        trace!("finished {}", current.bind.data.read().unwrap().name);
         trace!("before waiting: {:?}", self.waiting);
 
         if self.waiting.is_empty() {
             return true;
         }
 
-        let binding = current.binding;
-        let total = self.item_count[binding];
-
-        // add to collection of finished items
-        let finished = match self.staging.entry(binding) {
-            Vacant(entry) => {
-                entry.insert(vec![current.item]);
-                1 == total
-            },
-            Occupied(mut entry) => {
-                entry.get_mut().push(current.item);
-                entry.get().len() == total
-            },
-        };
-
-        trace!("checking if done");
-
-        // if the binding isn't complete, nothing more to do
-        if !finished {
-            return false;
-        }
+        let binding = current.bind.data.read().unwrap().name.to_string();
 
         // binding is complete
         trace!("binding {} finished", binding);
 
         // if they're done, move from staging to finished
-        self.finished.insert(binding, Arc::new({
-            self.staging.remove(&binding).unwrap()
+        self.finished.insert(binding.clone(), Arc::new({
+            current.into_bind()
         }));
 
-        self.satisfy(binding);
+        self.satisfy(&binding);
         self.enqueue_ready();
 
         return false;
     }
 
-    fn set_dependency_counts(&mut self) {
-        let empty = Arc::new(Vec::new());
-
-        let mut waiting = mem::replace(&mut self.waiting, BTreeMap::new());
-
-        // TODO: consolidate with satisfy()?
-        // loop again because now all dependencies are set
-        for (name, jobs) in &waiting {
-            let count = self.graph.dependency_count(name);
-            trace!("{} has {} dependencies", name, count);
-
-            // this contortion allows us to use a single loop instead of looping once
-            // to set the dependencies then looping again to do all of this
-            // the way this works is that the current binding gets its dependency count
-            // added to a potentially-existing dependency count
-            // this way, the dependency count can go negative due to the code below,
-            // but once that binding gets run through this it will add the dependency
-            // count to it, essentially having the same effect
-            *self.dependencies.entry(name).get().unwrap_or_else(|v| v.insert(0)) += count;
-
-            trace!("item count of {}: {:?}", name, self.item_count.get(name).cloned());
-
-            if jobs.is_empty() {
-                trace!("{} is an empty dependency", name);
-                self.finished.insert(name, empty.clone());
-
-                trace!("decrementing dep count of dependents");
-                self.satisfy(name);
-            }
-        }
-
-        self.waiting = mem::replace(&mut waiting, BTreeMap::new());
-    }
-
+    // TODO: I think this should be part of satisfy
     fn enqueue_ready(&mut self) {
         // prepare dependencies for now-ready dependents
         let mut deps_cache = BTreeMap::new();
 
-        for (name, jobs) in self.ready() {
-            if jobs.is_empty() {
+        for mut job in self.ready() {
+            if job.bind.items.is_empty() {
                 continue;
             }
 
+            let name = job.bind.data.read().unwrap().name.clone();
             trace!("{} is ready", name);
 
-            if let Vacant(entry) = deps_cache.entry(name) {
+            deps_cache.entry(name.clone()).get().unwrap_or_else(|entry| {
                 let mut deps = BTreeMap::new();
 
-                if let Some(ds) = self.graph.dependencies_of(name) {
-                    for &dep in ds {
+                // use Borrow?
+                if let Some(ds) = self.graph.dependencies_of(&name) {
+                    for dep in ds {
                         trace!("adding dependency: {:?}", dep);
-                        deps.insert(dep, self.finished[dep].clone());
+                        deps.insert(dep.clone(), self.finished[dep].clone());
                     }
                 }
 
-                entry.insert(Arc::new(deps));
-            }
+                entry.insert(Arc::new(deps))
+            });
 
-            for mut job in jobs {
-                job.item.dependencies = deps_cache[job.binding].clone();
-                trace!("job now ready: {:?}", job);
-                self.pool.enqueue(job).unwrap();
-            }
+            let deps = deps_cache[&name].clone();
+            job.bind.set_dependencies(deps);
+            trace!("job now ready: {:?}", job);
+            self.pool.enqueue(job).unwrap();
         }
     }
 }

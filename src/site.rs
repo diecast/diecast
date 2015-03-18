@@ -1,16 +1,15 @@
 //! Site generation.
 
 use std::sync::Arc;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::HashSet;
 use std::fs;
 
 // use threadpool::job::Pool;
 
 use pattern::Pattern;
-use job::{self, Job};
-use compiler::{self, Compile};
+use job;
 use item::Item;
-use dependency::Graph;
+use binding::Bind;
 use configuration::Configuration;
 use rule::{self, Rule};
 
@@ -68,36 +67,140 @@ impl Site {
             })
             .collect::<Vec<PathBuf>>();
 
-        for rule in &rules {
-            let mut binding: Vec<Item> = vec![];
+        // TODO
+        // this is complicated because after finding the items of a rule
+        // and constructing its binding, the rule.matches(cb) method
+        // can be used to perform logic based on the matches (binding)
+        // this can have the effect of creating other rules, which would
+        // modify the rules which were just iterated
+        // for rule in &rules {
+        //     let mut bind = Bind::new(rule.name.clone());
 
-            match rule.kind {
-                rule::Kind::Creating(ref path) => {
-                    let compiler = rule.compiler.clone();
+        //     match rule.kind {
+        //         rule::Kind::Creating(ref path) => {
+        //             let conf = self.configuration.clone();
+
+        //             bind.push(Item::to(path.clone(), conf));
+        //         },
+        //         rule::Kind::Matching(ref pattern) => {
+        //             for path in &paths {
+        //                 let relative =
+        //                     path.relative_from(&self.configuration.input).unwrap()
+        //                     .to_path_buf();
+
+        //                 let conf = self.configuration.clone();
+
+        //                 if pattern.matches(&relative) {
+        //                     bind.push(Item::from(relative, conf));
+        //                 }
+        //             }
+        //         },
+        //     }
+
+        //     rules.extend(rule.callback(&bind).into_iter());
+
+        //     // run matches callback here?
+        //     // perhaps the callback passed to from_matches
+        //     // should return a vector of rules?
+        //     // rule.from_matches(|bind: &Bind| -> Vec<Rule> {})
+
+        //     self.manager.add(bind, rule.compiler.clone(), &rule.dependencies);
+        // }
+
+        // TODO
+        // this should probably be a recursive function that keeps
+        // processing the rules, or an iterative-stack solution
+        enum LifeTime {
+            Dynamic,
+            Static,
+        }
+
+        let mut collected = Vec::new();
+        let mut rules = rules.into_iter().map(|r| (LifeTime::Static, r)).collect::<Vec<(LifeTime, Rule)>>();
+
+        while let Some((life, rule)) = rules.pop() {
+            let mut bind = Bind::new(rule.name().to_string(), self.configuration.clone());
+            let data = bind.data.clone();
+
+            // TODO
+            // this should be able to go into its own method on Rule?
+            match *rule.operation() {
+                rule::Operation::Creating(ref path) => {
                     let conf = self.configuration.clone();
 
-                    binding.push(Item::new(conf, None, Some(path.clone())));
+                    bind.push(Item::to(path.clone(), data.clone()));
                 },
-                rule::Kind::Matching(ref pattern) => {
+                rule::Operation::Matching(ref pattern) => {
                     for path in &paths {
                         let relative =
-                            path.relative_from(&self.configuration.input)
-                            .unwrap()
+                            path.relative_from(&self.configuration.input).unwrap()
                             .to_path_buf();
 
                         let conf = self.configuration.clone();
 
                         if pattern.matches(&relative) {
-                            binding.push(Item::new(conf, Some(relative), None));
+                            bind.push(Item::from(relative, data.clone()));
                         }
                     }
                 },
             }
 
-            self.manager.add(rule.name, rule.compiler.clone(), &rule.dependencies, binding);
+            // add any potential rules returned from the callback
+            if let &Some(ref callback) = rule.callback() {
+                rules.extend(
+                    callback(&bind).into_iter()
+                    .map(|r| (LifeTime::Dynamic, r.depends_on(&rule))));
+            }
+
+            // TODO: should handle compiler option clone
+            self.manager.add(bind, &rule);
+
+            // only save the static rules
+            if let LifeTime::Static = life {
+                collected.push(rule);
+            }
         }
 
-        mem::replace(&mut self.rules, rules);
+        // for rule in &self.rules {
+        //     let mut bind = Bind::new(rule.name.clone());
+
+        //     match rule.kind {
+        //         rule::Kind::Creating(ref path) => {
+        //             let conf = self.configuration.clone();
+
+        //             bind.push(Item::to(path.clone(), conf));
+        //         },
+        //         rule::Kind::Matching(ref pattern) => {
+        //             for path in &paths {
+        //                 let relative =
+        //                     path.relative_from(&self.configuration.input).unwrap()
+        //                     .to_path_buf();
+
+        //                 let conf = self.configuration.clone();
+
+        //                 if pattern.matches(&relative) {
+        //                     bind.push(Item::from(relative, conf));
+        //                 }
+        //             }
+        //         },
+        //     }
+
+        //     // add any potential rules returned from the callback
+        //     rules.extend(rule.callback(&bind).into_iter());
+
+        //     // run matches callback here?
+        //     // perhaps the callback passed to from_matches
+        //     // should return a vector of rules?
+        //     // rule.from_matches(|bind: &Bind| -> Vec<Rule> {})
+
+        //     self.manager.add(bind, rule.compiler.clone(), &rule.dependencies);
+        //     collected.push(rule);
+        // }
+
+        // TODO
+        // this isn't supposed to add the ones created from_matches
+        // since those rules are subject to change based on the matched binding
+        mem::replace(&mut self.rules, collected);
     }
 
     pub fn build(&mut self) {
@@ -108,9 +211,18 @@ impl Site {
         trace!("finding jobs");
         self.find_jobs();
 
+        trace!("creating output directory at {:?}", &self.configuration.output);
+
         // TODO: need a way to determine if there are no jobs
         // create the output directory
-        fs::create_dir_all(&self.configuration.output).unwrap();
+        // don't unwrap to ignore "already exists" error
+        if let Some(path) = self.configuration.output.parent() {
+            if let Some("") = path.to_str() {
+                fs::create_dir(&self.configuration.output);
+            }
+        } else {
+            fs::create_dir_all(&self.configuration.output).unwrap();
+        }
 
         // TODO: use resolve_from for partial builds?
         trace!("resolving graph");
@@ -118,12 +230,15 @@ impl Site {
         self.manager.execute();
     }
 
-    pub fn bind(&mut self, rule: Rule) {
-        for &dependency in &rule.dependencies {
-            if !self.rules.iter().any(|r| r.name == dependency) {
-                println!("`{}` depends on unregistered rule `{}`",
-                         rule.name,
-                         dependency);
+    pub fn register(&mut self, rule: Rule) {
+        println!("registering {}", rule.name());
+
+        if !rule.dependencies().is_empty() {
+            let names = self.rules.iter().map(|r| r.name().to_string()).collect();
+            let diff: HashSet<_> = rule.dependencies().difference(&names).cloned().collect();
+
+            if !diff.is_empty() {
+                println!("`{}` depends on unregistered rule(s) `{:?}`", rule.name(), diff);
                 ::exit(1);
             }
         }

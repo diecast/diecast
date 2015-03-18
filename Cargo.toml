@@ -17,8 +17,8 @@ regex_macros = "*"
 log = "*"
 env_logger = "*"
 hoedown = "*"
-handlebars = "*"
 rustc-serialize = "*"
+# handlebars = "*"
 docopt = "*"
 toml = "*"
 # notify = "*"
@@ -27,6 +27,8 @@ time = "*"
 # iron = "*"
 # static = "*"
 # mount = "*"
+threadpool = "*"
+tempdir = "*"
 
 [dependencies.notify]
 path = "../rsnotify"
@@ -37,8 +39,8 @@ path = "../rsnotify"
 # [dependencies.hoedown]
 # path = "../hoedown"
 
-# [dependencies.handlebars]
-# path = "../handlebars-rust"
+[dependencies.handlebars]
+path = "../handlebars-rust"
 
 [dependencies.anymap]
 path = "../anymap"

@@ -1,12 +1,17 @@
-//! Compiler behavior.
+//! item::Handler behavior.
 
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::sync::mpsc::channel;
 use std::error::FromError;
+use std::path::PathBuf;
 
 use toml;
 
-use item::Item;
+use job;
+use item::{self, Item};
+use binding::{self, Bind};
+use compiler;
+use threadpool::ThreadPool;
 
 pub trait Error: ::std::error::Error {}
 pub type Result = ::std::result::Result<(), Box<Error>>;
@@ -19,143 +24,104 @@ impl<E> FromError<E> for Box<Error> where E: Error + 'static {
     }
 }
 
-/// Behavior of a compiler.
-///
-/// There's a single method that takes a mutable
-/// reference to the `Item` being compiled.
-pub trait Compile: Send + Sync {
-    fn compile(&self, item: &mut Item) -> Result;
+pub enum Kind {
+    Fork(Arc<Box<item::Handler + Sync + Send>>),
+    Join(Box<binding::Handler + Sync + Send>),
 }
 
-impl<C> Compile for Arc<C> where C: Compile {
-    fn compile(&self, item: &mut Item) -> Result {
-        (**self).compile(item)
-    }
+// TODO
+// rename Compiler -> Hybrid
+// have Job contain a Box<binding::Handler> ?
+pub struct Compiler {
+    handlers: Vec<Kind>,
 }
 
-impl<C: ?Sized> Compile for Box<C> where C: Compile {
-    fn compile(&self, item: &mut Item) -> Result {
-        (**self).compile(item)
-    }
-}
-
-// impl<C: ?Sized> Compile for &'static C where C: Compile {
-//     fn compile(&self, item: &mut Item) {
-//         (**self).compile(item)
-//     }
-// }
-
-// impl<C: ?Sized> Compile for &'static mut C where C: Compile {
-//     fn compile(&self, item: &mut Item) {
-//         (**self).compile(item);
-//     }
-// }
-
-impl<F> Compile for F where F: Fn(&mut Item) -> Result + Send + Sync {
-    fn compile(&self, item: &mut Item) -> Result {
-        self(item)
-    }
-}
-
-#[derive(Clone)]
-pub enum Link {
-    Normal(Arc<Box<Compile + Send + Sync>>),
-    Barrier,
-}
-
-/// Chain of compilers.
-///
-/// Maintains a list of compilers and executes them
-/// in the order they were added.
-pub struct Chain {
-    pub chain: Vec<Link>,
-}
-
-impl Clone for Chain {
-    fn clone(&self) -> Chain {
-        Chain {
-            chain: self.chain.clone(),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct ChainPosition { trail: Vec<usize> }
-
-impl Chain {
-    pub fn new() -> Chain {
-        Chain {
-            chain: vec![],
+impl Compiler {
+    pub fn new() -> Compiler {
+        Compiler {
+            handlers: vec![],
         }
     }
 
-    pub fn only<C>(compiler: C) -> Chain
-    where C: Compile + 'static {
-        Chain {
-            chain: vec![Link::Normal(Arc::new(Box::new(compiler) as Box<Compile + Send + Sync>))],
-        }
-    }
-
-    pub fn link<C>(mut self, compiler: C) -> Chain
-    where C: Compile + 'static {
-        self.chain.push(Link::Normal(Arc::new(Box::new(compiler) as Box<Compile + Send + Sync>)));
+    pub fn fork<H>(mut self, compiler: H) -> Compiler
+    where H: item::Handler + Sync + Send + 'static {
+        self.handlers.push(Kind::Fork(Arc::new(Box::new(compiler))));
         self
     }
 
-    pub fn barrier(mut self) -> Chain {
-        self.chain.push(Link::Barrier);
+    pub fn join<H>(mut self, compiler: H) -> Compiler
+    where H: binding::Handler + Sync + Send + 'static {
+        self.handlers.push(Kind::Join(Box::new(compiler)));
         self
     }
 }
 
-pub fn is_paused(item: &Item) -> bool {
-    item.data.get::<ChainPosition>()
-        .map(|c| !c.trail.is_empty())
-        .unwrap_or(false)
-}
+// TODO
+// this is pretty confusing because the Job is scheduled to the threadpool
+// but then the handling of this Compiler itself requires a threadpool scheduling
+// for the purpose of the fork handlers
+//
+// LEVELS OF GRANULARITY
+// binding: jobs contain full bindings. jobs are enqueued into thread pool and dequeued out
+impl binding::Handler for Compiler {
+    fn handle(&self, binding: &mut Bind) -> compiler::Result {
+        trace!("performing Compiler::handler which has {} handlers", self.handlers.len());
 
-fn save_chain_position(item: &mut Item, index: usize) {
-    item.data.entry::<ChainPosition>().get()
-        .unwrap_or_else(|v| v.insert(ChainPosition { trail: Vec::new() }))
-        .trail.push(index);
-}
+        // TODO
+        // add configuration to binding? must also be on item
+        // FIXME
+        // this ends up creating a threadpool for EVERY instance of a compiler
+        let pool = ThreadPool::new(4);
+        let (tx, rx) = channel();
 
-fn get_chain_position(item: &mut Item) -> usize {
-    item.data.get_mut::<ChainPosition>()
-        .and_then(|chain| chain.trail.pop())
-        .unwrap_or(0)
-}
+        for (idx, kind) in self.handlers.iter().enumerate() {
+            trace!("processing handler {}", idx);
 
-impl Compile for Chain {
-    fn compile(&self, item: &mut Item) -> Result {
-        let resuming = is_paused(item);
-        let position: usize = get_chain_position(item);
+            match *kind {
+                Kind::Fork(ref handler) => {
+                    let count = binding.items.len();
 
-        // item.data.entry::<ChainBarriers>().get()
-        //     .unwrap_or_else(|v| v.insert(ChainBarriers { barriers: Vec::new() }));
+                    // TODO
+                    // use chunks to send a chunks to each thread instead of just one?
+                    for item in binding.items.drain() {
+                        let handler = handler.clone();
+                        let tx = tx.clone();
 
-        for (index, link) in (position ..).zip(self.chain[position ..].iter()) {
-            match *link {
-                Link::Barrier => {
-                    // if we are resuming and we begin on a barrier, skip over it,
-                    // since we just performed the barrier
-                    if resuming && index == position {
-                        continue;
+                        pool.execute(move || {
+                            let mut item = item;
+
+                            match handler.handle(&mut item) {
+                                Ok(()) => {
+                                    tx.send(Ok(item)).unwrap()
+                                },
+                                Err(e) => {
+                                    println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n", item, e);
+                                    tx.send(Err(job::Error::Err)).unwrap();
+                                }
+                            }
+                        });
                     }
 
-                    save_chain_position(item, index);
-                    return Ok(());
+                    // fork processing is not stable
+                    // i.e. order is not preserved
+                    for _ in 0 .. count {
+                        match rx.recv().unwrap() {
+                            Ok(item) => {
+                                binding.items.push(item);
+                            },
+                            Err(job::Error::Err) => {
+                                println!("an item returned an error. stopping everything");
+                                ::exit(1);
+                            },
+                            Err(job::Error::Panic) => {
+                                println!("an item panicked. stopping everything");
+                                ::exit(1);
+                            }
+                        }
+                    }
                 },
-                Link::Normal(ref compiler) => {
-                    try!(compiler.compile(item));
-
-                    if is_paused(item) {
-                        save_chain_position(item, index);
-
-                        // here check if it's the last item in the barriers?
-
-                        return Ok(());
-                    }
+                Kind::Join(ref handler) => {
+                    try!(handler.handle(binding));
                 },
             }
         }
@@ -169,7 +135,7 @@ pub fn stub(item: &mut Item) -> Result {
     Ok(())
 }
 
-/// Compiler that reads the `Item`'s body.
+/// item::Handler that reads the `Item`'s body.
 pub fn read(item: &mut Item) -> Result {
     use std::fs::File;
     use std::io::Read;
@@ -178,7 +144,7 @@ pub fn read(item: &mut Item) -> Result {
         let mut buf = String::new();
 
         // TODO: use try!
-        File::open(&item.configuration.input.join(path))
+        File::open(&item.bind().configuration.input.join(path))
             .unwrap()
             .read_to_string(&mut buf)
             .unwrap();
@@ -189,31 +155,35 @@ pub fn read(item: &mut Item) -> Result {
     Ok(())
 }
 
-/// Compiler that writes the `Item`'s body.
+/// item::Handler that writes the `Item`'s body.
 pub fn write(item: &mut Item) -> Result {
     use std::fs::{self, File};
     use std::io::Write;
 
     if let Some(ref path) = item.to {
         if let Some(ref body) = item.body {
-            let conf_out = &item.configuration.output;
+            let conf_out = &item.bind().configuration.output;
             let target = conf_out.join(path);
 
             if !target.starts_with(&conf_out) {
                 // TODO
                 // should probably return a proper T: Error?
                 println!("attempted to write outside of the output directory: {:?}", target);
-                panic!();
+                ::exit(1);
             }
 
-            trace!("mkdir -p {:?}", target);
-
             if let Some(parent) = target.parent() {
+                trace!("mkdir -p {:?}", parent);
+
                 // TODO: this errors out if the path already exists? dumb
                 let _ = fs::create_dir_all(parent);
             }
 
-            File::create(&conf_out.join(path))
+            let file = conf_out.join(path);
+
+            trace!("writing file {:?}", file);
+
+            File::create(&file)
                 .unwrap()
                 .write_all(body.as_bytes())
                 .unwrap();
@@ -224,12 +194,10 @@ pub fn write(item: &mut Item) -> Result {
 }
 
 
-/// Compiler that prints the `Item`'s body.
+/// item::Handler that prints the `Item`'s body.
 pub fn print(item: &mut Item) -> Result {
-    use std::old_io::stdio::println;
-
     if let &Some(ref body) = &item.body {
-        println(body);
+        println!("{}", body);
     }
 
     Ok(())
@@ -305,7 +273,7 @@ pub fn render_markdown(item: &mut Item) -> Result {
     Ok(())
 }
 
-pub fn inject_with<T>(t: Arc<T>) -> Box<Compile + Sync + Send>
+pub fn inject_with<T>(t: Arc<T>) -> Box<item::Handler + Sync + Send>
 where T: Sync + Send + 'static {
     Box::new(move |item: &mut Item| -> Result {
         item.data.insert(t.clone());
@@ -313,32 +281,10 @@ where T: Sync + Send + 'static {
     })
 }
 
-// TODO: this isn't necessary. in fact, on Barriers, it ends up cloning the data
-// this is mainly to ensure that the user is passing an Arc
-// #[derive(Clone)]
-// pub struct Inject<T> where T: Sync + Send + Clone + 'static {
-//     data: T,
-// }
-
-// impl<T> Inject<T> where T: Sync + Send + Clone + 'static {
-//     pub fn with(t: T) -> Inject<T>
-//     where T: Sync + Send + Clone + 'static {
-//         Inject {
-//             data: t
-//         }
-//     }
-// }
-
-// impl<T> Compile for Inject<T> where T: Sync + Send + Clone + 'static {
-//     fn compile(&self, item: &mut Item) {
-//         item.data.insert(self.data.clone());
-//     }
-// }
-
 use rustc_serialize::json::Json;
 use handlebars::Handlebars;
 
-pub fn render_template<H>(name: &'static str, handler: H) -> Box<Compile + Sync + Send>
+pub fn render_template<H>(name: &'static str, handler: H) -> Box<item::Handler + Sync + Send>
 where H: Fn(&Item) -> Json + Sync + Send + 'static {
     Box::new(move |item: &mut Item| -> Result {
         if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
@@ -350,162 +296,25 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
     })
 }
 
-// pub struct RenderTemplate {
-//     name: &'static str,
-//     handler: Box<Fn(&Item) -> Json + Sync + Send + 'static>,
-// }
-
-// impl RenderTemplate {
-//     pub fn new<H>(name: &'static str, handler: H) -> RenderTemplate
-//     where H: Fn(&Item) -> Json + Sync + Send + 'static {
-//         RenderTemplate {
-//             name: name,
-//             handler: Box::new(handler),
-//         }
-//     }
-// }
-
-// impl Compile for RenderTemplate {
-//     fn compile(&self, item: &mut Item) {
-//         if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
-//             let json = (*self.handler)(item);
-//             item.body = Some(registry.render(self.name, &json).unwrap());
-//         }
-//     }
-// }
-
 #[derive(Clone)]
-pub struct Barriers {
-    // TODO
-    // this needs to be in a mutex because there needs to be only one of these
-    pub counts: Arc<Mutex<Vec<usize>>>,
-}
+pub struct Pagination {
+    pub first_number: usize,
+    pub first_path: PathBuf,
 
-pub struct OnlyIf<B, C>
-where B: Fn(&Item) -> bool + Sync + Send + 'static,
-      C: Compile + Sync + Send + 'static {
-    // only run `compiler` if this condition holds true
-    condition:  Arc<B>,
-    // compiler to conditionally run
-    compiler: Arc<C>,
-    // count of items that satisfy predicate,
-    // so that subsequent barriers nested within the above `compiler`
-    // only block on this amount of items
-    ready: Arc<AtomicUsize>,
-    // this ensures that the stack is only pushed/popped once per OnlyIf
-    is_pushed: Arc<Mutex<bool>>,
-    is_popped: Arc<Mutex<bool>>,
-}
+    pub last_number: usize,
+    pub last_path: PathBuf,
 
-impl<B, C> OnlyIf<B, C>
-where B: Fn(&Item) -> bool + Sync + Send + 'static,
-      C: Compile + Sync + Send + 'static {
-    fn new(condition: B, compiler: C) -> OnlyIf<B, C> {
-        OnlyIf {
-            condition: Arc::new(condition),
-            compiler: Arc::new(compiler),
-            ready: Arc::new(AtomicUsize::new(0)),
-            is_pushed: Arc::new(Mutex::new(false)),
-            is_popped: Arc::new(Mutex::new(false)),
-        }
-    }
-}
+    pub next_number: Option<usize>,
+    pub next_path: Option<PathBuf>,
 
-impl<B, C> Compile for OnlyIf<B, C>
-where B: Fn(&Item) -> bool + Sync + Send + 'static,
-      C: Compile + Sync + Send + 'static {
-    fn compile(&self, item: &mut Item) -> Result {
-        let satisfied = (self.condition)(item);
+    pub curr_number: usize,
+    pub curr_path: PathBuf,
 
-        // this kinda sucks but w/e
-        let ready_1 = self.ready.clone();
-        let ready_2 = self.ready.clone();
+    pub prev_number: Option<usize>,
+    pub prev_path: Option<PathBuf>,
 
-        let is_pushed = self.is_pushed.clone();
-        let is_popped = self.is_popped.clone();
-
-        let compiler = self.compiler.clone();
-
-        let chain =
-            Chain::new()
-                .link(compiler.clone())
-                .barrier()
-                .link(move |item: &mut Item| -> Result {
-                    let is_popped = is_popped.clone();
-                    let mut is_popped = is_popped.lock().unwrap();
-
-                    // will pop the barrier count at the end of the conditional compiler
-                    // if it hasn't been popped yet
-                    if !*is_popped {
-                        let barriers = item.data.get_mut::<Barriers>().unwrap();
-                        let mut counts = barriers.counts.lock().unwrap();
-                        counts.pop();
-
-                        *is_popped = true;
-                    }
-
-                    Ok(())
-                });
-
-        // this is also nasty to have to build this here, but w/e
-        let run_it =
-            move |item: &mut Item| -> Result {
-                if satisfied {
-                    // perhaps make this a member to avoid rebuilding it each time?
-                    return chain.compile(item);
-                }
-
-                Ok(())
-            };
-
-        Chain::new()
-            // count items that satisfy the predicate
-            .link(move |_item: &mut Item| -> Result {
-                if !satisfied {
-                    return Ok(())
-                }
-
-                ready_1.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            })
-            .barrier()
-            // push count
-            .link(move |item: &mut Item| -> Result {
-                if !satisfied {
-                    return Ok(())
-                }
-
-                let is_pushed = is_pushed.clone();
-                let mut is_pushed = is_pushed.lock().unwrap();
-
-                // if the new barrier count hasn't been pushed, push it
-                if !*is_pushed {
-                    let max_count = ready_2.load(Ordering::SeqCst);
-
-                    let barriers = item.data.entry::<Barriers>().get()
-                        .unwrap_or_else(|v| {
-                            v.insert(Barriers { counts: Arc::new(Mutex::new(Vec::new())) })
-                        });
-
-                    let mut counts = barriers.counts.lock().unwrap();
-                    counts.push(max_count);
-
-                    *is_pushed = true;
-                }
-
-                Ok(())
-            })
-            // run compiler then pop barrier stack
-            .link(run_it)
-            // run this compiler chain
-            .compile(item)
-    }
-}
-
-// helper function. `OnlyIf` itself is not exposed cause who wants to type that
-pub fn only_if<C, F>(condition: C, compiler: F) -> OnlyIf<C, F>
-where C: Fn(&Item) -> bool + Sync + Send + 'static,
-      F: Compile + Sync + Send + 'static {
-    OnlyIf::new(condition, compiler)
+    pub page_count: usize,
+    pub post_count: usize,
+    pub posts_per_page: usize,
 }
 

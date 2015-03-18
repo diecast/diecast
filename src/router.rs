@@ -1,6 +1,6 @@
-use item::Item;
-use compiler::{self, Compile};
+use item::{self, Item};
 use std::path::PathBuf;
+use compiler;
 
 use regex;
 
@@ -17,7 +17,7 @@ pub fn identity(item: &mut Item) {
     item.to = item.from.clone();
 }
 
-pub fn set_extension(extension: &'static str) -> Box<Compile + Sync + Send> {
+pub fn set_extension(extension: &'static str) -> Box<item::Handler + Sync + Send> {
     Box::new(move |item: &mut Item| -> compiler::Result {
         if let Some(ref from) = item.from {
             item.to = Some(from.with_extension(extension));
@@ -42,8 +42,8 @@ impl SetExtension {
     }
 }
 
-impl Compile for SetExtension {
-    fn compile(&self, item: &mut Item) -> compiler::Result {
+impl item::Handler for SetExtension {
+    fn handle(&self, item: &mut Item) -> compiler::Result {
         let mut cloned = item.from.clone().unwrap();
         cloned.set_extension(self.extension);
         item.to = Some(cloned);
@@ -75,13 +75,13 @@ impl Regex {
     }
 }
 
-impl Compile for Regex {
-    fn compile(&self, item: &mut Item) -> compiler::Result {
+impl item::Handler for Regex {
+    fn handle(&self, item: &mut Item) -> compiler::Result {
         let from = item.from.clone().unwrap();
         let path_str = from.to_str().unwrap();
 
         if let Some(caps) = self.regex.captures(path_str) {
-            item.to = Some(PathBuf::new(&caps.expand(self.template)));
+            item.to = Some(PathBuf::from(&caps.expand(self.template)));
         }
 
         Ok(())

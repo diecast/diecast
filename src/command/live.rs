@@ -2,11 +2,11 @@ use docopt::Docopt;
 use site::Site;
 use configuration::Configuration;
 
-use std::old_io::TempDir;
-use std::path::PathBuf;
 use std::fs::PathExt;
 use std::process::Command as Server;
 use std::thread;
+
+use tempdir::TempDir;
 
 use command::Command;
 
@@ -59,11 +59,10 @@ impl Live {
         configuration.is_preview = true;
 
         let temp_dir =
-            TempDir::new(
-                configuration.output.file_name().unwrap()
-                    .to_str().unwrap()).unwrap();
+            TempDir::new(configuration.output.file_name().unwrap().to_str().unwrap())
+                .unwrap();
 
-        configuration.output = PathBuf::new(temp_dir.path().as_str().unwrap());
+        configuration.output = temp_dir.path().to_path_buf();
 
         println!("output dir: {:?}", configuration.output);
 
@@ -72,7 +71,6 @@ impl Live {
             temp_dir: temp_dir,
         }
     }
-
 }
 
 impl Command for Live {
@@ -106,7 +104,10 @@ impl Command for Live {
             Ok(mut watcher) => {
                 match watcher.watch(&self.site.configuration().input) {
                     Ok(_) => {},
-                    Err(e) => panic!(e),
+                    Err(e) => {
+                        println!("some error with the live command");
+                        ::exit(1);
+                    },
                 }
 
                 self.site.build();
@@ -159,6 +160,7 @@ impl Command for Live {
 
                     if let Some(ref path) = event.path {
                         while !path.exists() {
+                            // TODO: this should probably be thread::yield_now
                             thread::park_timeout(Duration::milliseconds(10));
                         }
                     }

@@ -19,23 +19,25 @@ extern crate toml;
 extern crate "rustc-serialize" as rustc_serialize;
 
 use diecast::{
-    // Site,
+    Compiler,
     Configuration,
     Rule,
-    Chain,
+    Bind,
     Item,
 };
 
 use diecast::router;
 use diecast::command;
-use diecast::compiler::{self, TomlMetadata};
+use diecast::compiler::{self, TomlMetadata, Pagination};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
 use std::fs::File;
 use std::io::Read;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
+use std::iter::RandomAccessIterator;
 use std::sync::Arc;
+use std::path::PathBuf;
 use rustc_serialize::json::{Json, ToJson};
 
 fn article_handler(item: &Item) -> Json {
@@ -68,14 +70,14 @@ fn is_draft(item: &Item) -> bool {
 }
 
 fn publishable(item: &Item) -> bool {
-    !(is_draft(item) && !item.configuration.is_preview)
+    !(is_draft(item) && !item.bind().configuration.is_preview)
 }
 
 fn collect_titles(item: &mut Item) -> compiler::Result {
     let mut titles = String::new();
 
     // TODO: just make Dependencies be empty if there are none?
-    for post in item.dependencies.get("posts").expect("no 'posts' dependency").iter() {
+    for post in &item.bind().dependencies[*"posts"].items {
         if !publishable(post) {
             continue;
         }
@@ -106,40 +108,134 @@ fn main() {
 
     let template_registry = Arc::new(handlebars);
 
-    let content_compiler =
-        Chain::new()
-            .link(compiler::inject_with(template_registry))
-            .link(compiler::read)
-            .link(compiler::parse_metadata)
-            .link(compiler::parse_toml)
-            .link(compiler::render_markdown)
-            .link(router::set_extension("html"))
-            .link(compiler::render_template("article", article_handler))
-            .link(
-                compiler::only_if(
-                    publishable,
-                    Chain::new()
-                        // .link(compiler::print)
-                        .link(compiler::write)));
+    let posts_compiler =
+        Compiler::new()
+            .fork(compiler::inject_with(template_registry))
+            .fork(compiler::read)
 
-    let posts =
-        Rule::matching(
-            "posts",
-            glob::Pattern::new("posts/dots.markdown").unwrap(),
-            content_compiler.clone());
+                // these two will be merged
+            .fork(compiler::parse_metadata)
+            .fork(compiler::parse_toml)
+
+            .fork(compiler::render_markdown)
+
+            .fork(compiler::render_template("article", article_handler))
+            .fork(router::set_extension("html"))
+
+                // TODO: only if publishable
+            // .fork(compiler::print)
+            .fork(compiler::write);
+
+    let posts_pattern = glob::Pattern::new("posts/dots.markdown").unwrap();
+
+    let mut posts =
+        Rule::matching("posts", posts_pattern)
+            .compiler(posts_compiler);
+
+    posts.rules_from_matches(|bind: &Bind| -> Vec<Rule> {
+        let mut rules = vec![];
+
+        // sort
+
+        let factor = 10;
+        let post_count = bind.items.len();
+        let mut page_count = (post_count / factor);
+
+        if page_count == 0 {
+            page_count = 1;
+        }
+
+        println!("page count: {}", page_count);
+
+        let mut current = 0;
+        let last = page_count - 1;
+
+        while current < page_count {
+            let prev = if current == 0 { None } else { Some(current - 1) };
+            let next = if current == last { None } else { Some(current + 1) };
+
+            let start = current * factor;
+            let end = ::std::cmp::min(bind.items.len(), (current + 1) * factor);
+
+            let items = &bind.items[start .. end];
+
+            let paths =
+                items.iter()
+                    // ensures only creatable items are used
+                    .filter_map(|i| i.from.clone())
+                    .collect::<HashSet<PathBuf>>();
+
+            let chunk =
+                Rule::matching(format!("chunk {}", current), paths)
+                    .compiler(
+                        Compiler::new()
+                            .join(|bind: &mut Bind| -> compiler::Result {
+                                println!("this chunk has {} items", bind.items.len());
+                                println!("items include:\n{:?}", bind.items);
+                                Ok(())
+                            })
+                            .join(move |bind: &mut Bind| -> compiler::Result {
+                                // TODO: optimize; don't have here; make customizable
+                                let route_path = |num: usize| -> PathBuf {
+                                    PathBuf::new(&format!("/posts/{}/index.html", num))
+                                };
+
+                                bind.data.write().unwrap().data.insert::<Pagination>(
+                                    Pagination {
+                                        first_number: 1,
+                                        first_path: route_path(1),
+
+                                        last_number: page_count - 1,
+                                        last_path: route_path(page_count - 1),
+
+                                        next_number: next,
+                                        next_path: next.map(|i| route_path(i)),
+
+                                        curr_number: current,
+                                        curr_path: route_path(current),
+
+                                        prev_number: prev,
+                                        prev_path: prev.map(|i| route_path(i)),
+
+                                        page_count: page_count,
+                                        post_count: post_count,
+                                        posts_per_page: factor,
+                                    }
+                                );
+                                Ok(())
+                            })
+                    )
+                    .depends_on("posts");
+
+            let rule_name = format!("page {}", current);
+            let file_name = format!("posts-{}.html", current);
+
+            let page =
+                Rule::creating(rule_name, &Path::new(file_name))
+                    .compiler(
+                        Compiler::new()
+                            .fork(|item: &mut Item| -> compiler::Result {
+                                println!("item is: {:?}", item);
+                                // item.body = Some("test".to_string());
+                                Ok(())
+                            })
+                            .fork(compiler::write)
+                        )
+                    .depends_on(&chunk);
+
+            rules.push(chunk);
+            rules.push(page);
+            current += 1;
+        }
+
+        rules
+    });
 
     let index_compiler =
-        Chain::new()
-            .link(collect_titles)
-            .link(compiler::print)
-            .link(compiler::write);
-
-    let index =
-        Rule::creating(
-            "post index",
-            "index.html",
-            index_compiler)
-            .depends_on(&posts);
+        Compiler::new()
+            .fork(collect_titles)
+            // .fork(compiler::print)
+            .fork(compiler::write);
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
@@ -147,9 +243,14 @@ fn main() {
 
     let mut command = command::from_args(config);
 
-    command.site().bind(posts);
-    command.site().bind(index);
+    command.site().register(posts);
 
     command.run();
+
+    // // this is how the pagination will be called
+    // // it is given the binding to be paginated
+    // // and a compiler for compiling each individual index page
+    // // and a routing function
+    // paginate(&posts, page_handler, router);
 }
 

@@ -13,13 +13,13 @@ use std::hash::Hash;
 use std::fmt;
 
 use graphviz as dot;
-use std::borrow::IntoCow;
+use std::borrow::{Borrow, IntoCow};
 
 /// Represents a dependency graph.
 ///
 /// This graph tracks items and is able to produce an ordering
 /// of the items that respects dependency constraints.
-pub struct Graph<T> where T: Ord + Copy + Hash {
+pub struct Graph<T> where T: Ord + Clone + Hash {
     /// Edges in the graph; implicitly stores nodes.
     ///
     /// There's a key for every node in the graph, even if
@@ -38,7 +38,7 @@ pub struct Graph<T> where T: Ord + Copy + Hash {
     reverse: BTreeMap<T, BTreeSet<T>>,
 }
 
-impl<T> Graph<T> where T: Ord + Copy + Hash {
+impl<T> Graph<T> where T: Ord + Clone + Hash {
     pub fn new() -> Graph<T> {
         Graph {
             edges: BTreeMap::new(),
@@ -57,9 +57,9 @@ impl<T> Graph<T> where T: Ord + Copy + Hash {
 
     /// Register a dependency constraint.
     pub fn add_edge(&mut self, a: T, b: T) {
-        self.edges.entry(a).get()
+        self.edges.entry(a.clone()).get()
             .unwrap_or_else(|v| v.insert(BTreeSet::new()))
-            .insert(b);
+            .insert(b.clone());
 
         self.reverse.entry(b).get()
             .unwrap_or_else(|v| v.insert(BTreeSet::new()))
@@ -73,19 +73,22 @@ impl<T> Graph<T> where T: Ord + Copy + Hash {
 
     // TODO: this seems identical to the above?
     /// The dependents a node has.
-    pub fn dependents_of(&self, node: T) -> Option<&BTreeSet<T>> {
-        self.edges.get(&node)
+    pub fn dependents_of<Q: ?Sized>(&self, node: &Q) -> Option<&BTreeSet<T>>
+    where T: Borrow<Q>, Q: Ord {
+        self.edges.get(node)
     }
 
     // TODO: this and the above should just return an empty btreeset if no deps
     // can't cause it's a reference, argh
-    pub fn dependencies_of(&self, node: T) -> Option<&BTreeSet<T>> {
-        self.reverse.get(&node)
+    pub fn dependencies_of<Q: ?Sized>(&self, node: &Q) -> Option<&BTreeSet<T>>
+    where T: Borrow<Q>, Q: Ord {
+        self.reverse.get(node)
     }
 
     /// The number of dependencies a node has.
-    pub fn dependency_count(&self, node: T) -> usize {
-        self.reverse.get(&node).map(|s| s.len()).unwrap_or(0usize)
+    pub fn dependency_count<Q: ?Sized>(&self, node: &Q) -> usize
+    where T: Borrow<Q>, Q: Ord {
+        self.reverse.get(node).map(|s| s.len()).unwrap_or(0usize)
     }
 
     /// Topological ordering starting at the provided node.
@@ -107,20 +110,20 @@ impl<T> Graph<T> where T: Ord + Copy + Hash {
     /// $ dot -Tpng < deps.dot > deps.png && open deps.png
     /// ```
     pub fn render<W>(&self, output: &mut W)
-    where W: Writer, T: Clone + fmt::Display {
+    where W: ::std::io::Write, T: Clone + fmt::Display {
         dot::render(self, output).unwrap()
     }
 }
 
 impl<T> fmt::Debug for Graph<T>
-where T: fmt::Debug + Ord + Copy + Hash {
+where T: fmt::Debug + Ord + Clone + Hash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(self.edges.fmt(f));
         Ok(())
     }
 }
 
-impl<'a, T> dot::Labeller<'a, T, (T, T)> for Graph<T> where T: Ord + Copy + Hash + fmt::Display {
+impl<'a, T> dot::Labeller<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Hash + fmt::Display {
     fn graph_id(&self) -> dot::Id<'a> {
         dot::Id::new("dependencies").unwrap()
     }
@@ -134,10 +137,10 @@ impl<'a, T> dot::Labeller<'a, T, (T, T)> for Graph<T> where T: Ord + Copy + Hash
     }
 }
 
-impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Copy + Hash {
+impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Hash {
     fn nodes(&self) -> dot::Nodes<'a, T> {
         Graph::<T>::nodes(self)
-            .map(|n| *n)
+            .cloned()
             .collect::<Vec<T>>()
             .into_cow()
     }
@@ -145,9 +148,9 @@ impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Co
     fn edges(&self) -> dot::Edges<'a, (T, T)> {
         let mut edges = Vec::new();
 
-        for (&source, targets) in &self.edges {
-            for &target in targets {
-                edges.push((source, target));
+        for (source, targets) in &self.edges {
+            for target in targets {
+                edges.push((source.clone(), target.clone()));
             }
         }
 
@@ -155,13 +158,13 @@ impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Co
     }
 
     fn source(&self, e: &(T, T)) -> T {
-        let &(s, _) = e;
-        return s;
+        let &(ref s, _) = e;
+        return s.clone();
     }
 
     fn target(&self, e: &(T, T)) -> T {
-        let &(_, t) = e;
-        return t;
+        let &(_, ref t) = e;
+        return t.clone();
     }
 }
 
@@ -173,7 +176,7 @@ pub type Cycle<T> = VecDeque<T>;
 /// Performs a topological sorting of the provided graph
 /// via a depth-first search. This ordering is such that
 /// every node comes before the node(s) that depends on it.
-struct Topological<'a, T: 'a> where T: Ord + Copy + Hash {
+struct Topological<'a, T: 'a> where T: Ord + Clone + Hash {
     /// The graph to traverse.
     graph: &'a Graph<T>,
 
@@ -187,7 +190,7 @@ struct Topological<'a, T: 'a> where T: Ord + Copy + Hash {
     edge_to: BTreeMap<T, T>,
 }
 
-impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy + Hash {
+impl<'a, T: 'a> Topological<'a, T> where T: Ord + Clone + Hash {
     /// Construct the initial algorithm state.
     fn new(graph: &'a Graph<T>) -> Topological<'a, T> {
         Topological {
@@ -203,30 +206,30 @@ impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy + Hash {
     /// This uses a recursive depth-first search, as it facilitates
     /// keeping track of a cycle, if any is present.
     fn dfs(&mut self, node: T, out: &mut VecDeque<T>) -> Result<(), VecDeque<T>> {
-        self.on_stack.insert(node);
-        self.visited.insert(node);
+        self.on_stack.insert(node.clone());
+        self.visited.insert(node.clone());
 
-        if let Some(neighbors) = self.graph.dependents_of(node) {
-            for &neighbor in neighbors {
+        if let Some(neighbors) = self.graph.dependents_of(&node) {
+            for neighbor in neighbors {
                 // node isn't visited yet, so visit it
                 // make sure to add a breadcrumb to trace our path
                 // backwards in case there's a cycle
-                if !self.visited.contains(&neighbor) {
-                    self.edge_to.insert(neighbor, node);
-                    try!(self.dfs(neighbor, out));
+                if !self.visited.contains(neighbor) {
+                    self.edge_to.insert(neighbor.clone(), node.clone());
+                    try!(self.dfs(neighbor.clone(), out));
                 }
 
                 // cycle detected
                 // trace back breadcrumbs to reconstruct the cycle's path
                 else if self.on_stack.contains(&neighbor) {
                     let mut path = VecDeque::new();
-                    path.push_front(neighbor);
-                    path.push_front(node);
+                    path.push_front(neighbor.clone());
+                    path.push_front(node.clone());
 
                     let mut previous = self.edge_to.get(&node);
 
-                    while let Some(&found) = previous {
-                        path.push_front(found);
+                    while let Some(found) = previous {
+                        path.push_front(found.clone());
                         previous = self.edge_to.get(&found);
                     }
 
@@ -254,9 +257,9 @@ impl<'a, T: 'a> Topological<'a, T> where T: Ord + Copy + Hash {
     pub fn all(mut self) -> Result<Order<T>, Cycle<T>> {
         let mut order = VecDeque::new();
 
-        for &node in self.graph.nodes() {
+        for node in self.graph.nodes() {
             if !self.visited.contains(&node) {
-                try!(self.dfs(node, &mut order));
+                try!(self.dfs(node.clone(), &mut order));
             }
         }
 
@@ -330,16 +333,17 @@ mod test {
 
     #[test]
     fn render() {
-        use std::old_io::fs::{PathExtensions, unlink};
+        use std::fs::{File, PathExt, remove_file};
+        use std::path::Path;
 
         let graph = helper_graph();
 
         let dot = Path::new("deps.dot");
 
-        graph.render(&mut File::create(&dot));
+        graph.render(&mut File::create(&dot).unwrap());
 
         assert!(dot.exists());
 
-        unlink(&dot).ok().expect("couldn't remove dot file");
+        remove_file(&dot).ok().expect("couldn't remove dot file");
     }
 }
