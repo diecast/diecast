@@ -39,6 +39,7 @@ extern crate notify;
 extern crate libc;
 extern crate time;
 extern crate tempdir;
+extern crate num_cpus;
 // extern crate iron;
 // extern crate "static" as static_file;
 // extern crate mount;

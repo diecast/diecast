@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use pattern::Pattern;
 use std::convert::AsRef;
+use num_cpus;
 
 use command;
 
@@ -50,7 +51,7 @@ impl Configuration {
             input: input.as_ref().to_path_buf(),
             output: output.as_ref().to_path_buf(),
             command: command::Kind::None,
-            threads: ::std::os::num_cpus(),
+            threads: num_cpus::get(),
             is_verbose: false,
             ignore: None,
             is_preview: false,

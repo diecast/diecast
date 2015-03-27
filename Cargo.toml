@@ -29,6 +29,7 @@ time = "*"
 # mount = "*"
 threadpool = "*"
 tempdir = "*"
+num_cpus = "*"
 
 [dependencies.notify]
 path = "../rsnotify"
