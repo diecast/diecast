@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use anymap::AnyMap;
 
-use item::{Item, Dependencies};
+use item::{self, Item, Dependencies};
 use configuration::Configuration;
 use compiler;
 

@@ -6,12 +6,12 @@ use std::error::FromError;
 use std::path::PathBuf;
 
 use toml;
+use threadpool::ThreadPool;
 
 use job;
+use compiler;
 use item::{self, Item};
 use binding::{self, Bind};
-use compiler;
-use threadpool::ThreadPool;
 
 pub trait Error: ::std::error::Error {}
 pub type Result = ::std::result::Result<(), Box<Error>>;
@@ -24,106 +24,72 @@ impl<E> FromError<E> for Box<Error> where E: Error + 'static {
     }
 }
 
-pub enum Kind {
-    Fork(Arc<Box<item::Handler + Sync + Send>>),
-    Join(Box<binding::Handler + Sync + Send>),
+pub struct BindChain {
+    handlers: Vec<Box<binding::Handler + Sync + Send>>,
 }
 
-// TODO
-// rename Compiler -> Hybrid
-// have Job contain a Box<binding::Handler> ?
-pub struct Compiler {
-    handlers: Vec<Kind>,
-}
-
-impl Compiler {
-    pub fn new() -> Compiler {
-        Compiler {
+impl BindChain {
+    pub fn new() -> BindChain {
+        BindChain {
             handlers: vec![],
         }
     }
 
-    pub fn fork<H>(mut self, compiler: H) -> Compiler
-    where H: item::Handler + Sync + Send + 'static {
-        self.handlers.push(Kind::Fork(Arc::new(Box::new(compiler))));
-        self
-    }
-
-    pub fn join<H>(mut self, compiler: H) -> Compiler
+    pub fn link<H>(mut self, compiler: H) -> BindChain
     where H: binding::Handler + Sync + Send + 'static {
-        self.handlers.push(Kind::Join(Box::new(compiler)));
+        self.handlers.push(Box::new(compiler));
         self
     }
 }
 
-// TODO
-// this is pretty confusing because the Job is scheduled to the threadpool
-// but then the handling of this Compiler itself requires a threadpool scheduling
-// for the purpose of the fork handlers
-//
-// LEVELS OF GRANULARITY
-// binding: jobs contain full bindings. jobs are enqueued into thread pool and dequeued out
-impl binding::Handler for Compiler {
+impl binding::Handler for BindChain {
     fn handle(&self, binding: &mut Bind) -> compiler::Result {
-        trace!("performing Compiler::handler which has {} handlers", self.handlers.len());
+        trace!("performing BindChain::handler which has {} handlers", self.handlers.len());
 
-        // TODO
-        // add configuration to binding? must also be on item
-        // FIXME
-        // this ends up creating a threadpool for EVERY instance of a compiler
-        let pool = ThreadPool::new(4);
-        let (tx, rx) = channel();
+        for handler in &self.handlers {
+            try!(handler.handle(binding));
+        }
 
-        for (idx, kind) in self.handlers.iter().enumerate() {
-            trace!("processing handler {}", idx);
+        Ok(())
+    }
+}
 
-            match *kind {
-                Kind::Fork(ref handler) => {
-                    let count = binding.items.len();
+pub struct ItemChain {
+    handlers: Vec<Box<item::Handler + Sync + Send>>,
+}
 
-                    // TODO
-                    // use chunks to send a chunks to each thread instead of just one?
-                    for item in binding.items.drain() {
-                        let handler = handler.clone();
-                        let tx = tx.clone();
+impl ItemChain {
+    pub fn new() -> ItemChain {
+        ItemChain {
+            handlers: vec![],
+        }
+    }
 
-                        pool.execute(move || {
-                            let mut item = item;
+    pub fn link<H>(mut self, compiler: H) -> ItemChain
+    where H: item::Handler + Sync + Send + 'static {
+        self.handlers.push(Box::new(compiler));
+        self
+    }
+}
 
-                            match handler.handle(&mut item) {
-                                Ok(()) => {
-                                    tx.send(Ok(item)).unwrap()
-                                },
-                                Err(e) => {
-                                    println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n", item, e);
-                                    tx.send(Err(job::Error::Err)).unwrap();
-                                }
-                            }
-                        });
-                    }
+impl item::Handler for ItemChain {
+    fn handle(&self, item: &mut Item) -> compiler::Result {
+        trace!("performing ItemChain::handler which has {} handlers", self.handlers.len());
 
-                    // fork processing is not stable
-                    // i.e. order is not preserved
-                    for _ in 0 .. count {
-                        match rx.recv().unwrap() {
-                            Ok(item) => {
-                                binding.items.push(item);
-                            },
-                            Err(job::Error::Err) => {
-                                println!("an item returned an error. stopping everything");
-                                ::exit(1);
-                            },
-                            Err(job::Error::Panic) => {
-                                println!("an item panicked. stopping everything");
-                                ::exit(1);
-                            }
-                        }
-                    }
-                },
-                Kind::Join(ref handler) => {
-                    try!(handler.handle(binding));
-                },
-            }
+        for handler in &self.handlers {
+            try!(handler.handle(item));
+        }
+
+        Ok(())
+    }
+}
+
+impl binding::Handler for ItemChain {
+    fn handle(&self, binding: &mut Bind) -> compiler::Result {
+        trace!("performing ItemChain::handler which has {} handlers", self.handlers.len());
+
+        for item in &mut binding.items {
+            try!(<ItemChain as item::Handler>::handle(self, item));
         }
 
         Ok(())

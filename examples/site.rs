@@ -1,8 +1,5 @@
 #![feature(plugin)]
-#![feature(old_path)]
-#![feature(io)]
-#![feature(fs)]
-#![feature(core)]
+#![feature(convert)]
 
 #![plugin(regex_macros)]
 
@@ -16,10 +13,9 @@ extern crate env_logger;
 extern crate hoedown;
 extern crate handlebars;
 extern crate toml;
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 
 use diecast::{
-    Compiler,
     Configuration,
     Rule,
     Bind,
@@ -28,16 +24,15 @@ use diecast::{
 
 use diecast::router;
 use diecast::command;
-use diecast::compiler::{self, TomlMetadata, Pagination};
+use diecast::compiler::{self, TomlMetadata, Pagination, BindChain, ItemChain};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
 use std::fs::File;
 use std::io::Read;
 use std::collections::{BTreeMap, HashSet};
-use std::iter::RandomAccessIterator;
 use std::sync::Arc;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use rustc_serialize::json::{Json, ToJson};
 
 fn article_handler(item: &Item) -> Json {
@@ -76,8 +71,7 @@ fn publishable(item: &Item) -> bool {
 fn collect_titles(item: &mut Item) -> compiler::Result {
     let mut titles = String::new();
 
-    // TODO: just make Dependencies be empty if there are none?
-    for post in &item.bind().dependencies[*"posts"].items {
+    for post in &item.bind().dependencies["posts"].items {
         if !publishable(post) {
             continue;
         }
@@ -109,22 +103,22 @@ fn main() {
     let template_registry = Arc::new(handlebars);
 
     let posts_compiler =
-        Compiler::new()
-            .fork(compiler::inject_with(template_registry))
-            .fork(compiler::read)
+        ItemChain::new()
+            .link(compiler::inject_with(template_registry))
+            .link(compiler::read)
 
-                // these two will be merged
-            .fork(compiler::parse_metadata)
-            .fork(compiler::parse_toml)
+            // these two will be merged
+            .link(compiler::parse_metadata)
+            .link(compiler::parse_toml)
 
-            .fork(compiler::render_markdown)
+            .link(compiler::render_markdown)
 
-            .fork(compiler::render_template("article", article_handler))
-            .fork(router::set_extension("html"))
+            .link(compiler::render_template("article", article_handler))
+            .link(router::set_extension("html"))
 
-                // TODO: only if publishable
-            // .fork(compiler::print)
-            .fork(compiler::write);
+            // TODO: only if publishable
+            // .link(compiler::print)
+            .link(compiler::write);
 
     let posts_pattern = glob::Pattern::new("posts/dots.markdown").unwrap();
 
@@ -139,7 +133,7 @@ fn main() {
 
         let factor = 10;
         let post_count = bind.items.len();
-        let mut page_count = (post_count / factor);
+        let mut page_count = post_count / factor;
 
         if page_count == 0 {
             page_count = 1;
@@ -168,16 +162,16 @@ fn main() {
             let chunk =
                 Rule::matching(format!("chunk {}", current), paths)
                     .compiler(
-                        Compiler::new()
-                            .join(|bind: &mut Bind| -> compiler::Result {
+                        BindChain::new()
+                            .link(|bind: &mut Bind| -> compiler::Result {
                                 println!("this chunk has {} items", bind.items.len());
                                 println!("items include:\n{:?}", bind.items);
                                 Ok(())
                             })
-                            .join(move |bind: &mut Bind| -> compiler::Result {
+                            .link(move |bind: &mut Bind| -> compiler::Result {
                                 // TODO: optimize; don't have here; make customizable
                                 let route_path = |num: usize| -> PathBuf {
-                                    PathBuf::new(&format!("/posts/{}/index.html", num))
+                                    PathBuf::from(&format!("/posts/{}/index.html", num))
                                 };
 
                                 bind.data.write().unwrap().data.insert::<Pagination>(
@@ -211,16 +205,15 @@ fn main() {
             let file_name = format!("posts-{}.html", current);
 
             let page =
-                Rule::creating(rule_name, &Path::new(file_name))
+                Rule::creating(rule_name, &Path::new(&file_name))
                     .compiler(
-                        Compiler::new()
-                            .fork(|item: &mut Item| -> compiler::Result {
+                        ItemChain::new()
+                            .link(|item: &mut Item| -> compiler::Result {
                                 println!("item is: {:?}", item);
                                 // item.body = Some("test".to_string());
                                 Ok(())
                             })
-                            .fork(compiler::write)
-                        )
+                            .link(compiler::write))
                     .depends_on(&chunk);
 
             rules.push(chunk);
@@ -230,12 +223,6 @@ fn main() {
 
         rules
     });
-
-    let index_compiler =
-        Compiler::new()
-            .fork(collect_titles)
-            // .fork(compiler::print)
-            .fork(compiler::write);
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")

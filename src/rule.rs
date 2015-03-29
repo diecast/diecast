@@ -5,8 +5,7 @@ use std::convert::AsRef;
 use std::path::{Path, PathBuf};
 
 use pattern::Pattern;
-use compiler::Compiler;
-use binding::Bind;
+use binding::{self, Bind};
 
 pub enum Operation {
     Creating(PathBuf),
@@ -17,7 +16,7 @@ pub enum Operation {
 pub struct Rule {
     name: String,
     operation: Operation,
-    compiler: Option<Arc<Compiler>>,
+    compiler: Option<Arc<Box<binding::Handler + Sync + Send>>>,
     dependencies: HashSet<String>,
 
     /// callback to run after bind has been created
@@ -56,12 +55,13 @@ impl Rule {
         self.callback = Some(Box::new(callback));
     }
 
-    pub fn compiler(mut self, compiler: Compiler) -> Rule {
-        self.compiler = Some(Arc::new(compiler));
+    pub fn compiler<H>(mut self, compiler: H) -> Rule
+    where H: binding::Handler + Sync + Send + 'static {
+        self.compiler = Some(Arc::new(Box::new(compiler)));
         self
     }
 
-    pub fn get_compiler(&self) -> &Option<Arc<Compiler>> {
+    pub fn get_compiler(&self) -> &Option<Arc<Box<binding::Handler + Sync + Send + 'static>>> {
         &self.compiler
     }
 
