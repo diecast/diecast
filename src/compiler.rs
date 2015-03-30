@@ -4,12 +4,14 @@ use std::sync::Arc;
 use std::sync::mpsc::channel;
 use std::error::FromError;
 use std::path::PathBuf;
+use std::collections::HashSet;
 
 use toml;
 use threadpool::ThreadPool;
 
 use job;
 use compiler;
+use rule::Rule;
 use item::{self, Item};
 use binding::{self, Bind};
 
@@ -89,7 +91,7 @@ impl binding::Handler for ItemChain {
         trace!("performing ItemChain::handler which has {} handlers", self.handlers.len());
 
         for item in &mut binding.items {
-            try!(<ItemChain as item::Handler>::handle(self, item));
+            try!(item::Handler::handle(self, item));
         }
 
         Ok(())
@@ -263,24 +265,109 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
 }
 
 #[derive(Clone)]
-pub struct Pagination {
-    pub first_number: usize,
-    pub first_path: PathBuf,
-
-    pub last_number: usize,
-    pub last_path: PathBuf,
-
-    pub next_number: Option<usize>,
-    pub next_path: Option<PathBuf>,
-
-    pub curr_number: usize,
-    pub curr_path: PathBuf,
-
-    pub prev_number: Option<usize>,
-    pub prev_path: Option<PathBuf>,
+struct Pagination {
+    pub first: (usize, PathBuf),
+    pub last: (usize, PathBuf),
+    pub next: Option<(usize, PathBuf)>,
+    pub curr: (usize, PathBuf),
+    pub prev: Option<(usize, PathBuf)>,
 
     pub page_count: usize,
     pub post_count: usize,
     pub posts_per_page: usize,
+}
+
+pub fn paginate<H, R>(bind: &Bind, factor: usize, router: R, handler: H) -> Vec<Rule>
+where H: binding::Handler + Sync + Send + 'static,
+      R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
+    let handler = Arc::new(handler);
+
+    let mut rules = vec![];
+    let post_count = bind.items.len();
+
+    // TODO: is this correct? what if there are no items?
+    let mut page_count = ::std::cmp::max(1, post_count / factor);
+
+    println!("page count: {}", page_count);
+
+    let mut current = 0;
+    let last_num = page_count - 1;
+
+    let first = (1, router(1));
+    let last = (last_num, router(last_num));
+
+    while current < page_count {
+        let prev = if current == 0 { None } else { let num = current - 1; Some((num, router(num))) };
+        let next = if current == last_num { None } else { let num = current + 1; Some((num, router(num))) };
+
+        let start = current * factor;
+        let end = ::std::cmp::min(bind.items.len(), (current + 1) * factor);
+
+        let items = &bind.items[start .. end];
+
+        let handler = handler.clone();
+
+        // TODO: probably should arc-cache-map<num, pathbuf> this
+        let first = first.clone();
+        let last = last.clone();
+        let curr = (current, router(current));
+
+        let page = Rule::creating(format!("page {}", curr.0), &curr.1);
+
+        let paths =
+            items.iter()
+                // ensures only creatable items are used
+                .filter_map(|i| i.from.clone())
+                .collect::<HashSet<PathBuf>>();
+
+        let page_struct =
+            Pagination {
+                first: first,
+
+                prev: prev,
+                curr: curr,
+                next: next,
+
+                last: last,
+
+                page_count: page_count,
+                post_count: post_count,
+                posts_per_page: factor,
+            };
+
+        let chunk =
+            Rule::matching(format!("chunk {}", current), paths)
+                .compiler(
+                    BindChain::new()
+                        .link(|bind: &mut Bind| -> compiler::Result {
+                            println!("this chunk has {} items", bind.items.len());
+                            println!("items include:\n{:?}", bind.items);
+                            Ok(())
+                        })
+                        // TODO: can this be generalized by the next/prev system?
+                        // FIXME
+                        // we have to clone the page_struct because otherwise
+                        // it would move out of the closure, which would cause it
+                        // to infer as FnOnce, since it can't possibly move
+                        // out of it more than once
+                        // probably better to just insert an Arc<Pagination>?
+                        //
+                        // probably good idea to be able to mutate the binding directly?
+                        .link(move |bind: &mut Bind| -> compiler::Result {
+                            bind.data.write().unwrap().data.insert::<Pagination>(page_struct.clone());
+                            Ok(())
+                        })
+                )
+                .depends_on(&bind.data.read().unwrap().name[..]);
+
+        let page = page.compiler(handler).depends_on(&chunk);
+
+        rules.push(chunk);
+        rules.push(page);
+
+        current += 1;
+    }
+
+    rules
 }
 

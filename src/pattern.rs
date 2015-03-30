@@ -188,8 +188,8 @@ mod test {
         let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
         let about_page = Path::new("pages/about.md");
 
-        assert!(<glob::Pattern as Pattern>::matches(&pattern, &intro_to_rust));
-        assert!(!<glob::Pattern as Pattern>::matches(&pattern, &about_page));
+        assert!(Pattern::matches(&pattern, &intro_to_rust));
+        assert!(!Pattern::matches(&pattern, &about_page));
     }
 
     #[test]

@@ -24,7 +24,8 @@ use diecast::{
 
 use diecast::router;
 use diecast::command;
-use diecast::compiler::{self, TomlMetadata, Pagination, BindChain, ItemChain};
+use diecast::binding;
+use diecast::compiler::{self, TomlMetadata, BindChain, ItemChain, paginate};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -126,100 +127,30 @@ fn main() {
         Rule::matching("posts", posts_pattern)
             .compiler(posts_compiler);
 
+    fn router(page: usize) -> PathBuf {
+        if page == 0 {
+            PathBuf::from("posts/index.html")
+        } else {
+            PathBuf::from(&format!("posts/{}/index.html", page))
+        }
+    }
+
     posts.rules_from_matches(|bind: &Bind| -> Vec<Rule> {
         let mut rules = vec![];
 
+        let handler =
+            ItemChain::new()
+                .link(|item: &mut Item| -> compiler::Result {
+                    println!("item is: {:?}", item);
+                    item.body = Some("test".to_string());
+                    Ok(())
+                })
+                .link(compiler::write);
+
+        let paginate_rules = paginate(bind, 10, router, handler);
+
         // sort
-
-        let factor = 10;
-        let post_count = bind.items.len();
-        let mut page_count = post_count / factor;
-
-        if page_count == 0 {
-            page_count = 1;
-        }
-
-        println!("page count: {}", page_count);
-
-        let mut current = 0;
-        let last = page_count - 1;
-
-        while current < page_count {
-            let prev = if current == 0 { None } else { Some(current - 1) };
-            let next = if current == last { None } else { Some(current + 1) };
-
-            let start = current * factor;
-            let end = ::std::cmp::min(bind.items.len(), (current + 1) * factor);
-
-            let items = &bind.items[start .. end];
-
-            let paths =
-                items.iter()
-                    // ensures only creatable items are used
-                    .filter_map(|i| i.from.clone())
-                    .collect::<HashSet<PathBuf>>();
-
-            let chunk =
-                Rule::matching(format!("chunk {}", current), paths)
-                    .compiler(
-                        BindChain::new()
-                            .link(|bind: &mut Bind| -> compiler::Result {
-                                println!("this chunk has {} items", bind.items.len());
-                                println!("items include:\n{:?}", bind.items);
-                                Ok(())
-                            })
-                            .link(move |bind: &mut Bind| -> compiler::Result {
-                                // TODO: optimize; don't have here; make customizable
-                                let route_path = |num: usize| -> PathBuf {
-                                    PathBuf::from(&format!("/posts/{}/index.html", num))
-                                };
-
-                                bind.data.write().unwrap().data.insert::<Pagination>(
-                                    Pagination {
-                                        first_number: 1,
-                                        first_path: route_path(1),
-
-                                        last_number: page_count - 1,
-                                        last_path: route_path(page_count - 1),
-
-                                        next_number: next,
-                                        next_path: next.map(|i| route_path(i)),
-
-                                        curr_number: current,
-                                        curr_path: route_path(current),
-
-                                        prev_number: prev,
-                                        prev_path: prev.map(|i| route_path(i)),
-
-                                        page_count: page_count,
-                                        post_count: post_count,
-                                        posts_per_page: factor,
-                                    }
-                                );
-                                Ok(())
-                            })
-                    )
-                    .depends_on("posts");
-
-            let rule_name = format!("page {}", current);
-            let file_name = format!("posts-{}.html", current);
-
-            let page =
-                Rule::creating(rule_name, &Path::new(&file_name))
-                    .compiler(
-                        ItemChain::new()
-                            .link(|item: &mut Item| -> compiler::Result {
-                                println!("item is: {:?}", item);
-                                // item.body = Some("test".to_string());
-                                Ok(())
-                            })
-                            .link(compiler::write))
-                    .depends_on(&chunk);
-
-            rules.push(chunk);
-            rules.push(page);
-            current += 1;
-        }
+        rules.extend(paginate_rules.into_iter());
 
         rules
     });
