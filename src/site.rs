@@ -79,8 +79,6 @@ impl Site {
             // this should be able to go into its own method on Rule?
             match *rule.operation() {
                 rule::Operation::Creating(ref path) => {
-                    let conf = self.configuration.clone();
-
                     bind.push(Item::to(path.clone(), data.clone()));
                 },
                 rule::Operation::Matching(ref pattern) => {
@@ -88,8 +86,6 @@ impl Site {
                         let relative =
                             path.relative_from(&self.configuration.input).unwrap()
                             .to_path_buf();
-
-                        let conf = self.configuration.clone();
 
                         if pattern.matches(&relative) {
                             bind.push(Item::from(relative, data.clone()));

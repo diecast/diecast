@@ -1,7 +1,6 @@
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender, SendError, Receiver, RecvError};
+use std::sync::Arc;
+use std::sync::mpsc::{channel, Sender, Receiver};
 use std::collections::{BTreeMap, VecDeque, HashMap};
-use std::thread;
 use std::mem;
 use std::fmt;
 
@@ -42,18 +41,16 @@ impl Job {
     }
 }
 
-pub struct Error;
-
-struct Canary {
-    tx: Sender<Result<Job, Error>>,
+struct Canary<T> where T: Send {
+    tx: Sender<Option<T>>,
     active: bool
 }
 
-impl Canary {
-    fn new(tx: Sender<Result<Job, Error>>) -> Canary {
+impl<T> Canary<T> where T: Send {
+    fn new(tx: Sender<Option<T>>) -> Canary<T> {
         Canary {
             tx: tx,
-            active: true
+            active: true,
         }
     }
 
@@ -64,35 +61,32 @@ impl Canary {
 }
 
 #[unsafe_destructor]
-impl Drop for Canary {
+impl<T> Drop for Canary<T> where T: Send {
     fn drop(&mut self) {
         if self.active {
-            match self.tx.send(Err(Error)) {
-                Ok(_) => (), // will close down everything
-                Err(_) => (), // already panicked once
-            }
+            self.tx.send(None).unwrap();
         }
     }
 }
 
-pub struct Pool {
-    result_tx: Sender<Result<Job, Error>>,
-    result_rx: Receiver<Result<Job, Error>>,
+pub struct Pool<T> where T: Send {
+    result_tx: Sender<Option<T>>,
+    result_rx: Receiver<Option<T>>,
 
     pool: ThreadPool,
 }
 
-impl Pool {
+impl<T> Pool<T> where T: Send {
     /// Spawns a new thread pool with `threads` threads.
     ///
     /// # Panics
     ///
     /// This function will panic if `threads` is 0.
-    pub fn new(threads: usize) -> Pool {
+    pub fn new(threads: usize) -> Pool<T> {
         assert!(threads >= 1);
         trace!("using {} threads", threads);
 
-        let (result_tx, result_rx) = channel::<Result<Job, Error>>();
+        let (result_tx, result_rx) = channel::<Option<T>>();
 
         let pool = ThreadPool::new(threads);
 
@@ -104,31 +98,21 @@ impl Pool {
         }
     }
 
-    pub fn enqueue(&self, job: Job) {
+    pub fn enqueue<F>(&self, work: F)
+    where T: 'static,
+          F: FnOnce() -> Option<T>, F: Send + 'static {
         let tx = self.result_tx.clone();
 
         self.pool.execute(move || {
             let canary = Canary::new(tx.clone());
 
-            let mut job = job;
-
-            trace!("dequeued {:?}", job);
-
-            match job.process() {
-                Ok(()) => {
-                    tx.send(Ok(job)).unwrap()
-                },
-                Err(e) => {
-                    println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", job, e);
-                    tx.send(Err(Error)).unwrap();
-                }
-            }
+            tx.send(work()).unwrap();
 
             canary.cancel();
         });
     }
 
-    pub fn dequeue(&self) -> Result<Job, Error> {
+    pub fn dequeue(&self) -> Option<T> {
         self.result_rx.recv().unwrap()
     }
 }
@@ -146,7 +130,7 @@ pub struct Manager {
     finished: BTreeMap<String, Arc<Bind>>,
 
     /// Thread pool to process jobs
-    pool: Pool,
+    pool: Pool<Job>,
 
     /// number of jobs being managed
     count: usize,
@@ -294,13 +278,13 @@ impl Manager {
                 trace!("looping");
                 loop {
                     match self.pool.dequeue() {
-                        Ok(job) => {
+                        Some(job) => {
                             trace!("received job from pool");
                             if self.handle_done(job) {
                                 break;
                             }
                         },
-                        Err(Error) => {
+                        None => {
                             println!("a job panicked. stopping everything");
                             ::exit(1);
                         }
@@ -381,7 +365,18 @@ impl Manager {
             let deps = deps_cache[&name].clone();
             job.bind.set_dependencies(deps);
             trace!("job now ready: {:?}", job);
-            self.pool.enqueue(job);
+
+            self.pool.enqueue(move || {
+                let mut job = job;
+
+                match job.process() {
+                    Ok(()) => Some(job),
+                    Err(e) => {
+                        println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", job, e);
+                        None
+                    },
+                }
+            });
         }
     }
 }

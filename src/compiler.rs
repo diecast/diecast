@@ -1,15 +1,12 @@
 //! item::Handler behavior.
 
 use std::sync::Arc;
-use std::sync::mpsc::channel;
 use std::error::FromError;
 use std::path::PathBuf;
 use std::collections::HashSet;
 
 use toml;
-use threadpool::ThreadPool;
 
-use job;
 use compiler;
 use rule::Rule;
 use item::{self, Item};
@@ -286,7 +283,7 @@ where H: binding::Handler + Sync + Send + 'static,
     let post_count = bind.items.len();
 
     // TODO: is this correct? what if there are no items?
-    let mut page_count = ::std::cmp::max(1, post_count / factor);
+    let page_count = ::std::cmp::max(1, post_count / factor);
 
     println!("page count: {}", page_count);
 
