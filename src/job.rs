@@ -206,27 +206,20 @@ impl Manager {
 
         self.graph.add_node(binding.clone());
 
-        let dependencies = rule.dependencies();
-
-        if !dependencies.is_empty() {
-            trace!("has dependencies: {:?}", dependencies);
-
-            for dep in dependencies {
-                trace!("setting dependency {} -> {}", dep, binding);
-                self.graph.add_edge(dep.clone(), binding.clone());
-            }
+        for dep in rule.dependencies() {
+            trace!("setting dependency {} -> {}", dep, binding);
+            self.graph.add_edge(dep.clone(), binding.clone());
         }
 
-        if compiler.is_none() {
-            self.satisfy(&binding);
-            self.enqueue_ready();
-        }
+        self.satisfy(&binding);
+        self.enqueue_ready();
     }
 
     // TODO: will need Borrow bound
     fn satisfy(&mut self, binding: &str) {
         if let Some(dependents) = self.graph.dependents_of(binding) {
             let names = self.dependencies.keys().cloned().collect::<Vec<String>>();
+
             for name in names {
                 if dependents.contains(&name) {
                     *self.dependencies.entry(name).get().unwrap_or_else(|v| v.insert(0)) -= 1;
@@ -368,13 +361,18 @@ impl Manager {
             current.into_bind()
         }));
 
-        self.satisfy(&binding);
-        self.enqueue_ready();
+        if compiler.is_none() {
+            self.satisfy(&binding);
+            self.enqueue_ready();
+        }
 
         return false;
     }
 
     // TODO: I think this should be part of satisfy
+    // one of the benefits of keeping it separate is that
+    // we can satisfy multiple bindings at once and then perform
+    // a bulk enqueue_ready
     fn enqueue_ready(&mut self) {
         // prepare dependencies for now-ready dependents
         let mut deps_cache = BTreeMap::new();
