@@ -59,8 +59,8 @@ fn is_draft(item: &Item) -> bool {
         .map(|meta| {
             let &TomlMetadata(ref meta) = meta;
             meta.lookup("draft")
-               .and_then(::toml::Value::as_bool)
-               .unwrap_or(false)
+                .and_then(::toml::Value::as_bool)
+                .unwrap_or(false)
         })
         .unwrap_or(false)
 }
@@ -105,13 +105,17 @@ fn main() {
 
     let posts_compiler =
         ItemChain::new()
+            // TODO: this should probably be bind-level data
             .link(compiler::inject_with(template_registry))
+
             .link(compiler::read)
 
             // these two will be merged
             .link(compiler::parse_metadata)
-            .link(compiler::parse_toml)
+            .link(compiler::parse_toml);
 
+    let posts_compiler_post =
+        ItemChain::new()
             .link(compiler::render_markdown)
 
             .link(compiler::render_template("article", article_handler))
@@ -125,16 +129,18 @@ fn main() {
 
     let mut posts =
         Rule::matching("posts", posts_pattern)
-            .compiler(posts_compiler);
+            .compiler(
+                BindChain::new()
+                    .link(posts_compiler)
+                    .link(compiler::retain(publishable))
+                    .link(posts_compiler_post));
 
-    fn router(page: usize) -> PathBuf {
-        if page == 0 {
-            PathBuf::from("posts/index.html")
-        } else {
-            PathBuf::from(&format!("posts/{}/index.html", page))
-        }
-    }
-
+    // FIXME
+    // major problem
+    // this runs before anything is processed by a handler
+    // this means that `retain` can't remove unnecessary items
+    // and have them be acknowledged by this
+    // it would be necessary to have a way to run this during handling
     posts.rules_from_matches(|bind: &Bind| -> Vec<Rule> {
         let mut rules = vec![];
 
@@ -147,9 +153,17 @@ fn main() {
                 })
                 .link(compiler::write);
 
+        // TODO: zero-based
+        fn router(page: usize) -> PathBuf {
+            if page == 0 {
+                PathBuf::from("posts/index.html")
+            } else {
+                PathBuf::from(&format!("posts/{}/index.html", page))
+            }
+        }
+
         let paginate_rules = paginate(bind, 10, router, handler);
 
-        // sort
         rules.extend(paginate_rules.into_iter());
 
         rules

@@ -261,6 +261,18 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
     })
 }
 
+// TODO: this needs Copy so it can be 'moved' to the retain method more than once
+// even if we're not actually doing it more than once
+// in general this means that it can only be used with a function
+// perhaps should make the bound be Clone once Copy: Clone is implemented
+pub fn retain<C>(condition: C) -> Box<binding::Handler + Sync + Send>
+where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
+    Box::new(move |bind: &mut Bind| -> Result {
+        bind.items.retain(condition);
+        Ok(())
+    })
+}
+
 #[derive(Clone)]
 struct Pagination {
     pub first: (usize, PathBuf),
