@@ -67,55 +67,8 @@ impl Site {
             })
             .collect::<Vec<PathBuf>>();
 
-        // TODO
-        // this is complicated because after finding the items of a rule
-        // and constructing its binding, the rule.matches(cb) method
-        // can be used to perform logic based on the matches (binding)
-        // this can have the effect of creating other rules, which would
-        // modify the rules which were just iterated
-        // for rule in &rules {
-        //     let mut bind = Bind::new(rule.name.clone());
+        enum LifeTime { Dynamic, Static }
 
-        //     match rule.kind {
-        //         rule::Kind::Creating(ref path) => {
-        //             let conf = self.configuration.clone();
-
-        //             bind.push(Item::to(path.clone(), conf));
-        //         },
-        //         rule::Kind::Matching(ref pattern) => {
-        //             for path in &paths {
-        //                 let relative =
-        //                     path.relative_from(&self.configuration.input).unwrap()
-        //                     .to_path_buf();
-
-        //                 let conf = self.configuration.clone();
-
-        //                 if pattern.matches(&relative) {
-        //                     bind.push(Item::from(relative, conf));
-        //                 }
-        //             }
-        //         },
-        //     }
-
-        //     rules.extend(rule.callback(&bind).into_iter());
-
-        //     // run matches callback here?
-        //     // perhaps the callback passed to from_matches
-        //     // should return a vector of rules?
-        //     // rule.from_matches(|bind: &Bind| -> Vec<Rule> {})
-
-        //     self.manager.add(bind, rule.compiler.clone(), &rule.dependencies);
-        // }
-
-        // TODO
-        // this should probably be a recursive function that keeps
-        // processing the rules, or an iterative-stack solution
-        enum LifeTime {
-            Dynamic,
-            Static,
-        }
-
-        let mut collected = Vec::new();
         let mut rules = rules.into_iter().map(|r| (LifeTime::Static, r)).collect::<Vec<(LifeTime, Rule)>>();
 
         while let Some((life, rule)) = rules.pop() {
@@ -157,50 +110,9 @@ impl Site {
 
             // only save the static rules
             if let LifeTime::Static = life {
-                collected.push(rule);
+                self.rules.push(rule);
             }
         }
-
-        // for rule in &self.rules {
-        //     let mut bind = Bind::new(rule.name.clone());
-
-        //     match rule.kind {
-        //         rule::Kind::Creating(ref path) => {
-        //             let conf = self.configuration.clone();
-
-        //             bind.push(Item::to(path.clone(), conf));
-        //         },
-        //         rule::Kind::Matching(ref pattern) => {
-        //             for path in &paths {
-        //                 let relative =
-        //                     path.relative_from(&self.configuration.input).unwrap()
-        //                     .to_path_buf();
-
-        //                 let conf = self.configuration.clone();
-
-        //                 if pattern.matches(&relative) {
-        //                     bind.push(Item::from(relative, conf));
-        //                 }
-        //             }
-        //         },
-        //     }
-
-        //     // add any potential rules returned from the callback
-        //     rules.extend(rule.callback(&bind).into_iter());
-
-        //     // run matches callback here?
-        //     // perhaps the callback passed to from_matches
-        //     // should return a vector of rules?
-        //     // rule.from_matches(|bind: &Bind| -> Vec<Rule> {})
-
-        //     self.manager.add(bind, rule.compiler.clone(), &rule.dependencies);
-        //     collected.push(rule);
-        // }
-
-        // TODO
-        // this isn't supposed to add the ones created from_matches
-        // since those rules are subject to change based on the matched binding
-        mem::replace(&mut self.rules, collected);
     }
 
     pub fn build(&mut self) {
