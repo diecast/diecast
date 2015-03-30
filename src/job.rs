@@ -5,6 +5,8 @@ use std::thread;
 use std::mem;
 use std::fmt;
 
+use threadpool::ThreadPool;
+
 use binding::{self, Bind};
 use dependency::Graph;
 use rule::Rule;
@@ -40,19 +42,16 @@ impl Job {
     }
 }
 
-pub enum Error {
-    Err,
-    Panic,
-}
+pub struct Error;
 
-struct Sentinel {
+struct Canary {
     tx: Sender<Result<Job, Error>>,
     active: bool
 }
 
-impl Sentinel {
-    fn new(tx: Sender<Result<Job, Error>>) -> Sentinel {
-        Sentinel {
+impl Canary {
+    fn new(tx: Sender<Result<Job, Error>>) -> Canary {
+        Canary {
             tx: tx,
             active: true
         }
@@ -65,20 +64,22 @@ impl Sentinel {
 }
 
 #[unsafe_destructor]
-impl Drop for Sentinel {
+impl Drop for Canary {
     fn drop(&mut self) {
         if self.active {
-            match self.tx.send(Err(Error::Panic)) {
+            match self.tx.send(Err(Error)) {
                 Ok(_) => (), // will close down everything
-                Err(_) => (), // already pannicked once
+                Err(_) => (), // already panicked once
             }
         }
     }
 }
 
 pub struct Pool {
-    enqueue: Sender<Job>,
-    dequeue: Receiver<Result<Job, Error>>,
+    result_tx: Sender<Result<Job, Error>>,
+    result_rx: Receiver<Result<Job, Error>>,
+
+    pool: ThreadPool,
 }
 
 impl Pool {
@@ -91,62 +92,44 @@ impl Pool {
         assert!(threads >= 1);
         trace!("using {} threads", threads);
 
-        let (enqueue, rx) = channel::<Job>();
-        let rx = Arc::new(Mutex::new(rx));
-        let (tx, dequeue) = channel::<Result<Job, Error>>();
+        let (result_tx, result_rx) = channel::<Result<Job, Error>>();
 
-        // Threadpool threads
-        for _ in 0 .. threads {
-            let rx = rx.clone();
-            let tx = tx.clone();
-
-            thread::spawn(move || {
-                let sentinel = Sentinel::new(tx.clone());
-
-                loop {
-                    let message = {
-                        // Only lock jobs for the time it takes
-                        // to get a job, not run it.
-                        let lock = rx.lock().unwrap();
-                        lock.recv()
-                    };
-
-                    match message {
-                        Ok(mut job) => {
-                            trace!("dequeued {:?}", job);
-
-                            match job.process() {
-                                Ok(()) => {
-                                    tx.send(Ok(job)).unwrap()
-                                },
-                                Err(e) => {
-                                    println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", job, e);
-                                    tx.send(Err(Error::Err)).unwrap();
-                                }
-                            }
-                        },
-
-                        // The Taskpool was dropped.
-                        Err(..) => break
-                    }
-                }
-
-                sentinel.cancel();
-            });
-        }
+        let pool = ThreadPool::new(threads);
 
         Pool {
-            enqueue: enqueue,
-            dequeue: dequeue,
+            result_tx: result_tx,
+            result_rx: result_rx,
+
+            pool: pool,
         }
     }
 
-    pub fn enqueue(&self, job: Job) -> Result<(), SendError<Job>> {
-        self.enqueue.send(job)
+    pub fn enqueue(&self, job: Job) {
+        let tx = self.result_tx.clone();
+
+        self.pool.execute(move || {
+            let canary = Canary::new(tx.clone());
+
+            let mut job = job;
+
+            trace!("dequeued {:?}", job);
+
+            match job.process() {
+                Ok(()) => {
+                    tx.send(Ok(job)).unwrap()
+                },
+                Err(e) => {
+                    println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", job, e);
+                    tx.send(Err(Error)).unwrap();
+                }
+            }
+
+            canary.cancel();
+        });
     }
 
-    pub fn dequeue(&self) -> Result<Result<Job, Error>, RecvError> {
-        self.dequeue.recv()
+    pub fn dequeue(&self) -> Result<Job, Error> {
+        self.result_rx.recv().unwrap()
     }
 }
 
@@ -211,8 +194,10 @@ impl Manager {
             self.graph.add_edge(dep.clone(), binding.clone());
         }
 
-        self.satisfy(&binding);
-        self.enqueue_ready();
+        if compiler.is_none() {
+            self.satisfy(&binding);
+            self.enqueue_ready();
+        }
     }
 
     // TODO: will need Borrow bound
@@ -284,7 +269,7 @@ impl Manager {
 
                 return job;
             })
-        .collect::<VecDeque<Job>>();
+            .collect::<VecDeque<Job>>();
 
         mem::replace(&mut self.waiting, ordered);
 
@@ -308,18 +293,14 @@ impl Manager {
 
                 trace!("looping");
                 loop {
-                    match self.pool.dequeue().unwrap() {
+                    match self.pool.dequeue() {
                         Ok(job) => {
                             trace!("received job from pool");
                             if self.handle_done(job) {
                                 break;
                             }
                         },
-                        Err(Error::Err) => {
-                            println!("a job returned an error. stopping everything");
-                            ::exit(1);
-                        },
-                        Err(Error::Panic) => {
+                        Err(Error) => {
                             println!("a job panicked. stopping everything");
                             ::exit(1);
                         }
@@ -361,10 +342,8 @@ impl Manager {
             current.into_bind()
         }));
 
-        if compiler.is_none() {
-            self.satisfy(&binding);
-            self.enqueue_ready();
-        }
+        self.satisfy(&binding);
+        self.enqueue_ready();
 
         return false;
     }
@@ -402,7 +381,7 @@ impl Manager {
             let deps = deps_cache[&name].clone();
             job.bind.set_dependencies(deps);
             trace!("job now ready: {:?}", job);
-            self.pool.enqueue(job).unwrap();
+            self.pool.enqueue(job);
         }
     }
 }
