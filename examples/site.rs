@@ -25,7 +25,7 @@ use diecast::{
 use diecast::router;
 use diecast::command;
 use diecast::binding;
-use diecast::compiler::{self, TomlMetadata, BindChain, ItemChain, paginate};
+use diecast::compiler::{self, TomlMetadata, BindChain, ItemChain, paginate, Pagination};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -125,9 +125,9 @@ fn main() {
             // .link(compiler::print)
             .link(compiler::write);
 
-    let posts_pattern = glob::Pattern::new("posts/dots.markdown").unwrap();
+    let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
 
-    let mut posts =
+    let posts =
         Rule::matching("posts", posts_pattern)
             .compiler(
                 BindChain::new()
@@ -135,40 +135,52 @@ fn main() {
                     .link(compiler::retain(publishable))
                     .link(posts_compiler_post));
 
-    // FIXME
-    // major problem
-    // this runs before anything is processed by a handler
-    // this means that `retain` can't remove unnecessary items
-    // and have them be acknowledged by this
-    // it would be necessary to have a way to run this during handling
-    posts.rules_from_matches(|bind: &Bind| -> Vec<Rule> {
-        let mut rules = vec![];
-
-        let handler =
-            ItemChain::new()
-                .link(|item: &mut Item| -> compiler::Result {
-                    println!("item is: {:?}", item);
-                    item.body = Some("test".to_string());
-                    Ok(())
-                })
-                .link(compiler::write);
-
-        // TODO: zero-based
-        fn router(page: usize) -> PathBuf {
-            if page == 0 {
-                PathBuf::from("posts/index.html")
-            } else {
-                PathBuf::from(&format!("posts/{}/index.html", page))
-            }
+    fn router(page: usize) -> PathBuf {
+        if page == 0 {
+            PathBuf::from("index.html")
+        } else {
+            PathBuf::from(&format!("{}/index.html", page))
         }
+    }
 
-        let paginate_rules = paginate(bind, 10, router, handler);
+    let index =
+        Rule::creating("post index", "index.html")
+        .compiler(
+            BindChain::new()
+            .link(paginate(10, router))
+            .link(|bind: &mut Bind| -> compiler::Result {
+                println!("pages: {:?}", bind.items);
+                Ok(())
+            })
+            .link(
+                ItemChain::new()
+                .link(|item: &mut Item| -> compiler::Result {
+                    let pagination = item.data.remove::<Pagination>().unwrap();
+                    // TODO: cloning here :/
+                    // if we end up doing that, might as well clone it and set it in paginate()
+                    let posts: Vec<Item> = item.bind().dependencies["posts"].items[pagination.range]
+                        .iter()
+                        .cloned()
+                        .collect();
+                    println!("page {:?} contains posts {:?}", item, posts);
 
-        rules.extend(paginate_rules.into_iter());
+                    let mut titles = String::new();
 
-        rules
-    });
+                    for post in posts {
+                        if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
+                            if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
+                                titles.push_str(&format!("> {}\n", title));
+                            }
+                        }
+                    }
 
+                    item.body = Some(titles);
+                    println!("body: {:?}", item.body);
+                    try!(compiler::print(item));
+
+                    Ok(())
+                })))
+        .depends_on(&posts);
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
             .ignore(regex!(r"^\.|^#|~$|\.swp$|4913"));
@@ -176,13 +188,8 @@ fn main() {
     let mut command = command::from_args(config);
 
     command.site().register(posts);
+    command.site().register(index);
 
     command.run();
-
-    // // this is how the pagination will be called
-    // // it is given the binding to be paginated
-    // // and a compiler for compiling each individual index page
-    // // and a routing function
-    // paginate(&posts, page_handler, router);
 }
 
