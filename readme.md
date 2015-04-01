@@ -6,10 +6,9 @@ Markdown processing is enabled through the use of [idiomatic Hoedown bindings](h
 
 Documentation and examples are forthcoming, but here's a taste of what it's like:
 
+Define a rule called `"posts"` which will match any file in the input directory that matches the glob pattern `posts/*.md`:
+
 ``` rust
-// define a rule called "posts"
-// it will match any file in the input directory that matches
-// the glob pattern "posts/*.md"
 let posts =
   Rule::matching("posts", glob::Pattern::new("posts/*.md").unwrap())
   // specify the compiler to use to process each matched item
@@ -33,8 +32,11 @@ let posts =
       .link(router::set_extension("html"))
       // write the contents to the output file
       .link(compiler::write));
+```
 
-// a custom compiler which would render the post index
+A custom compiler which would render the post index:
+
+``` rust
 fn render_index(item: &mut Item) -> compiler::Result {
   // notice since "post index" depends on "posts",
   // it has access to the "posts" dependency within its compilers
@@ -42,9 +44,11 @@ fn render_index(item: &mut Item) -> compiler::Result {
 
   // use the posts to render the index
 }
+```
 
-// define a rule called "post index"
-// it will create an "index.html" file
+Define a rule called `"post index"` which will create an `"index.html"` file:
+
+``` rust
 let index =
   Rule::creating("post index", "index.html")
   .compiler(
@@ -55,15 +59,16 @@ let index =
   //   1. is evaluated _only_ after the "posts" rule has been evaluated
   //   2. has access to the "posts" dependency
   .depends_on(&posts);
+```
 
+Define a base configuration and allow it to be overridden from the command line:
+
+``` rust
 let config =
   Configuration::new("input/", "output/")
   // ignore common editor files
   .ignore(regex!(r"^\.|^#|~$|\.swp$"));
 
-// determine which command the user would like to run
-// provide our configuration to serve as a base which the user can override
-// using command line arguments
 let mut command = command::from_args(config);
 
 // register the rules with the site
