@@ -1,10 +1,7 @@
 use std::sync::Arc;
 use std::collections::HashSet;
 use std::borrow::IntoCow;
-use std::convert::AsRef;
-use std::path::{Path, PathBuf};
 
-use pattern::Pattern;
 use binding;
 
 // TODO: optimization: Arc<String> ?
