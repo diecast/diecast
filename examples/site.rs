@@ -120,7 +120,7 @@ fn main() {
         Rule::new("post index")
         .compiler(
             BindChain::new()
-            .link(paginate(10, router))
+            .link(paginate(5, router))
             .link(
                 ItemChain::new()
                 .link(|item: &mut Item| -> compiler::Result {
@@ -140,7 +140,8 @@ fn main() {
 
                     Ok(())
                 })
-                .link(compiler::print)))
+                .link(compiler::print)
+                .link(compiler::write)))
         .depends_on(&posts);
 
     let config =

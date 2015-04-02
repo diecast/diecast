@@ -356,9 +356,11 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 
             println!("page {} has a range of [{}, {})", current, start, end);
 
+            let target = router(current);
+
             let first = first.clone();
             let last = last.clone();
-            let curr = (current, router(current));
+            let curr = (current, target.clone());
 
             let page_struct =
                 Page {
@@ -377,7 +379,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                     range: start .. end,
                 };
 
-            let mut page = Item::to(PathBuf::from(format!("{}/index.html", current)), bind.data.clone());
+            let mut page = Item::to(target, bind.data.clone());
             page.data.insert::<Page>(page_struct);
             bind.items.push(page);
         }
