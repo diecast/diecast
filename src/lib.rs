@@ -16,6 +16,7 @@
 #![feature(path_relative_from)]
 #![feature(str_char)]
 #![feature(into_cow)]
+#![feature(collections)]
 
 #![plugin(regex_macros)]
 

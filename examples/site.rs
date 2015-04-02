@@ -25,7 +25,7 @@ use diecast::{
 use diecast::router;
 use diecast::command;
 use diecast::binding;
-use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page};
+use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page, Pooled};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -52,8 +52,6 @@ fn article_handler(item: &Item) -> Json {
     Json::Object(bt)
 }
 
-// approach: have a wrapper compiler that only performs its inner if the condition is true
-
 fn is_draft(item: &Item) -> bool {
     item.data.get::<Metadata>()
         .map(|meta| {
@@ -69,34 +67,15 @@ fn publishable(item: &Item) -> bool {
     !(is_draft(item) && !item.bind().configuration.is_preview)
 }
 
-fn collect_titles(item: &mut Item) -> compiler::Result {
-    let mut titles = String::new();
-
-    for post in &item.bind().dependencies["posts"].items {
-        if !publishable(post) {
-            continue;
-        }
-
-        if let Some(&Metadata(ref metadata)) = post.data.get::<Metadata>() {
-            if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
-                titles.push_str(&format!("> {}\n", title));
-            }
-        }
-    }
-
-    item.body = Some(titles);
-    Ok(())
-}
-
 fn main() {
     env_logger::init().unwrap();
 
     let mut layout = String::new();
 
     File::open("tests/fixtures/input/layouts/article.handlebars")
-        .unwrap()
-        .read_to_string(&mut layout)
-        .unwrap();
+    .unwrap()
+    .read_to_string(&mut layout)
+    .unwrap();
 
     let mut handlebars = Handlebars::new();
     handlebars.register_template_string("article", layout).unwrap();
@@ -104,36 +83,31 @@ fn main() {
     let template_registry = Arc::new(handlebars);
 
     let posts_compiler =
-        ItemChain::new()
+        Pooled::new(
+            ItemChain::new()
             // TODO: this should probably be bind-level data
             .link(compiler::inject_with(template_registry))
-
             .link(compiler::read)
-
-            // these two will be merged
-            .link(compiler::parse_metadata);
+            .link(compiler::parse_metadata));
 
     let posts_compiler_post =
-        ItemChain::new()
+        Pooled::new(
+            ItemChain::new()
             .link(compiler::render_markdown)
-
             .link(compiler::render_template("article", article_handler))
             .link(router::set_extension("html"))
-
-            // TODO: only if publishable
-            // .link(compiler::print)
-            .link(compiler::write);
+            .link(compiler::write));
 
     let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
 
     let posts =
         Rule::new("posts")
-            .compiler(
-                BindChain::new()
-                    .link(compiler::from_pattern(posts_pattern))
-                    .link(posts_compiler)
-                    .link(compiler::retain(publishable))
-                    .link(posts_compiler_post));
+        .compiler(
+            BindChain::new()
+            .link(compiler::from_pattern(posts_pattern))
+            .link(posts_compiler)
+            .link(compiler::retain(publishable))
+            .link(posts_compiler_post));
 
     fn router(page: usize) -> PathBuf {
         if page == 0 {
@@ -173,7 +147,7 @@ fn main() {
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
-            .ignore(regex!(r"^\.|^#|~$|\.swp$|4913"));
+        .ignore(regex!(r"^\.|^#|~$|\.swp$|4913"));
 
     let mut command = command::from_args(config);
 

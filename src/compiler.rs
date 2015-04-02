@@ -16,6 +16,8 @@ use std::fs::PathExt;
 use std::fs;
 use std::path::Path;
 
+use job::Pool;
+
 pub trait Error: ::std::error::Error {}
 pub type Result = ::std::result::Result<(), Box<Error>>;
 
@@ -52,6 +54,47 @@ impl binding::Handler for BindChain {
         for handler in &self.handlers {
             try!(handler.handle(binding));
         }
+
+        Ok(())
+    }
+}
+
+pub struct Pooled {
+    chain: Arc<ItemChain>,
+}
+
+impl Pooled {
+    pub fn new(chain: ItemChain) -> Pooled {
+        Pooled {
+            chain: Arc::new(chain),
+        }
+    }
+}
+
+impl binding::Handler for Pooled {
+    fn handle(&self, bind: &mut Bind) -> compiler::Result {
+        let pool = Pool::new(bind.data.read().unwrap().configuration.threads);
+        let count = bind.items.len();
+
+        for item in bind.items.drain() {
+            let chain = self.chain.clone();
+
+            pool.enqueue(move || {
+                let mut item = item;
+
+                match item::Handler::handle(&chain, &mut item) {
+                    Ok(()) => Some(item),
+                    Err(e) => {
+                        println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n", item, e);
+                        None
+                    }
+                }
+            });
+        }
+
+        bind.items = (0 .. count).map(|_| pool.dequeue().unwrap()).collect::<Vec<Item>>();
+
+        assert!(count == bind.items.len(), "received different number of items from pool");
 
         Ok(())
     }
@@ -343,6 +386,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     })
 }
 
+// TODO: problem here is that the dir is being walked multiple times
 pub fn from_pattern<P>(pattern: P) -> Box<binding::Handler + Sync + Send>
 where P: Pattern + Sync + Send + 'static {
     Box::new(move |bind: &mut Bind| -> compiler::Result {
