@@ -83,20 +83,18 @@ fn main() {
     let template_registry = Arc::new(handlebars);
 
     let posts_compiler =
-        Pooled::new(
-            ItemChain::new()
-            // TODO: this should probably be bind-level data
-            .link(compiler::inject_with(template_registry))
-            .link(compiler::read)
-            .link(compiler::parse_metadata));
+        ItemChain::new()
+        // TODO: this should probably be bind-level data
+        .link(compiler::inject_with(template_registry))
+        .link(compiler::read)
+        .link(compiler::parse_metadata);
 
     let posts_compiler_post =
-        Pooled::new(
-            ItemChain::new()
-            .link(compiler::render_markdown)
-            .link(compiler::render_template("article", article_handler))
-            .link(router::set_extension("html"))
-            .link(compiler::write));
+        ItemChain::new()
+        .link(compiler::render_markdown)
+        .link(compiler::render_template("article", article_handler))
+        .link(router::set_extension("html"))
+        .link(compiler::write);
 
     let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
 
@@ -105,9 +103,9 @@ fn main() {
         .compiler(
             BindChain::new()
             .link(compiler::from_pattern(posts_pattern))
-            .link(posts_compiler)
+            .link(Pooled::new(posts_compiler))
             .link(compiler::retain(publishable))
-            .link(posts_compiler_post));
+            .link(Pooled::new(posts_compiler_post)));
 
     fn router(page: usize) -> PathBuf {
         if page == 0 {
