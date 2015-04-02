@@ -46,8 +46,6 @@ impl Site {
     pub fn find_jobs(&mut self) {
         use std::fs::PathExt;
 
-        let rules = mem::replace(&mut self.rules, Vec::new());
-
         let paths =
             fs::walk_dir(&self.configuration.input).unwrap()
             .filter_map(|p| {
@@ -67,11 +65,7 @@ impl Site {
             })
             .collect::<Vec<PathBuf>>();
 
-        enum LifeTime { Dynamic, Static }
-
-        let mut rules = rules.into_iter().map(|r| (LifeTime::Static, r)).collect::<Vec<(LifeTime, Rule)>>();
-
-        while let Some((life, rule)) = rules.pop() {
+        for rule in &self.rules {
             let mut bind = Bind::new(rule.name().to_string(), self.configuration.clone());
             let data = bind.data.clone();
 
@@ -94,20 +88,8 @@ impl Site {
                 },
             }
 
-            // add any potential rules returned from the callback
-            if let &Some(ref callback) = rule.callback() {
-                rules.extend(
-                    callback(&bind).into_iter()
-                    .map(|r| (LifeTime::Dynamic, r.depends_on(&rule))));
-            }
-
             // TODO: should handle compiler option clone
             self.manager.add(bind, &rule);
-
-            // only save the static rules
-            if let LifeTime::Static = life {
-                self.rules.push(rule);
-            }
         }
     }
 

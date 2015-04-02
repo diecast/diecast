@@ -18,12 +18,6 @@ pub struct Rule {
     operation: Operation,
     compiler: Option<Arc<Box<binding::Handler + Sync + Send>>>,
     dependencies: HashSet<String>,
-
-    /// callback to run after bind has been created
-    /// enables the creation of rules based on the
-    /// binding, for example to create a separate
-    /// rule for each page in a pagination scheme
-    callback: Option<Box<Fn(&Bind) -> Vec<Rule>>>,
 }
 
 impl Rule {
@@ -35,7 +29,6 @@ impl Rule {
             operation: Operation::Creating(path.as_ref().to_path_buf()),
             compiler: None,
             dependencies: HashSet::new(),
-            callback: None,
         }
     }
 
@@ -46,13 +39,7 @@ impl Rule {
             operation: Operation::Matching(Box::new(pattern)),
             compiler: None,
             dependencies: HashSet::new(),
-            callback: None,
         }
-    }
-
-    pub fn rules_from_matches<F>(&mut self, callback: F)
-    where F: Fn(&Bind) -> Vec<Rule>, F: 'static {
-        self.callback = Some(Box::new(callback));
     }
 
     pub fn compiler<H>(mut self, compiler: H) -> Rule
@@ -83,10 +70,6 @@ impl Rule {
 
     pub fn operation(&self) -> &Operation {
         &self.operation
-    }
-
-    pub fn callback(&self) -> &Option<Box<Fn(&Bind) -> Vec<Rule>>> {
-        &self.callback
     }
 }
 

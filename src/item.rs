@@ -55,10 +55,6 @@ pub struct Item {
     /// The Item's body which will fill the target file.
     pub body: Option<String>,
 
-    // TODO: remove this and put ref to BindData
-    // pub binding: Weak<BindData>,
-    pub dependencies: Dependencies,
-
     /// Any additional data (post metadata)
     ///
     /// * Title
@@ -87,7 +83,6 @@ impl Item {
             from: from,
             to: to,
             body: None,
-            dependencies: Arc::new(BTreeMap::new()),
             data: AnyMap::new(),
             bind: bind,
         }

@@ -148,39 +148,30 @@ fn main() {
         .compiler(
             BindChain::new()
             .link(paginate(10, router))
-            .link(|bind: &mut Bind| -> compiler::Result {
-                println!("pages: {:?}", bind.items);
-                Ok(())
-            })
             .link(
                 ItemChain::new()
                 .link(|item: &mut Item| -> compiler::Result {
                     let pagination = item.data.remove::<Pagination>().unwrap();
-                    // TODO: cloning here :/
-                    // if we end up doing that, might as well clone it and set it in paginate()
-                    let posts: Vec<Item> = item.bind().dependencies["posts"].items[pagination.range]
-                        .iter()
-                        .cloned()
-                        .collect();
-                    println!("page {:?} contains posts {:?}", item, posts);
 
                     let mut titles = String::new();
 
-                    for post in posts {
-                        if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
-                            if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
-                                titles.push_str(&format!("> {}\n", title));
+                    {
+                        for post in &item.bind().dependencies["posts"].items[pagination.range] {
+                            if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
+                                if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
+                                    titles.push_str(&format!("> {}\n", title));
+                                }
                             }
                         }
                     }
 
                     item.body = Some(titles);
-                    println!("body: {:?}", item.body);
-                    try!(compiler::print(item));
 
                     Ok(())
-                })))
+                })
+                .link(compiler::print)))
         .depends_on(&posts);
+
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
             .ignore(regex!(r"^\.|^#|~$|\.swp$|4913"));

@@ -292,6 +292,7 @@ pub struct Pagination {
 pub fn paginate<R>(factor: usize, router: R) -> Box<binding::Handler + Sync + Send>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     Box::new(move |bind: &mut Bind| -> compiler::Result {
+        println!("starting paginate");
         let posts = &bind.data.read().unwrap().dependencies["posts"].items;
 
         // TODO
