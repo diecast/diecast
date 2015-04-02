@@ -25,7 +25,7 @@ use diecast::{
 use diecast::router;
 use diecast::command;
 use diecast::binding;
-use diecast::compiler::{self, TomlMetadata, BindChain, ItemChain, paginate, Pagination};
+use diecast::compiler::{self, TomlMetadata, BindChain, ItemChain, paginate, Page};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -153,7 +153,7 @@ fn main() {
             .link(
                 ItemChain::new()
                 .link(|item: &mut Item| -> compiler::Result {
-                    let pagination = item.data.remove::<Pagination>().unwrap();
+                    let pagination = item.data.remove::<Page>().unwrap();
 
                     let mut titles = String::new();
 

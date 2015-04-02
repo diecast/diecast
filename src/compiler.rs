@@ -279,7 +279,7 @@ where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
 }
 
 #[derive(Clone)]
-pub struct Pagination {
+pub struct Page {
     pub first: (usize, PathBuf),
     pub last: (usize, PathBuf),
     pub next: Option<(usize, PathBuf)>,
@@ -315,10 +315,6 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
         let first = (1, router(1));
         let last = (last_num, router(last_num));
 
-        // TODO: this seems hacky
-        // perhaps move matching/creating behavior to compiler
-        bind.items.clear();
-
         // grow the number of pages as needed
         for current in 0 .. page_count {
             let prev =
@@ -338,7 +334,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
             let curr = (current, router(current));
 
             let page_struct =
-                Pagination {
+                Page {
                     first: first,
 
                     prev: prev,
@@ -355,7 +351,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                 };
 
             let mut page = Item::to(PathBuf::from(format!("{}/index.html", current)), bind.data.clone());
-            page.data.insert::<Pagination>(page_struct);
+            page.data.insert::<Page>(page_struct);
             bind.items.push(page);
         }
 
