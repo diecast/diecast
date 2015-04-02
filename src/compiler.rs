@@ -59,42 +59,78 @@ impl binding::Handler for BindChain {
     }
 }
 
+// TODO: should the chunk be in configuration or a parameter?
 pub struct Pooled {
+    chunk: usize,
     chain: Arc<ItemChain>,
 }
 
 impl Pooled {
     pub fn new(chain: ItemChain) -> Pooled {
         Pooled {
+            chunk: 1,
             chain: Arc::new(chain),
         }
+    }
+
+    pub fn chunk(mut self, size: usize) -> Pooled {
+        self.chunk = size;
+        self
     }
 }
 
 impl binding::Handler for Pooled {
     fn handle(&self, bind: &mut Bind) -> compiler::Result {
-        let pool = Pool::new(bind.data.read().unwrap().configuration.threads);
-        let count = bind.items.len();
+        let pool: Pool<Vec<Item>> = Pool::new(bind.data.read().unwrap().configuration.threads);
+        let item_count = bind.items.len();
 
-        for item in bind.items.drain() {
+        let chunks = {
+            let (div, rem) = (item_count / self.chunk, item_count % self.chunk);
+
+            if rem == 0 {
+                div
+            } else {
+                div + 1
+            }
+        };
+
+        let mut items = bind.items.drain().collect::<Vec<Item>>();
+
+        // TODO: optimize this for general case of chunk=1?
+        while !items.is_empty() {
+            let rest = if self.chunk > items.len() {
+                vec![]
+            } else {
+                items.split_off(self.chunk)
+            };
+
             let chain = self.chain.clone();
 
             pool.enqueue(move || {
-                let mut item = item;
+                let mut items = items;
+                let mut results = vec![];
 
-                match item::Handler::handle(&chain, &mut item) {
-                    Ok(()) => Some(item),
-                    Err(e) => {
-                        println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n", item, e);
-                        None
+                for mut item in items {
+                    match item::Handler::handle(&chain, &mut item) {
+                        Ok(()) => results.push(item),
+                        Err(e) => {
+                            println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n", item, e);
+                            return None;
+                        }
                     }
                 }
+
+                Some(results)
             });
+
+            items = rest;
         }
 
-        bind.items = (0 .. count).map(|_| pool.dequeue().unwrap()).collect::<Vec<Item>>();
+        for _ in 0 .. chunks {
+            bind.items.extend(pool.dequeue().unwrap().into_iter());
+        }
 
-        assert!(count == bind.items.len(), "received different number of items from pool");
+        assert!(item_count == bind.items.len(), "received different number of items from pool");
 
         Ok(())
     }
@@ -427,6 +463,8 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
             page.data.insert::<Page>(page_struct);
             bind.items.push(page);
         }
+
+        println!("finished pagination");
 
         Ok(())
     })

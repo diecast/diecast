@@ -1,5 +1,6 @@
 #![feature(plugin)]
 #![feature(convert)]
+#![feature(std_misc)]
 
 #![plugin(regex_macros)]
 
@@ -103,21 +104,57 @@ fn main() {
         .compiler(
             BindChain::new()
             .link(compiler::from_pattern(posts_pattern))
-            .link(Pooled::new(posts_compiler))
+            .link(posts_compiler)
             .link(compiler::retain(publishable))
-            .link(Pooled::new(posts_compiler_post))
-            .link(compiler::next_prev)
-            .link(|bind: &mut Bind| -> compiler::Result {
-                for item in &bind.items {
-                    println!("item: {:?}", item);
+            .link(posts_compiler_post)
+            .link(compiler::next_prev));
 
-                    if let Some(ref adj) = item.data.get::<Adjacent>() {
-                        println!("{:?}", adj);
+    struct Tags {
+        tags: ::std::collections::HashMap<String, Vec<Arc<Item>>>,
+    }
+
+    // TODO: it could also be an item compiler for posts, where each item contributes
+    // to a bind-level data about the tags?
+    // also maybe post item compiler can read tags into Tags structure
+    // which tag index would simply merge together
+    let tag_index =
+        Rule::new("tag index")
+        .compiler(|bind: &mut Bind| -> compiler::Result {
+            println!("collecting tag map");
+            let mut tag_map = ::std::collections::HashMap::new();
+
+            for item in &bind.data.read().unwrap().dependencies["posts"].items {
+                println!("checking tags of {:?}", item);
+
+                let toml =
+                    item.data.get::<Metadata>()
+                    .and_then(|m| {
+                        let &Metadata(ref meta) = m;
+                        meta.lookup("tags")
+                    })
+                    .and_then(::toml::Value::as_slice);
+
+                let arc = Arc::new(item.clone());
+
+                if let Some(tags) = toml {
+                    println!("has tags {:?}", tags);
+
+                    for tag in tags {
+                        println!("adding tag {:?}", tag);
+                        tag_map.entry(tag.as_str().unwrap().to_string()).get()
+                            .unwrap_or_else(|v| v.insert(vec![]))
+                            .push(arc.clone());
+                        println!("tag map is now: {:?}", tag_map);
                     }
                 }
+            }
 
-                Ok(())
-            }));
+            println!("finished collecting tags");
+            println!("tags: {:?}", tag_map);
+
+            Ok(())
+        })
+        .depends_on(&posts);
 
     fn router(page: usize) -> PathBuf {
         if page == 0 {
@@ -163,8 +200,12 @@ fn main() {
     let mut command = command::from_args(config);
 
     command.site().register(posts);
+    command.site().register(tag_index);
     command.site().register(index);
 
     command.run();
+
+    // FIXME: main thread doesn't wait for children?
+    println!("EXITING");
 }
 

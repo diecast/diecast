@@ -161,7 +161,6 @@ impl Manager {
         // TODO: this still necessary?
         // it's only used to determine if anything will actually be done
         // operate on a binding-level
-        println!("adding to count");
         self.count += 1;
 
         let compiler = rule.get_compiler();
@@ -263,13 +262,11 @@ impl Manager {
                 self.enqueue_ready();
 
                 trace!("looping");
-                loop {
+                for _ in (0 .. self.count) {
                     match self.pool.dequeue() {
                         Some(job) => {
                             trace!("received job from pool");
-                            if self.handle_done(job) {
-                                break;
-                            }
+                            self.handle_done(job);
                         },
                         None => {
                             println!("a job panicked. stopping everything");
@@ -295,13 +292,9 @@ impl Manager {
         self.count = 0;
     }
 
-    fn handle_done(&mut self, current: Job) -> bool {
+    fn handle_done(&mut self, current: Job) {
         trace!("finished {}", current.bind.data.read().unwrap().name);
         trace!("before waiting: {:?}", self.waiting);
-
-        if self.waiting.is_empty() {
-            return true;
-        }
 
         let binding = current.bind.data.read().unwrap().name.to_string();
 
@@ -315,8 +308,6 @@ impl Manager {
 
         self.satisfy(&binding);
         self.enqueue_ready();
-
-        return false;
     }
 
     // TODO: I think this should be part of satisfy
