@@ -173,7 +173,7 @@ pub fn print(item: &mut Item) -> Result {
 }
 
 #[derive(Clone)]
-pub struct Metadata(pub String);
+pub struct Metadata(pub toml::Value);
 
 pub fn parse_metadata(item: &mut Item) -> Result {
     if let Some(body) = item.body.take() {
@@ -192,7 +192,9 @@ pub fn parse_metadata(item: &mut Item) -> Result {
 
         if let Some(captures) = re.captures(&body) {
             if let Some(metadata) = captures.name("metadata") {
-                item.data.insert(Metadata(metadata.to_string()));
+                if let Ok(parsed) = metadata.parse() {
+                    item.data.insert(Metadata(parsed));
+                }
             }
 
             if let Some(body) = captures.name("body") {
@@ -205,24 +207,6 @@ pub fn parse_metadata(item: &mut Item) -> Result {
         }
 
         item.body = Some(body);
-    }
-
-    Ok(())
-}
-
-#[derive(Clone)]
-pub struct TomlMetadata(pub toml::Value);
-
-pub fn parse_toml(item: &mut Item) -> Result {
-    let parsed = if let Some(&Metadata(ref parsed)) = item.data.get::<Metadata>() {
-        // TODO: proper error handling here
-        parsed.parse().ok()
-    } else {
-        None
-    };
-
-    if let Some(parsed) = parsed {
-        item.data.insert(TomlMetadata(parsed));
     }
 
     Ok(())

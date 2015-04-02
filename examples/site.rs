@@ -25,7 +25,7 @@ use diecast::{
 use diecast::router;
 use diecast::command;
 use diecast::binding;
-use diecast::compiler::{self, TomlMetadata, BindChain, ItemChain, paginate, Page};
+use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -39,7 +39,7 @@ use rustc_serialize::json::{Json, ToJson};
 fn article_handler(item: &Item) -> Json {
     let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
-    if let Some(&TomlMetadata(ref metadata)) = item.data.get::<TomlMetadata>() {
+    if let Some(&Metadata(ref metadata)) = item.data.get::<Metadata>() {
         if let Some(body) = item.data.get::<Buffer>() {
             bt.insert("body".to_string(), body.as_str().unwrap().to_json());
         }
@@ -55,9 +55,9 @@ fn article_handler(item: &Item) -> Json {
 // approach: have a wrapper compiler that only performs its inner if the condition is true
 
 fn is_draft(item: &Item) -> bool {
-    item.data.get::<TomlMetadata>()
+    item.data.get::<Metadata>()
         .map(|meta| {
-            let &TomlMetadata(ref meta) = meta;
+            let &Metadata(ref meta) = meta;
             meta.lookup("draft")
                 .and_then(::toml::Value::as_bool)
                 .unwrap_or(false)
@@ -77,7 +77,7 @@ fn collect_titles(item: &mut Item) -> compiler::Result {
             continue;
         }
 
-        if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
+        if let Some(&Metadata(ref metadata)) = post.data.get::<Metadata>() {
             if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
                 titles.push_str(&format!("> {}\n", title));
             }
@@ -111,8 +111,7 @@ fn main() {
             .link(compiler::read)
 
             // these two will be merged
-            .link(compiler::parse_metadata)
-            .link(compiler::parse_toml);
+            .link(compiler::parse_metadata);
 
     let posts_compiler_post =
         ItemChain::new()
@@ -153,12 +152,12 @@ fn main() {
             .link(
                 ItemChain::new()
                 .link(|item: &mut Item| -> compiler::Result {
-                    let pagination = item.data.remove::<Page>().unwrap();
+                    let page = item.data.remove::<Page>().unwrap();
 
                     let mut titles = String::new();
 
-                    for post in &item.bind().dependencies["posts"].items[pagination.range] {
-                        if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
+                    for post in &item.bind().dependencies["posts"].items[page.range] {
+                        if let Some(&Metadata(ref metadata)) = post.data.get::<Metadata>() {
                             if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
                                 titles.push_str(&format!("> {}\n", title));
                             }
