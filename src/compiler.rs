@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::error::FromError;
 use std::path::PathBuf;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use toml;
 
@@ -305,13 +305,48 @@ where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
     })
 }
 
+#[derive(Clone, Debug)]
+pub struct Adjacent {
+    previous: Option<Arc<Item>>,
+    next: Option<Arc<Item>>,
+}
+
+pub fn next_prev(bind: &mut Bind) -> compiler::Result {
+    let count = bind.items.len();
+
+    let last_num = if count == 0 {
+        0
+    } else {
+        count - 1
+    };
+
+    // TODO: yet another reason to have Arc<Item>?
+    let cloned = bind.items.iter().map(|i| Arc::new(i.clone())).collect::<Vec<Arc<Item>>>();
+
+    for (idx, item) in bind.items.iter_mut().enumerate() {
+        let prev =
+            if idx == 0 { None }
+            else { let num = idx - 1; Some(cloned[num].clone()) };
+        let next =
+            if idx == last_num { None }
+            else { let num = idx + 1; Some(cloned[num].clone()) };
+
+        item.data.insert::<Adjacent>(Adjacent {
+            previous: prev,
+            next: next,
+        });
+    }
+
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct Page {
-    pub first: (usize, PathBuf),
-    pub last: (usize, PathBuf),
-    pub next: Option<(usize, PathBuf)>,
-    pub curr: (usize, PathBuf),
-    pub prev: Option<(usize, PathBuf)>,
+    pub first: (usize, Arc<PathBuf>),
+    pub last: (usize, Arc<PathBuf>),
+    pub next: Option<(usize, Arc<PathBuf>)>,
+    pub curr: (usize, Arc<PathBuf>),
+    pub prev: Option<(usize, Arc<PathBuf>)>,
 
     pub range: ::std::ops::Range<usize>,
 
@@ -323,21 +358,30 @@ pub struct Page {
 pub fn paginate<R>(factor: usize, router: R) -> Box<binding::Handler + Sync + Send>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     Box::new(move |bind: &mut Bind| -> compiler::Result {
-        println!("starting paginate");
-        let posts = &bind.data.read().unwrap().dependencies["posts"].items;
+        let post_count = bind.data.read().unwrap().dependencies["posts"].items.len();
 
-        // TODO
-        // test:
-        //   1. no items
-        //   2. just one item
+        let page_count = {
+            let (div, rem) = (post_count / factor, post_count % factor);
 
-        let post_count = posts.len();
+            if rem == 0 {
+                div
+            } else {
+                div + 1
+            }
+        };
 
         // this conversion could fail if post_count or factor is greater than 2^53
         // I think that's unlikely...
         let page_count = ::std::cmp::max(1, (post_count as f64 / factor as f64).ceil() as usize);
 
-        let last_num = ::std::cmp::max(1, page_count - 1);
+        let last_num = page_count - 1;
+
+        let mut cache: HashMap<usize, Arc<PathBuf>> = HashMap::new();
+
+        let mut router = |num: usize| -> Arc<PathBuf> {
+            cache.entry(num).get()
+                .unwrap_or_else(|v| v.insert(Arc::new(router(num)))).clone()
+        };
 
         let first = (1, router(1));
         let last = (last_num, router(last_num));
@@ -379,7 +423,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                     range: start .. end,
                 };
 
-            let mut page = Item::to(target, bind.data.clone());
+            let mut page = Item::to((*target).clone(), bind.data.clone());
             page.data.insert::<Page>(page_struct);
             bind.items.push(page);
         }

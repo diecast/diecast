@@ -25,7 +25,7 @@ use diecast::{
 use diecast::router;
 use diecast::command;
 use diecast::binding;
-use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page, Pooled};
+use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page, Pooled, Adjacent};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -105,7 +105,19 @@ fn main() {
             .link(compiler::from_pattern(posts_pattern))
             .link(Pooled::new(posts_compiler))
             .link(compiler::retain(publishable))
-            .link(Pooled::new(posts_compiler_post)));
+            .link(Pooled::new(posts_compiler_post))
+            .link(compiler::next_prev)
+            .link(|bind: &mut Bind| -> compiler::Result {
+                for item in &bind.items {
+                    println!("item: {:?}", item);
+
+                    if let Some(ref adj) = item.data.get::<Adjacent>() {
+                        println!("{:?}", adj);
+                    }
+                }
+
+                Ok(())
+            }));
 
     fn router(page: usize) -> PathBuf {
         if page == 0 {
