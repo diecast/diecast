@@ -157,12 +157,10 @@ fn main() {
 
                     let mut titles = String::new();
 
-                    {
-                        for post in &item.bind().dependencies["posts"].items[pagination.range] {
-                            if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
-                                if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
-                                    titles.push_str(&format!("> {}\n", title));
-                                }
+                    for post in &item.bind().dependencies["posts"].items[pagination.range] {
+                        if let Some(&TomlMetadata(ref metadata)) = post.data.get::<TomlMetadata>() {
+                            if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
+                                titles.push_str(&format!("> {}\n", title));
                             }
                         }
                     }
