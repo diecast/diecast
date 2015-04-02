@@ -46,49 +46,29 @@ impl Site {
     pub fn find_jobs(&mut self) {
         use std::fs::PathExt;
 
-        let paths =
-            fs::walk_dir(&self.configuration.input).unwrap()
-            .filter_map(|p| {
-                let path = p.unwrap().path();
+        // let paths =
+        //     fs::walk_dir(&self.configuration.input).unwrap()
+        //     .filter_map(|p| {
+        //         let path = p.unwrap().path();
 
-                if let Some(ref pattern) = self.configuration.ignore {
-                    if pattern.matches(&Path::new(path.file_name().unwrap())) {
-                        return None;
-                    }
-                }
+        //         if let Some(ref pattern) = self.configuration.ignore {
+        //             if pattern.matches(&Path::new(path.file_name().unwrap())) {
+        //                 return None;
+        //             }
+        //         }
 
-                if path.is_file() {
-                    Some(path.to_path_buf())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<PathBuf>>();
+        //         if path.is_file() {
+        //             Some(path.to_path_buf())
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .collect::<Vec<PathBuf>>();
 
         for rule in &self.rules {
+            // FIXME: this just seems weird re: strings
             let mut bind = Bind::new(rule.name().to_string(), self.configuration.clone());
-            let data = bind.data.clone();
 
-            // TODO
-            // this should be able to go into its own method on Rule?
-            match *rule.operation() {
-                rule::Operation::Creating(ref path) => {
-                    bind.push(Item::to(path.clone(), data.clone()));
-                },
-                rule::Operation::Matching(ref pattern) => {
-                    for path in &paths {
-                        let relative =
-                            path.relative_from(&self.configuration.input).unwrap()
-                            .to_path_buf();
-
-                        if pattern.matches(&relative) {
-                            bind.push(Item::from(relative, data.clone()));
-                        }
-                    }
-                },
-            }
-
-            // TODO: should handle compiler option clone
             self.manager.add(bind, &rule);
         }
     }
@@ -106,6 +86,7 @@ impl Site {
         // TODO: need a way to determine if there are no jobs
         // create the output directory
         // don't unwrap to ignore "already exists" error
+        // FIXME: do and_then
         if let Some(path) = self.configuration.output.parent() {
             if let Some("") = path.to_str() {
                 fs::create_dir(&self.configuration.output);

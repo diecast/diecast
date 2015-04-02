@@ -161,6 +161,7 @@ impl Manager {
         // TODO: this still necessary?
         // it's only used to determine if anything will actually be done
         // operate on a binding-level
+        println!("adding to count");
         self.count += 1;
 
         let compiler = rule.get_compiler();
@@ -178,6 +179,7 @@ impl Manager {
             self.graph.add_edge(dep.clone(), binding.clone());
         }
 
+        // TODO: is this necessary?
         if compiler.is_none() {
             self.satisfy(&binding);
             self.enqueue_ready();

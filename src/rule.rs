@@ -7,36 +7,17 @@ use std::path::{Path, PathBuf};
 use pattern::Pattern;
 use binding;
 
-pub enum Operation {
-    Creating(PathBuf),
-    Matching(Box<Pattern>),
-}
-
 // TODO: optimization: Arc<String> ?
 pub struct Rule {
     name: String,
-    operation: Operation,
     compiler: Option<Arc<Box<binding::Handler + Sync + Send>>>,
     dependencies: HashSet<String>,
 }
 
 impl Rule {
-    pub fn creating<'a, P: ?Sized, S: IntoCow<'a, str>>(name: S, path: &P) -> Rule
-    where P: AsRef<Path> {
+    pub fn new<'a, S: IntoCow<'a, str>>(name: S) -> Rule {
         Rule {
             name: name.into_cow().into_owned(),
-            // Into<PathBuf>
-            operation: Operation::Creating(path.as_ref().to_path_buf()),
-            compiler: None,
-            dependencies: HashSet::new(),
-        }
-    }
-
-    pub fn matching<'a, P, S: IntoCow<'a, str>>(name: S, pattern: P) -> Rule
-    where P: Pattern + 'static {
-        Rule {
-            name: name.into_cow().into_owned(),
-            operation: Operation::Matching(Box::new(pattern)),
             compiler: None,
             dependencies: HashSet::new(),
         }
@@ -66,10 +47,6 @@ impl Rule {
 
     pub fn dependencies(&self) -> &HashSet<String> {
         &self.dependencies
-    }
-
-    pub fn operation(&self) -> &Operation {
-        &self.operation
     }
 }
 

@@ -128,9 +128,10 @@ fn main() {
     let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
 
     let posts =
-        Rule::matching("posts", posts_pattern)
+        Rule::new("posts")
             .compiler(
                 BindChain::new()
+                    .link(compiler::from_pattern(posts_pattern))
                     .link(posts_compiler)
                     .link(compiler::retain(publishable))
                     .link(posts_compiler_post));
@@ -143,8 +144,9 @@ fn main() {
         }
     }
 
+    // this feels awkward
     let index =
-        Rule::creating("post index", "index.html")
+        Rule::new("post index")
         .compiler(
             BindChain::new()
             .link(paginate(10, router))

@@ -11,6 +11,10 @@ use compiler;
 use rule::Rule;
 use item::{self, Item};
 use binding::{self, Bind};
+use pattern::Pattern;
+use std::fs::PathExt;
+use std::fs;
+use std::path::Path;
 
 pub trait Error: ::std::error::Error {}
 pub type Result = ::std::result::Result<(), Box<Error>>;
@@ -359,3 +363,46 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     })
 }
 
+pub fn from_pattern<P>(pattern: P) -> Box<binding::Handler + Sync + Send>
+where P: Pattern + Sync + Send + 'static {
+    Box::new(move |bind: &mut Bind| -> compiler::Result {
+        let paths =
+            fs::walk_dir(&bind.data.read().unwrap().configuration.input).unwrap()
+            .filter_map(|p| {
+                let path = p.unwrap().path();
+
+                if let Some(ref pattern) = bind.data.read().unwrap().configuration.ignore {
+                    if pattern.matches(&Path::new(path.file_name().unwrap())) {
+                        return None;
+                    }
+                }
+
+                if path.is_file() {
+                    Some(path.to_path_buf())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<PathBuf>>();
+
+        for path in &paths {
+            let relative =
+                path.relative_from(&bind.data.read().unwrap().configuration.input).unwrap()
+                .to_path_buf();
+
+            if pattern.matches(&relative) {
+                bind.items.push(Item::from(relative, bind.data.clone()));
+            }
+        }
+
+        Ok(())
+    })
+}
+
+pub fn creating(path: PathBuf) -> Box<binding::Handler + Sync + Send> {
+    Box::new(move |bind: &mut Bind| -> compiler::Result {
+        bind.items.push(Item::to(path.clone(), bind.data.clone()));
+
+        Ok(())
+    })
+}
