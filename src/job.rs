@@ -230,26 +230,11 @@ impl Manager {
 
                 // set dep counts
                 let name = job.bind.data.read().unwrap().name.clone();
-                let empty =
-                    Arc::new(
-                        Bind::new(
-                            name.clone(),
-                            job.bind.data.read().unwrap().configuration.clone()));
 
                 let count = self.graph.dependency_count(&name);
                 trace!("{} has {} dependencies", name, count);
 
                 *self.dependencies.entry(name.clone()).get().unwrap_or_else(|v| v.insert(0)) += count;
-
-                if job.bind.items.is_empty() {
-                    trace!("{} is an empty dependency", name);
-                    self.finished.insert(name.clone(), empty.clone());
-
-                    // this can go negative but it balances out once the dep
-                    // is processed by the above
-                    trace!("decrementing dep count of dependents");
-                    self.satisfy(&name);
-                }
 
                 return job;
             })
@@ -341,10 +326,6 @@ impl Manager {
         let mut deps_cache = BTreeMap::new();
 
         for mut job in self.ready() {
-            if job.bind.items.is_empty() {
-                continue;
-            }
-
             let name = job.bind.data.read().unwrap().name.clone();
             trace!("{} is ready", name);
 

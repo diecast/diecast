@@ -5,7 +5,7 @@ use std::convert::AsRef;
 use std::path::{Path, PathBuf};
 
 use pattern::Pattern;
-use binding::{self, Bind};
+use binding;
 
 pub enum Operation {
     Creating(PathBuf),
