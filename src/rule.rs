@@ -3,11 +3,12 @@ use std::collections::HashSet;
 use std::borrow::IntoCow;
 
 use binding;
+use compiler;
 
 // TODO: optimization: Arc<String> ?
 pub struct Rule {
     name: String,
-    compiler: Option<Arc<Box<binding::Handler + Sync + Send>>>,
+    compiler: Arc<Box<binding::Handler + Sync + Send>>,
     dependencies: HashSet<String>,
 }
 
@@ -15,18 +16,18 @@ impl Rule {
     pub fn new<'a, S: IntoCow<'a, str>>(name: S) -> Rule {
         Rule {
             name: name.into_cow().into_owned(),
-            compiler: None,
+            compiler: Arc::new(Box::new(compiler::stub)),
             dependencies: HashSet::new(),
         }
     }
 
     pub fn compiler<H>(mut self, compiler: H) -> Rule
     where H: binding::Handler + Sync + Send + 'static {
-        self.compiler = Some(Arc::new(Box::new(compiler)));
+        self.compiler = Arc::new(Box::new(compiler));
         self
     }
 
-    pub fn get_compiler(&self) -> &Option<Arc<Box<binding::Handler + Sync + Send + 'static>>> {
+    pub fn get_compiler(&self) -> &Arc<Box<binding::Handler + Sync + Send + 'static>> {
         &self.compiler
     }
 

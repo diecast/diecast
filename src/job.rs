@@ -163,25 +163,15 @@ impl Manager {
         // operate on a binding-level
         self.count += 1;
 
-        let compiler = rule.get_compiler();
-
         // if there's no compiler then no need to dispatch a job
         // or anything like that
-        if let &Some(ref compiler) = compiler {
-            self.waiting.push_front(Job::new(bind, compiler.clone()));
-        }
+        self.waiting.push_front(Job::new(bind, rule.get_compiler().clone()));
 
         self.graph.add_node(binding.clone());
 
         for dep in rule.dependencies() {
             trace!("setting dependency {} -> {}", dep, binding);
             self.graph.add_edge(dep.clone(), binding.clone());
-        }
-
-        // TODO: is this necessary?
-        if compiler.is_none() {
-            self.satisfy(&binding);
-            self.enqueue_ready();
         }
     }
 
@@ -255,8 +245,6 @@ impl Manager {
         match self.graph.resolve() {
             Ok(order) => {
                 self.sort_jobs(order);
-
-                println!("jobs: {:?}", self.waiting);
 
                 trace!("enqueueing ready jobs");
                 self.enqueue_ready();

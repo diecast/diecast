@@ -40,12 +40,12 @@ use rustc_serialize::json::{Json, ToJson};
 fn article_handler(item: &Item) -> Json {
     let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
-    if let Some(&Metadata(ref metadata)) = item.data.get::<Metadata>() {
+    if let Some(ref meta) = item.data.get::<Metadata>() {
         if let Some(body) = item.data.get::<Buffer>() {
             bt.insert("body".to_string(), body.as_str().unwrap().to_json());
         }
 
-        if let Some(title) = metadata.lookup("title") {
+        if let Some(title) = meta.data.lookup("title") {
             bt.insert("title".to_string(), title.as_str().unwrap().to_json());
         }
     }
@@ -56,8 +56,7 @@ fn article_handler(item: &Item) -> Json {
 fn is_draft(item: &Item) -> bool {
     item.data.get::<Metadata>()
         .map(|meta| {
-            let &Metadata(ref meta) = meta;
-            meta.lookup("draft")
+            meta.data.lookup("draft")
                 .and_then(::toml::Value::as_bool)
                 .unwrap_or(false)
         })
@@ -106,55 +105,46 @@ fn main() {
             .link(compiler::from_pattern(posts_pattern))
             .link(posts_compiler)
             .link(compiler::retain(publishable))
+            .link(|bind: &mut Bind| -> compiler::Result {
+                println!("collecting tag map");
+                let mut tag_map = ::std::collections::HashMap::new();
+
+                for item in &bind.items {
+                    println!("checking tags of {:?}", item);
+
+                    let toml =
+                        item.data.get::<Metadata>()
+                        .and_then(|m| {
+                            m.data.lookup("tags")
+                        })
+                        .and_then(::toml::Value::as_slice);
+
+                    let arc = Arc::new(item.clone());
+
+                    if let Some(tags) = toml {
+                        println!("has tags {:?}", tags);
+
+                        for tag in tags {
+                            println!("adding tag {:?}", tag);
+                            tag_map.entry(tag.as_str().unwrap().to_string()).get()
+                                .unwrap_or_else(|v| v.insert(vec![]))
+                                .push(arc.clone());
+                            println!("tag map is now: {:?}", tag_map);
+                        }
+                    }
+                }
+
+                println!("finished collecting tags");
+                println!("tags: {:?}", tag_map);
+
+                Ok(())
+            })
             .link(posts_compiler_post)
             .link(compiler::next_prev));
 
     struct Tags {
         tags: ::std::collections::HashMap<String, Vec<Arc<Item>>>,
     }
-
-    // TODO: it could also be an item compiler for posts, where each item contributes
-    // to a bind-level data about the tags?
-    // also maybe post item compiler can read tags into Tags structure
-    // which tag index would simply merge together
-    let tag_index =
-        Rule::new("tag index")
-        .compiler(|bind: &mut Bind| -> compiler::Result {
-            println!("collecting tag map");
-            let mut tag_map = ::std::collections::HashMap::new();
-
-            for item in &bind.data.read().unwrap().dependencies["posts"].items {
-                println!("checking tags of {:?}", item);
-
-                let toml =
-                    item.data.get::<Metadata>()
-                    .and_then(|m| {
-                        let &Metadata(ref meta) = m;
-                        meta.lookup("tags")
-                    })
-                    .and_then(::toml::Value::as_slice);
-
-                let arc = Arc::new(item.clone());
-
-                if let Some(tags) = toml {
-                    println!("has tags {:?}", tags);
-
-                    for tag in tags {
-                        println!("adding tag {:?}", tag);
-                        tag_map.entry(tag.as_str().unwrap().to_string()).get()
-                            .unwrap_or_else(|v| v.insert(vec![]))
-                            .push(arc.clone());
-                        println!("tag map is now: {:?}", tag_map);
-                    }
-                }
-            }
-
-            println!("finished collecting tags");
-            println!("tags: {:?}", tag_map);
-
-            Ok(())
-        })
-        .depends_on(&posts);
 
     fn router(page: usize) -> PathBuf {
         if page == 0 {
@@ -178,8 +168,8 @@ fn main() {
                     let mut titles = String::new();
 
                     for post in &item.bind().dependencies["posts"].items[page.range] {
-                        if let Some(&Metadata(ref metadata)) = post.data.get::<Metadata>() {
-                            if let Some(ref title) = metadata.lookup("title").and_then(|t| t.as_str()) {
+                        if let Some(ref meta) = post.data.get::<Metadata>() {
+                            if let Some(title) = meta.data.lookup("title").and_then(|t| t.as_str()) {
                                 titles.push_str(&format!("> {}\n", title));
                             }
                         }
@@ -200,7 +190,6 @@ fn main() {
     let mut command = command::from_args(config);
 
     command.site().register(posts);
-    command.site().register(tag_index);
     command.site().register(index);
 
     command.run();

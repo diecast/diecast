@@ -1,13 +1,17 @@
 use std::path::{Path, PathBuf};
-use pattern::Pattern;
 use std::convert::AsRef;
+
 use num_cpus;
+use toml;
 
 use command;
+use pattern::Pattern;
 
 /// The configuration of the build
 /// an Arc of this is given to each Item
 pub struct Configuration {
+    toml: Option<toml::Value>,
+
     /// The input directory
     pub input: PathBuf,
 
@@ -47,6 +51,7 @@ impl Configuration {
     pub fn new<P: ?Sized, Q: ?Sized>(input: &P, output: &Q) -> Configuration
     where P: AsRef<Path>, Q: AsRef<Path> {
         Configuration {
+            toml: None,
             // TODO: setting it to error by default seems like a wart
             input: input.as_ref().to_path_buf(),
             output: output.as_ref().to_path_buf(),

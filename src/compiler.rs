@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::error::FromError;
 use std::path::PathBuf;
 use std::collections::{HashSet, HashMap};
+use std::ops::Range;
 
 use toml;
 
@@ -60,26 +61,29 @@ impl binding::Handler for BindChain {
 }
 
 // TODO: should the chunk be in configuration or a parameter?
-pub struct Pooled {
+pub struct Pooled<H>
+where H: item::Handler + Sync + Send + 'static {
     chunk: usize,
-    chain: Arc<ItemChain>,
+    handler: Arc<H>,
 }
 
-impl Pooled {
-    pub fn new(chain: ItemChain) -> Pooled {
+impl<H> Pooled<H>
+where H: item::Handler + Sync + Send + 'static {
+    pub fn new(handler: H) -> Pooled<H> {
         Pooled {
             chunk: 1,
-            chain: Arc::new(chain),
+            handler: Arc::new(handler),
         }
     }
 
-    pub fn chunk(mut self, size: usize) -> Pooled {
+    pub fn chunk(mut self, size: usize) -> Pooled<H> {
         self.chunk = size;
         self
     }
 }
 
-impl binding::Handler for Pooled {
+impl<H> binding::Handler for Pooled<H>
+where H: item::Handler + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> compiler::Result {
         let pool: Pool<Vec<Item>> = Pool::new(bind.data.read().unwrap().configuration.threads);
         let item_count = bind.items.len();
@@ -104,14 +108,14 @@ impl binding::Handler for Pooled {
                 items.split_off(self.chunk)
             };
 
-            let chain = self.chain.clone();
+            let handler = self.handler.clone();
 
             pool.enqueue(move || {
                 let mut items = items;
                 let mut results = vec![];
 
                 for mut item in items {
-                    match item::Handler::handle(&chain, &mut item) {
+                    match item::Handler::handle(&handler, &mut item) {
                         Ok(()) => results.push(item),
                         Err(e) => {
                             println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n", item, e);
@@ -178,8 +182,8 @@ impl binding::Handler for ItemChain {
     }
 }
 
-pub fn stub(item: &mut Item) -> Result {
-    trace!("no compiler established for: {:?}", item);
+pub fn stub(bind: &mut Bind) -> Result {
+    trace!("stub compiler");
     Ok(())
 }
 
@@ -252,7 +256,9 @@ pub fn print(item: &mut Item) -> Result {
 }
 
 #[derive(Clone)]
-pub struct Metadata(pub toml::Value);
+pub struct Metadata {
+    pub data: toml::Value,
+}
 
 pub fn parse_metadata(item: &mut Item) -> Result {
     if let Some(body) = item.body.take() {
@@ -272,7 +278,7 @@ pub fn parse_metadata(item: &mut Item) -> Result {
         if let Some(captures) = re.captures(&body) {
             if let Some(metadata) = captures.name("metadata") {
                 if let Ok(parsed) = metadata.parse() {
-                    item.data.insert(Metadata(parsed));
+                    item.data.insert(Metadata { data: parsed });
                 }
             }
 
@@ -379,12 +385,12 @@ pub fn next_prev(bind: &mut Bind) -> compiler::Result {
 #[derive(Clone)]
 pub struct Page {
     pub first: (usize, Arc<PathBuf>),
-    pub last: (usize, Arc<PathBuf>),
     pub next: Option<(usize, Arc<PathBuf>)>,
     pub curr: (usize, Arc<PathBuf>),
     pub prev: Option<(usize, Arc<PathBuf>)>,
+    pub last: (usize, Arc<PathBuf>),
 
-    pub range: ::std::ops::Range<usize>,
+    pub range: Range<usize>,
 
     pub page_count: usize,
     pub post_count: usize,
