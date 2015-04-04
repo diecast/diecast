@@ -105,46 +105,9 @@ fn main() {
             .link(compiler::from_pattern(posts_pattern))
             .link(posts_compiler)
             .link(compiler::retain(publishable))
-            .link(|bind: &mut Bind| -> compiler::Result {
-                println!("collecting tag map");
-                let mut tag_map = ::std::collections::HashMap::new();
-
-                for item in &bind.items {
-                    println!("checking tags of {:?}", item);
-
-                    let toml =
-                        item.data.get::<Metadata>()
-                        .and_then(|m| {
-                            m.data.lookup("tags")
-                        })
-                        .and_then(::toml::Value::as_slice);
-
-                    let arc = Arc::new(item.clone());
-
-                    if let Some(tags) = toml {
-                        println!("has tags {:?}", tags);
-
-                        for tag in tags {
-                            println!("adding tag {:?}", tag);
-                            tag_map.entry(tag.as_str().unwrap().to_string()).get()
-                                .unwrap_or_else(|v| v.insert(vec![]))
-                                .push(arc.clone());
-                            println!("tag map is now: {:?}", tag_map);
-                        }
-                    }
-                }
-
-                println!("finished collecting tags");
-                println!("tags: {:?}", tag_map);
-
-                Ok(())
-            })
+            .link(compiler::tags)
             .link(posts_compiler_post)
             .link(compiler::next_prev));
-
-    struct Tags {
-        tags: ::std::collections::HashMap<String, Vec<Arc<Item>>>,
-    }
 
     fn router(page: usize) -> PathBuf {
         if page == 0 {
@@ -186,6 +149,12 @@ fn main() {
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
         .ignore(regex!(r"^\.|^#|~$|\.swp$|4913"));
+
+    if let Some(i) = config.toml().lookup("age").and_then(toml::Value::as_integer) {
+        println!("age: {}", i);
+    } else {
+        println!("no config.toml present");
+    }
 
     let mut command = command::from_args(config);
 

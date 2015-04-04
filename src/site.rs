@@ -42,28 +42,14 @@ impl Site {
 }
 
 impl Site {
-    // TODO: make this generate a Vec<Job> which is then sent to the manager
-    pub fn find_jobs(&mut self) {
+    pub fn build(&mut self) {
         use std::fs::PathExt;
 
-        // let paths =
-        //     fs::walk_dir(&self.configuration.input).unwrap()
-        //     .filter_map(|p| {
-        //         let path = p.unwrap().path();
+        // TODO: clean out the output directory here to avoid cruft and conflicts
+        trace!("cleaning out directory");
+        self.clean();
 
-        //         if let Some(ref pattern) = self.configuration.ignore {
-        //             if pattern.matches(&Path::new(path.file_name().unwrap())) {
-        //                 return None;
-        //             }
-        //         }
-
-        //         if path.is_file() {
-        //             Some(path.to_path_buf())
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .collect::<Vec<PathBuf>>();
+        trace!("finding jobs");
 
         for rule in &self.rules {
             // FIXME: this just seems weird re: strings
@@ -71,15 +57,6 @@ impl Site {
 
             self.manager.add(bind, &rule);
         }
-    }
-
-    pub fn build(&mut self) {
-        // TODO: clean out the output directory here to avoid cruft and conflicts
-        trace!("cleaning out directory");
-        self.clean();
-
-        trace!("finding jobs");
-        self.find_jobs();
 
         trace!("creating output directory at {:?}", &self.configuration.output);
 

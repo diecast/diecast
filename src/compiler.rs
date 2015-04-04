@@ -520,3 +520,35 @@ pub fn creating(path: PathBuf) -> Box<binding::Handler + Sync + Send> {
         Ok(())
     })
 }
+
+#[derive(Clone)]
+pub struct Tags {
+    map: HashMap<String, Vec<Arc<Item>>>,
+}
+
+pub fn tags(bind: &mut Bind) -> compiler::Result {
+    let mut tag_map = ::std::collections::HashMap::new();
+
+    for item in &bind.items {
+        let toml =
+            item.data.get::<Metadata>()
+            .and_then(|m| {
+                m.data.lookup("tags")
+            })
+            .and_then(::toml::Value::as_slice);
+
+        let arc = Arc::new(item.clone());
+
+        if let Some(tags) = toml {
+            for tag in tags {
+                tag_map.entry(tag.as_str().unwrap().to_string()).get()
+                    .unwrap_or_else(|v| v.insert(vec![]))
+                    .push(arc.clone());
+            }
+        }
+    }
+
+    bind.data.write().unwrap().data.insert::<Tags>(Tags { map: tag_map });
+
+    Ok(())
+}

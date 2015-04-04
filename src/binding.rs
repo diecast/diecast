@@ -6,15 +6,6 @@ use item::{Item, Dependencies};
 use configuration::Configuration;
 use compiler;
 
-// TODO
-//   - Arc<Configuration>
-
-// TODO
-// expose the bind data to the items
-//   - name
-//   - dependencies
-//   - data
-
 pub struct Data {
     pub name: String,
     pub dependencies: Dependencies,
@@ -28,16 +19,19 @@ pub struct Bind {
 }
 
 impl Bind {
+    // FIXME: I don't like that this has to be associated with the configuration
     pub fn new(name: String, configuration: Arc<Configuration>) -> Bind {
+        let data =
+            Data {
+                name: name,
+                dependencies: Arc::new(BTreeMap::new()),
+                data: AnyMap::new(),
+                configuration: configuration,
+            };
+
         Bind {
             items: Vec::new(),
-            data: Arc::new(RwLock::new(
-                    Data {
-                        name: name,
-                        dependencies: Arc::new(BTreeMap::new()),
-                        data: AnyMap::new(),
-                        configuration: configuration,
-                    })),
+            data: Arc::new(RwLock::new(data)),
         }
     }
 

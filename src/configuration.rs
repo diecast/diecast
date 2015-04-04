@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::convert::AsRef;
+use std::fs::File;
+use std::io::Read;
 
 use num_cpus;
 use toml;
@@ -10,7 +12,7 @@ use pattern::Pattern;
 /// The configuration of the build
 /// an Arc of this is given to each Item
 pub struct Configuration {
-    toml: Option<toml::Value>,
+    toml: toml::Value,
 
     /// The input directory
     pub input: PathBuf,
@@ -50,8 +52,20 @@ pub struct Configuration {
 impl Configuration {
     pub fn new<P: ?Sized, Q: ?Sized>(input: &P, output: &Q) -> Configuration
     where P: AsRef<Path>, Q: AsRef<Path> {
+        // if there's no file just set an empty toml table
+        // otherwise forcibly attempt to read the contents and parsing them
+        // if either of those two fails the program should and will panic
+        let toml =
+            File::open("config.toml")
+            .map(|mut file| {
+                let mut contents = String::new();
+                file.read_to_string(&mut contents).unwrap();
+                contents.parse::<toml::Value>().unwrap()
+            })
+            .unwrap_or(toml::Value::Table(::std::collections::BTreeMap::new()));
+
         Configuration {
-            toml: None,
+            toml: toml,
             // TODO: setting it to error by default seems like a wart
             input: input.as_ref().to_path_buf(),
             output: output.as_ref().to_path_buf(),
@@ -62,6 +76,10 @@ impl Configuration {
             is_preview: false,
             ignore_hidden: false,
         }
+    }
+
+    pub fn toml(&self) -> &toml::Value {
+        &self.toml
     }
 
     pub fn thread_count(mut self, count: usize) -> Configuration {
