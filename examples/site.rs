@@ -134,7 +134,7 @@ fn main() {
                         }
                     }
 
-                    item.body = Some(titles);
+                    item.body = titles;
 
                     Ok(())
                 })

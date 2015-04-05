@@ -192,7 +192,7 @@ pub fn read(item: &mut Item) -> Result {
             .read_to_string(&mut buf)
             .unwrap();
 
-        item.body = Some(buf);
+        item.body = buf;
     }
 
     Ok(())
@@ -204,33 +204,31 @@ pub fn write(item: &mut Item) -> Result {
     use std::io::Write;
 
     if let Some(ref path) = item.to {
-        if let Some(ref body) = item.body {
-            let conf_out = &item.bind().configuration.output;
-            let target = conf_out.join(path);
+        let conf_out = &item.bind().configuration.output;
+        let target = conf_out.join(path);
 
-            if !target.starts_with(&conf_out) {
-                // TODO
-                // should probably return a proper T: Error?
-                println!("attempted to write outside of the output directory: {:?}", target);
-                ::exit(1);
-            }
-
-            if let Some(parent) = target.parent() {
-                trace!("mkdir -p {:?}", parent);
-
-                // TODO: this errors out if the path already exists? dumb
-                let _ = fs::create_dir_all(parent);
-            }
-
-            let file = conf_out.join(path);
-
-            trace!("writing file {:?}", file);
-
-            File::create(&file)
-                .unwrap()
-                .write_all(body.as_bytes())
-                .unwrap();
+        if !target.starts_with(&conf_out) {
+            // TODO
+            // should probably return a proper T: Error?
+            println!("attempted to write outside of the output directory: {:?}", target);
+            ::exit(1);
         }
+
+        if let Some(parent) = target.parent() {
+            trace!("mkdir -p {:?}", parent);
+
+            // TODO: this errors out if the path already exists? dumb
+            let _ = fs::create_dir_all(parent);
+        }
+
+        let file = conf_out.join(path);
+
+        trace!("writing file {:?}", file);
+
+        File::create(&file)
+            .unwrap()
+            .write_all(item.body.as_bytes())
+            .unwrap();
     }
 
     Ok(())
@@ -239,9 +237,7 @@ pub fn write(item: &mut Item) -> Result {
 
 /// item::Handler that prints the `Item`'s body.
 pub fn print(item: &mut Item) -> Result {
-    if let &Some(ref body) = &item.body {
-        println!("{}", body);
-    }
+    println!("{}", item.body);
 
     Ok(())
 }
@@ -252,37 +248,31 @@ pub struct Metadata {
 }
 
 pub fn parse_metadata(item: &mut Item) -> Result {
-    if let Some(body) = item.body.take() {
-        // TODO:
-        // should probably allow arbitrary amount of
-        // newlines after metadata block?
-        let re =
-            regex!(
-                concat!(
-                    "(?ms)",
-                    r"\A---\s*\n",
-                    r"(?P<metadata>.*?\n?)",
-                    r"^---\s*$",
-                    r"\n?",
-                    r"(?P<body>.*)"));
+    // TODO:
+    // should probably allow arbitrary amount of
+    // newlines after metadata block?
+    let re =
+        regex!(
+            concat!(
+                "(?ms)",
+                r"\A---\s*\n",
+                r"(?P<metadata>.*?\n?)",
+                r"^---\s*$",
+                r"\n?",
+                r"(?P<body>.*)"));
 
-        if let Some(captures) = re.captures(&body) {
-            if let Some(metadata) = captures.name("metadata") {
-                if let Ok(parsed) = metadata.parse() {
-                    item.data.insert(Metadata { data: parsed });
-                }
-            }
-
-            if let Some(body) = captures.name("body") {
-                item.body = Some(body.to_string());
-                return Ok(());
-            } else {
-                item.body = None;
-                return Ok(());
+    let body = if let Some(captures) = re.captures(&item.body) {
+        if let Some(metadata) = captures.name("metadata") {
+            if let Ok(parsed) = metadata.parse() {
+                item.data.insert(Metadata { data: parsed });
             }
         }
 
-        item.body = Some(body);
+        captures.name("body").map(|b| b.to_string())
+    } else { None };
+
+    if let Some(body) = body {
+        item.body = body;
     }
 
     Ok(())
@@ -292,13 +282,10 @@ pub fn render_markdown(item: &mut Item) -> Result {
     use hoedown::Markdown;
     use hoedown::renderer::html;
 
-    if let Some(body) = item.body.take() {
-        let document = Markdown::new(body.as_bytes());
-        let renderer = html::Html::new(html::Flags::empty(), 0);
-        let buffer = document.render_to_buffer(renderer);
-        item.data.insert(buffer);
-        item.body = Some(body);
-    }
+    let document = Markdown::new(item.body.as_bytes());
+    let renderer = html::Html::new(html::Flags::empty(), 0);
+    let buffer = document.render_to_buffer(renderer);
+    item.data.insert(buffer);
 
     Ok(())
 }
@@ -319,7 +306,7 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
     Box::new(move |item: &mut Item| -> Result {
         if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
             let json = handler(item);
-            item.body = Some(registry.render(name, &json).unwrap());
+            item.body = registry.render(name, &json).unwrap();
         }
 
         Ok(())
@@ -452,9 +439,8 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                     range: start .. end,
                 };
 
-            let mut page = Item::to((*target).clone(), bind.data().clone());
+            let page = bind.new_item(None, Some((*target).clone()));
             page.data.insert::<Page>(page_struct);
-            bind.items.push(page);
         }
 
         println!("finished pagination");
@@ -492,8 +478,7 @@ where P: Pattern + Sync + Send + 'static {
                 .to_path_buf();
 
             if pattern.matches(&relative) {
-                let data = bind.data().clone();
-                bind.items.push(Item::from(relative, data));
+                bind.new_item(Some(relative), None);
             }
         }
 
@@ -503,8 +488,7 @@ where P: Pattern + Sync + Send + 'static {
 
 pub fn creating(path: PathBuf) -> Box<binding::Handler + Sync + Send> {
     Box::new(move |bind: &mut Bind| -> compiler::Result {
-        let data = bind.data().clone();
-        bind.items.push(Item::to(path.clone(), data));
+        bind.new_item(None, Some(path.clone()));
 
         Ok(())
     })

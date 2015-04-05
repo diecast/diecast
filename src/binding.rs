@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
+use std::path::PathBuf;
 use anymap::AnyMap;
 
 use item::{Item, Dependencies};
@@ -43,7 +44,7 @@ impl Bind {
 
     // TODO: audit
     pub fn with_dependencies(bind: Bind, dependencies: Dependencies) -> Bind {
-        let mut data = (**bind.data()).clone();
+        let mut data = bind.data().clone();
         data.dependencies = dependencies;
 
         Bind {
@@ -52,12 +53,14 @@ impl Bind {
         }
     }
 
-    pub fn data(&self) -> &Arc<Data> {
+    pub fn data(&self) -> &Data {
         &self.data
     }
 
-    pub fn push(&mut self, item: Item) {
-        self.items.push(item);
+    // TODO: this isn't thread-safe, does it matter?
+    pub fn new_item(&mut self, from: Option<PathBuf>, to: Option<PathBuf>) -> &mut Item {
+        self.items.push(Item::new(from, to, self.data.clone()));
+        self.items.last_mut().unwrap()
     }
 }
 

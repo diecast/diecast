@@ -35,7 +35,6 @@ pub type Dependencies = Arc<BTreeMap<String, Arc<Bind>>>;
 #[derive(Clone)]
 pub struct Item {
     bind: Arc<binding::Data>,
-    // pub bind: Arc<binding::Data>,
 
     //  TODO
     //  this doesn't feel right
@@ -54,7 +53,7 @@ pub struct Item {
     // TODO: just make this a straight up string? empty string
     // means no body
     /// The Item's body which will fill the target file.
-    pub body: Option<String>,
+    pub body: String,
 
     /// Any additional data (post metadata)
     ///
@@ -76,6 +75,7 @@ impl Item {
         use std::fs::PathExt;
 
         if let Some(ref from) = from {
+            println!("from: {:?}", from);
             assert!(bind.configuration.input.join(from).is_file())
         }
 
@@ -83,7 +83,7 @@ impl Item {
         Item {
             from: from,
             to: to,
-            body: None,
+            body: String::new(),
             data: AnyMap::new(),
             bind: bind,
         }
@@ -97,7 +97,7 @@ impl Item {
         Item::new(None, Some(path), bind)
     }
 
-    pub fn bind(&self) -> &Arc<binding::Data> {
+    pub fn bind(&self) -> &binding::Data {
         &self.bind
     }
 
@@ -110,18 +110,16 @@ impl Item {
                 .read_to_string(&mut buf)
                 .unwrap();
 
-            self.body = Some(buf);
+            self.body = buf;
         }
     }
 
     pub fn write(&mut self) {
         if let Some(ref path) = self.to {
-            if let Some(ref body) = self.body {
-                File::create(path)
-                    .unwrap()
-                    .write_all(body.as_bytes())
-                    .unwrap();
-            }
+            File::create(path)
+                .unwrap()
+                .write_all(self.body.as_bytes())
+                .unwrap();
         }
     }
 }

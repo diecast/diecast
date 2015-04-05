@@ -141,6 +141,7 @@ impl<E> Manager<E> where E: Evaluator {
                 trace!("enqueueing ready jobs");
                 self.enqueue_ready();
 
+                // TODO: should have some sort of timeout here
                 trace!("looping");
                 for _ in (0 .. self.count) {
                     match self.evaluator.dequeue() {
