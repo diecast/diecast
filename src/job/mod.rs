@@ -1,14 +1,7 @@
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Sender, Receiver};
-use std::collections::{BTreeMap, VecDeque, HashMap};
-use std::mem;
 use std::fmt;
 
-use threadpool::ThreadPool;
-
 use binding::{self, Bind};
-use dependency::Graph;
-use rule::Rule;
 use compiler;
 
 pub mod evaluator;

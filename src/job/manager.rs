@@ -4,7 +4,7 @@ use std::mem;
 
 use dependency::Graph;
 use rule::Rule;
-use binding::{self, Bind};
+use binding::Bind;
 use super::evaluator::Evaluator;
 use super::Job;
 
