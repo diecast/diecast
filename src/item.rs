@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::fmt::{self, Debug};
 use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::path::PathBuf;
 
 use binding::{self, Bind};
@@ -34,7 +34,8 @@ pub type Dependencies = Arc<BTreeMap<String, Arc<Bind>>>;
 
 #[derive(Clone)]
 pub struct Item {
-    pub bind: Arc<RwLock<binding::Data>>,
+    bind: Arc<binding::Data>,
+    // pub bind: Arc<binding::Data>,
 
     //  TODO
     //  this doesn't feel right
@@ -70,12 +71,12 @@ impl Item {
     pub fn new(
         from: Option<PathBuf>,
         to: Option<PathBuf>,
-        bind: Arc<RwLock<binding::Data>>,
+        bind: Arc<binding::Data>,
     ) -> Item {
         use std::fs::PathExt;
 
         if let Some(ref from) = from {
-            assert!(bind.read().unwrap().configuration.input.join(from).is_file())
+            assert!(bind.configuration.input.join(from).is_file())
         }
 
         // ensure that the source is a file
@@ -88,23 +89,23 @@ impl Item {
         }
     }
 
-    pub fn from(path: PathBuf, bind: Arc<RwLock<binding::Data>>) -> Item {
+    pub fn from(path: PathBuf, bind: Arc<binding::Data>) -> Item {
         Item::new(Some(path), None, bind)
     }
 
-    pub fn to(path: PathBuf, bind: Arc<RwLock<binding::Data>>) -> Item {
+    pub fn to(path: PathBuf, bind: Arc<binding::Data>) -> Item {
         Item::new(None, Some(path), bind)
     }
 
-    pub fn bind(&self) -> ::std::sync::RwLockReadGuard<binding::Data> {
-        self.bind.read().unwrap()
+    pub fn bind(&self) -> &Arc<binding::Data> {
+        &self.bind
     }
 
     pub fn read(&mut self) {
         if let Some(ref path) = self.from {
             let mut buf = String::new();
 
-            File::open(&self.bind().configuration.input.join(path))
+            File::open(&self.bind.configuration.input.join(path))
                 .unwrap()
                 .read_to_string(&mut buf)
                 .unwrap();

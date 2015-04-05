@@ -1,6 +1,5 @@
 #![feature(plugin)]
 #![feature(convert)]
-#![feature(std_misc)]
 
 #![plugin(regex_macros)]
 
@@ -25,16 +24,15 @@ use diecast::{
 
 use diecast::router;
 use diecast::command;
-use diecast::binding;
-use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page, Pooled, Adjacent};
+use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page, Pooled};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
 use std::fs::File;
 use std::io::Read;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use rustc_serialize::json::{Json, ToJson};
 
 fn article_handler(item: &Item) -> Json {
@@ -109,20 +107,18 @@ fn main() {
             .link(posts_compiler_post)
             .link(compiler::next_prev));
 
-    fn router(page: usize) -> PathBuf {
-        if page == 0 {
-            PathBuf::from("index.html")
-        } else {
-            PathBuf::from(&format!("{}/index.html", page))
-        }
-    }
-
     // this feels awkward
     let index =
         Rule::new("post index")
         .compiler(
             BindChain::new()
-            .link(paginate(5, router))
+            .link(paginate(5, |page: usize| -> PathBuf {
+                if page == 0 {
+                    PathBuf::from("index.html")
+                } else {
+                    PathBuf::from(&format!("{}/index.html", page))
+                }
+            }))
             .link(
                 ItemChain::new()
                 .link(|item: &mut Item| -> compiler::Result {

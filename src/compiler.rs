@@ -3,13 +3,12 @@
 use std::sync::Arc;
 use std::error::FromError;
 use std::path::PathBuf;
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
 use std::ops::Range;
 
 use toml;
 
 use compiler;
-use rule::Rule;
 use item::{self, Item};
 use binding::{self, Bind};
 use pattern::Pattern;
@@ -50,8 +49,6 @@ impl BindChain {
 
 impl binding::Handler for BindChain {
     fn handle(&self, binding: &mut Bind) -> compiler::Result {
-        trace!("performing BindChain::handler which has {} handlers", self.handlers.len());
-
         for handler in &self.handlers {
             try!(handler.handle(binding));
         }
@@ -85,7 +82,7 @@ where H: item::Handler + Sync + Send + 'static {
 impl<H> binding::Handler for Pooled<H>
 where H: item::Handler + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> compiler::Result {
-        let pool: Pool<Vec<Item>> = Pool::new(bind.data.read().unwrap().configuration.threads);
+        let pool: Pool<Vec<Item>> = Pool::new(bind.data().configuration.threads);
         let item_count = bind.items.len();
 
         let chunks = {
@@ -111,7 +108,6 @@ where H: item::Handler + Sync + Send + 'static {
             let handler = self.handler.clone();
 
             pool.enqueue(move || {
-                let mut items = items;
                 let mut results = vec![];
 
                 for mut item in items {
@@ -160,8 +156,6 @@ impl ItemChain {
 
 impl item::Handler for ItemChain {
     fn handle(&self, item: &mut Item) -> compiler::Result {
-        trace!("performing ItemChain::handler which has {} handlers", self.handlers.len());
-
         for handler in &self.handlers {
             try!(handler.handle(item));
         }
@@ -172,8 +166,6 @@ impl item::Handler for ItemChain {
 
 impl binding::Handler for ItemChain {
     fn handle(&self, binding: &mut Bind) -> compiler::Result {
-        trace!("performing ItemChain::handler which has {} handlers", self.handlers.len());
-
         for item in &mut binding.items {
             try!(item::Handler::handle(self, item));
         }
@@ -182,7 +174,7 @@ impl binding::Handler for ItemChain {
     }
 }
 
-pub fn stub(bind: &mut Bind) -> Result {
+pub fn stub(_bind: &mut Bind) -> Result {
     trace!("stub compiler");
     Ok(())
 }
@@ -400,7 +392,7 @@ pub struct Page {
 pub fn paginate<R>(factor: usize, router: R) -> Box<binding::Handler + Sync + Send>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     Box::new(move |bind: &mut Bind| -> compiler::Result {
-        let post_count = bind.data.read().unwrap().dependencies["posts"].items.len();
+        let post_count = bind.data().dependencies["posts"].items.len();
 
         let page_count = {
             let (div, rem) = (post_count / factor, post_count % factor);
@@ -411,10 +403,6 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                 div + 1
             }
         };
-
-        // this conversion could fail if post_count or factor is greater than 2^53
-        // I think that's unlikely...
-        let page_count = ::std::cmp::max(1, (post_count as f64 / factor as f64).ceil() as usize);
 
         let last_num = page_count - 1;
 
@@ -465,7 +453,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                     range: start .. end,
                 };
 
-            let mut page = Item::to((*target).clone(), bind.data.clone());
+            let mut page = Item::to((*target).clone(), bind.data().clone());
             page.data.insert::<Page>(page_struct);
             bind.items.push(page);
         }
@@ -481,11 +469,11 @@ pub fn from_pattern<P>(pattern: P) -> Box<binding::Handler + Sync + Send>
 where P: Pattern + Sync + Send + 'static {
     Box::new(move |bind: &mut Bind| -> compiler::Result {
         let paths =
-            fs::walk_dir(&bind.data.read().unwrap().configuration.input).unwrap()
+            fs::walk_dir(&bind.data().configuration.input).unwrap()
             .filter_map(|p| {
                 let path = p.unwrap().path();
 
-                if let Some(ref pattern) = bind.data.read().unwrap().configuration.ignore {
+                if let Some(ref pattern) = bind.data().configuration.ignore {
                     if pattern.matches(&Path::new(path.file_name().unwrap())) {
                         return None;
                     }
@@ -501,11 +489,12 @@ where P: Pattern + Sync + Send + 'static {
 
         for path in &paths {
             let relative =
-                path.relative_from(&bind.data.read().unwrap().configuration.input).unwrap()
+                path.relative_from(&bind.data().configuration.input).unwrap()
                 .to_path_buf();
 
             if pattern.matches(&relative) {
-                bind.items.push(Item::from(relative, bind.data.clone()));
+                let data = bind.data().clone();
+                bind.items.push(Item::from(relative, data));
             }
         }
 
@@ -515,7 +504,8 @@ where P: Pattern + Sync + Send + 'static {
 
 pub fn creating(path: PathBuf) -> Box<binding::Handler + Sync + Send> {
     Box::new(move |bind: &mut Bind| -> compiler::Result {
-        bind.items.push(Item::to(path.clone(), bind.data.clone()));
+        let data = bind.data().clone();
+        bind.items.push(Item::to(path.clone(), data));
 
         Ok(())
     })
@@ -548,7 +538,7 @@ pub fn tags(bind: &mut Bind) -> compiler::Result {
         }
     }
 
-    bind.data.write().unwrap().data.insert::<Tags>(Tags { map: tag_map });
+    bind.data().data.write().unwrap().insert::<Tags>(Tags { map: tag_map });
 
     Ok(())
 }

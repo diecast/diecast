@@ -18,7 +18,7 @@ pub struct Job {
 
 impl fmt::Debug for Job {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{}]", self.bind.data.read().unwrap().name)
+        write!(f, "[{}]", self.bind.data().name)
     }
 }
 
@@ -155,8 +155,8 @@ impl Manager {
         }
     }
 
-    pub fn add(&mut self, bind: Bind, rule: &Rule) {
-        let binding = bind.data.read().unwrap().name.clone();
+    pub fn add(&mut self, rule: &Rule, bind: Bind) {
+        let binding = bind.data().name.clone();
 
         // TODO: this still necessary?
         // it's only used to determine if anything will actually be done
@@ -193,7 +193,7 @@ impl Manager {
 
         let (ready, waiting): (VecDeque<Job>, VecDeque<Job>) =
             waiting.into_iter()
-               .partition(|job| self.dependencies[&job.bind.data.read().unwrap().name] == 0);
+               .partition(|job| self.dependencies[&job.bind.data().name] == 0);
 
         self.waiting = waiting;
 
@@ -208,7 +208,7 @@ impl Manager {
             mem::replace(&mut self.waiting, VecDeque::new())
             .into_iter()
             .map(|job| {
-                let name = job.bind.data.read().unwrap().name.to_string();
+                let name = job.bind.data().name.to_string();
                 (name, job)
             })
             .collect::<HashMap<String, Job>>();
@@ -220,7 +220,7 @@ impl Manager {
                 let job = job_map.remove(&name).unwrap();
 
                 // set dep counts
-                let name = job.bind.data.read().unwrap().name.clone();
+                let name = job.bind.data().name.clone();
 
                 let count = self.graph.dependency_count(&name);
                 trace!("{} has {} dependencies", name, count);
@@ -281,10 +281,10 @@ impl Manager {
     }
 
     fn handle_done(&mut self, current: Job) {
-        trace!("finished {}", current.bind.data.read().unwrap().name);
+        trace!("finished {}", current.bind.data().name);
         trace!("before waiting: {:?}", self.waiting);
 
-        let binding = current.bind.data.read().unwrap().name.to_string();
+        let binding = current.bind.data().name.to_string();
 
         // binding is complete
         trace!("binding {} finished", binding);
@@ -307,7 +307,7 @@ impl Manager {
         let mut deps_cache = BTreeMap::new();
 
         for mut job in self.ready() {
-            let name = job.bind.data.read().unwrap().name.clone();
+            let name = job.bind.data().name.clone();
             trace!("{} is ready", name);
 
             deps_cache.entry(name.clone()).get().unwrap_or_else(|entry| {
@@ -325,7 +325,9 @@ impl Manager {
             });
 
             let deps = deps_cache[&name].clone();
-            job.bind.set_dependencies(deps);
+
+            job.bind = Bind::with_dependencies(job.bind, deps);
+
             trace!("job now ready: {:?}", job);
 
             self.pool.enqueue(move || {

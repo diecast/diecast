@@ -6,16 +6,22 @@ use item::{Item, Dependencies};
 use configuration::Configuration;
 use compiler;
 
+// FIXME
+// problem is that an item handler can easily change
+// these fields and essentially corrupt the bind data
+// for future items
+#[derive(Clone)]
 pub struct Data {
     pub name: String,
     pub dependencies: Dependencies,
     pub configuration: Arc<Configuration>,
-    pub data: AnyMap,
+    pub data: Arc<RwLock<AnyMap>>,
 }
 
 pub struct Bind {
     pub items: Vec<Item>,
-    pub data: Arc<RwLock<Data>>,
+
+    data: Arc<Data>,
 }
 
 impl Bind {
@@ -25,23 +31,33 @@ impl Bind {
             Data {
                 name: name,
                 dependencies: Arc::new(BTreeMap::new()),
-                data: AnyMap::new(),
                 configuration: configuration,
+                data: Arc::new(RwLock::new(AnyMap::new())),
             };
 
         Bind {
             items: Vec::new(),
-            data: Arc::new(RwLock::new(data)),
+            data: Arc::new(data),
         }
+    }
+
+    // TODO: audit
+    pub fn with_dependencies(bind: Bind, dependencies: Dependencies) -> Bind {
+        let mut data = (**bind.data()).clone();
+        data.dependencies = dependencies;
+
+        Bind {
+            items: bind.items,
+            data: Arc::new(data),
+        }
+    }
+
+    pub fn data(&self) -> &Arc<Data> {
+        &self.data
     }
 
     pub fn push(&mut self, item: Item) {
         self.items.push(item);
-    }
-
-    // setters
-    pub fn set_dependencies(&mut self, deps: Dependencies) {
-        self.data.write().unwrap().dependencies = deps;
     }
 }
 

@@ -4,17 +4,10 @@ use std::sync::Arc;
 use std::collections::HashSet;
 use std::fs;
 
-// use threadpool::job::Pool;
-
-use pattern::Pattern;
 use job;
-use item::Item;
 use binding::Bind;
 use configuration::Configuration;
-use rule::{self, Rule};
-
-use std::path::{PathBuf, Path};
-use std::mem;
+use rule::Rule;
 
 /// A Site scans the input path to find
 /// files that match the given pattern. It then
@@ -43,8 +36,6 @@ impl Site {
 
 impl Site {
     pub fn build(&mut self) {
-        use std::fs::PathExt;
-
         // TODO: clean out the output directory here to avoid cruft and conflicts
         trace!("cleaning out directory");
         self.clean();
@@ -53,9 +44,7 @@ impl Site {
 
         for rule in &self.rules {
             // FIXME: this just seems weird re: strings
-            let mut bind = Bind::new(rule.name().to_string(), self.configuration.clone());
-
-            self.manager.add(bind, &rule);
+            self.manager.add(&rule, Bind::new(rule.name().to_string(), self.configuration.clone()));
         }
 
         trace!("creating output directory at {:?}", &self.configuration.output);
