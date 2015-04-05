@@ -1,123 +1,14 @@
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Sender, Receiver};
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
-use std::fmt;
 
-use threadpool::ThreadPool;
-
-use binding::{self, Bind};
 use dependency::Graph;
 use rule::Rule;
-use compiler;
+use binding::{self, Bind};
+use super::evaluator::Evaluator;
+use super::Job;
 
-pub struct Job {
-    pub bind: Bind,
-    pub compiler: Arc<Box<binding::Handler + Sync + Send>>,
-}
-
-impl fmt::Debug for Job {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{}]", self.bind.data().name)
-    }
-}
-
-impl Job {
-    pub fn new<C>(bind: Bind, compiler: C) -> Job
-    where C: binding::Handler + Sync + Send + 'static {
-        Job {
-            bind: bind,
-            compiler: Arc::new(Box::new(compiler)),
-        }
-    }
-
-    pub fn into_bind(self) -> Bind {
-        self.bind
-    }
-
-    pub fn process(&mut self) -> compiler::Result {
-        // <Compiler as binding::Handler>::handle(&self.compiler, &mut self.bind)
-        self.compiler.handle(&mut self.bind)
-    }
-}
-
-struct Canary<T> where T: Send {
-    tx: Sender<Option<T>>,
-    active: bool
-}
-
-impl<T> Canary<T> where T: Send {
-    fn new(tx: Sender<Option<T>>) -> Canary<T> {
-        Canary {
-            tx: tx,
-            active: true,
-        }
-    }
-
-    // Cancel and destroy this sentinel.
-    fn cancel(mut self) {
-        self.active = false;
-    }
-}
-
-#[unsafe_destructor]
-impl<T> Drop for Canary<T> where T: Send {
-    fn drop(&mut self) {
-        if self.active {
-            self.tx.send(None).unwrap();
-        }
-    }
-}
-
-pub struct Pool<T> where T: Send {
-    result_tx: Sender<Option<T>>,
-    result_rx: Receiver<Option<T>>,
-
-    pool: ThreadPool,
-}
-
-impl<T> Pool<T> where T: Send {
-    /// Spawns a new thread pool with `threads` threads.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if `threads` is 0.
-    pub fn new(threads: usize) -> Pool<T> {
-        assert!(threads >= 1);
-        trace!("using {} threads", threads);
-
-        let (result_tx, result_rx) = channel::<Option<T>>();
-
-        let pool = ThreadPool::new(threads);
-
-        Pool {
-            result_tx: result_tx,
-            result_rx: result_rx,
-
-            pool: pool,
-        }
-    }
-
-    pub fn enqueue<F>(&self, work: F)
-    where T: 'static,
-          F: FnOnce() -> Option<T>, F: Send + 'static {
-        let tx = self.result_tx.clone();
-
-        self.pool.execute(move || {
-            let canary = Canary::new(tx.clone());
-
-            tx.send(work()).unwrap();
-
-            canary.cancel();
-        });
-    }
-
-    pub fn dequeue(&self) -> Option<T> {
-        self.result_rx.recv().unwrap()
-    }
-}
-
-pub struct Manager {
+pub struct Manager<E> where E: Evaluator {
     graph: Graph<String>,
 
     /// the dependency count of each binding
@@ -130,7 +21,7 @@ pub struct Manager {
     finished: BTreeMap<String, Arc<Bind>>,
 
     /// Thread pool to process jobs
-    pool: Pool<Job>,
+    evaluator: E,
 
     /// number of jobs being managed
     count: usize,
@@ -143,14 +34,15 @@ pub struct Manager {
 /// later:
 ///   manager.update_path(path);
 
-impl Manager {
-    pub fn new(threads: usize) -> Manager {
+impl<E> Manager<E> where E: Evaluator {
+    pub fn new(evaluator: E) -> Manager<E> {
         Manager {
             graph: Graph::new(),
             dependencies: BTreeMap::new(),
             waiting: VecDeque::new(),
             finished: BTreeMap::new(),
-            pool: Pool::new(threads),
+            // TODO: this is what needs to change afaik
+            evaluator: evaluator,
             count: 0,
         }
     }
@@ -251,7 +143,7 @@ impl Manager {
 
                 trace!("looping");
                 for _ in (0 .. self.count) {
-                    match self.pool.dequeue() {
+                    match self.evaluator.dequeue() {
                         Some(job) => {
                             trace!("received job from pool");
                             self.handle_done(job);
@@ -330,18 +222,9 @@ impl Manager {
 
             trace!("job now ready: {:?}", job);
 
-            self.pool.enqueue(move || {
-                let mut job = job;
-
-                match job.process() {
-                    Ok(()) => Some(job),
-                    Err(e) => {
-                        println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", job, e);
-                        None
-                    },
-                }
-            });
+            self.evaluator.enqueue(job);
         }
     }
 }
+
 

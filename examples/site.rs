@@ -81,18 +81,18 @@ fn main() {
     let template_registry = Arc::new(handlebars);
 
     let posts_compiler =
-        ItemChain::new()
+        Pooled::new(ItemChain::new()
         // TODO: this should probably be bind-level data
         .link(compiler::inject_with(template_registry))
         .link(compiler::read)
-        .link(compiler::parse_metadata);
+        .link(compiler::parse_metadata));
 
     let posts_compiler_post =
-        ItemChain::new()
+        Pooled::new(ItemChain::new()
         .link(compiler::render_markdown)
         .link(compiler::render_template("article", article_handler))
         .link(router::set_extension("html"))
-        .link(compiler::write);
+        .link(compiler::write));
 
     let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
 
@@ -120,7 +120,7 @@ fn main() {
                 }
             }))
             .link(
-                ItemChain::new()
+                Pooled::new(ItemChain::new()
                 .link(|item: &mut Item| -> compiler::Result {
                     let page = item.data.remove::<Page>().unwrap();
 
@@ -139,7 +139,7 @@ fn main() {
                     Ok(())
                 })
                 .link(compiler::print)
-                .link(compiler::write)))
+                .link(compiler::write))))
         .depends_on(&posts);
 
     let config =

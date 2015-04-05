@@ -5,6 +5,9 @@ use std::error::FromError;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use std::ops::Range;
+use std::fs::PathExt;
+use std::fs;
+use std::path::Path;
 
 use toml;
 
@@ -12,11 +15,7 @@ use compiler;
 use item::{self, Item};
 use binding::{self, Bind};
 use pattern::Pattern;
-use std::fs::PathExt;
-use std::fs;
-use std::path::Path;
-
-use job::Pool;
+use job::evaluator::Pool;
 
 pub trait Error: ::std::error::Error {}
 pub type Result = ::std::result::Result<(), Box<Error>>;

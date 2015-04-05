@@ -1,10 +1,10 @@
 //! Site generation.
 
 use std::sync::Arc;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 
-use job;
+use job::{self, Job};
 use binding::Bind;
 use configuration::Configuration;
 use rule::Rule;
@@ -16,14 +16,18 @@ use rule::Rule;
 pub struct Site {
     configuration: Arc<Configuration>,
     rules: Vec<Rule>,
-    manager: job::Manager,
+    // manager: job::Manager<VecDeque<job::Job>>,
+    manager: job::Manager<job::evaluator::Pool<Job>>,
 }
 
 impl Site {
     pub fn new(configuration: Configuration) -> Site {
         trace!("output directory is: {:?}", configuration.output);
 
-        let manager = job::Manager::new(configuration.threads);
+        // let queue: VecDeque<job::Job> = VecDeque::new();
+        let queue = job::evaluator::Pool::new(4);
+
+        let manager = job::Manager::new(queue);
         let configuration = Arc::new(configuration);
 
         Site {

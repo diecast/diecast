@@ -6,9 +6,12 @@ version = "0.0.1"
 authors = ["Jorge Israel Peña <jorge.israel.p@gmail.com>"]
 
 [profile.dev]
-opt-level = 0
-debug = true
 rpath = true
+# opt-level = 3
+# debug = false
+# rpath = false
+# lto = false
+# debug-assertions = false
 
 [dependencies]
 glob = "*"
