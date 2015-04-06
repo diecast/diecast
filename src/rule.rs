@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::collections::HashSet;
-use std::borrow::IntoCow;
+use std::borrow::Cow;
 
 use binding;
 use compiler;
@@ -13,9 +13,9 @@ pub struct Rule {
 }
 
 impl Rule {
-    pub fn new<'a, S: IntoCow<'a, str>>(name: S) -> Rule {
+    pub fn new<'a, S: Into<Cow<'a, str>>>(name: S) -> Rule {
         Rule {
-            name: name.into_cow().into_owned(),
+            name: name.into().into_owned(),
             compiler: Arc::new(Box::new(compiler::stub)),
             dependencies: HashSet::new(),
         }

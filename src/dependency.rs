@@ -12,8 +12,7 @@ use std::hash::Hash;
 
 use std::fmt;
 
-use graphviz as dot;
-use std::borrow::{Borrow, IntoCow};
+use std::borrow::Borrow;
 
 /// Represents a dependency graph.
 ///
@@ -103,16 +102,6 @@ impl<T> Graph<T> where T: Ord + Clone + Hash {
     pub fn resolve(&self) -> Result<VecDeque<T>, VecDeque<T>> {
         Topological::new(self).all()
     }
-
-    /// Render the dependency graph with graphviz. Visualize it with:
-    ///
-    /// ```bash
-    /// $ dot -Tpng < deps.dot > deps.png && open deps.png
-    /// ```
-    pub fn render<W>(&self, output: &mut W)
-    where W: ::std::io::Write, T: Clone + fmt::Display {
-        dot::render(self, output).unwrap()
-    }
 }
 
 impl<T> fmt::Debug for Graph<T>
@@ -120,51 +109,6 @@ where T: fmt::Debug + Ord + Clone + Hash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(self.edges.fmt(f));
         Ok(())
-    }
-}
-
-impl<'a, T> dot::Labeller<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Hash + fmt::Display {
-    fn graph_id(&self) -> dot::Id<'a> {
-        dot::Id::new("dependencies").unwrap()
-    }
-
-    fn node_id(&self, n: &T) -> dot::Id<'a> {
-        dot::Id::new(format!("N{}", *n)).unwrap()
-    }
-
-    fn node_label(&self, n: &T) -> dot::LabelText {
-        dot::LabelText::LabelStr(n.to_string().into_cow())
-    }
-}
-
-impl<'a, T> dot::GraphWalk<'a, T, (T, T)> for Graph<T> where T: Ord + Clone + Hash {
-    fn nodes(&self) -> dot::Nodes<'a, T> {
-        Graph::<T>::nodes(self)
-            .cloned()
-            .collect::<Vec<T>>()
-            .into_cow()
-    }
-
-    fn edges(&self) -> dot::Edges<'a, (T, T)> {
-        let mut edges = Vec::new();
-
-        for (source, targets) in &self.edges {
-            for target in targets {
-                edges.push((source.clone(), target.clone()));
-            }
-        }
-
-        edges.into_cow()
-    }
-
-    fn source(&self, e: &(T, T)) -> T {
-        let &(ref s, _) = e;
-        return s.clone();
-    }
-
-    fn target(&self, e: &(T, T)) -> T {
-        let &(_, ref t) = e;
-        return t.clone();
     }
 }
 
@@ -329,21 +273,5 @@ mod test {
         let resolve_single = graph.resolve_only(6);
 
         assert!(resolve_single.is_ok());
-    }
-
-    #[test]
-    fn render() {
-        use std::fs::{File, PathExt, remove_file};
-        use std::path::Path;
-
-        let graph = helper_graph();
-
-        let dot = Path::new("deps.dot");
-
-        graph.render(&mut File::create(&dot).unwrap());
-
-        assert!(dot.exists());
-
-        remove_file(&dot).ok().expect("couldn't remove dot file");
     }
 }

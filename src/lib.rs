@@ -12,7 +12,6 @@
 #![feature(fs_walk)]
 #![feature(path_relative_from)]
 #![feature(str_char)] // for char_at
-#![feature(into_cow)]
 #![feature(collections)]
 
 #![plugin(regex_macros)]
