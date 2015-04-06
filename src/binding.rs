@@ -78,6 +78,12 @@ impl<C> Handler for Arc<C> where C: Handler {
     }
 }
 
+impl Handler for Box<Handler> {
+    fn handle(&self, bind: &mut Bind) -> compiler::Result {
+        (**self).handle(bind)
+    }
+}
+
 impl Handler for Box<Handler + Sync + Send> {
     fn handle(&self, bind: &mut Bind) -> compiler::Result {
         (**self).handle(bind)

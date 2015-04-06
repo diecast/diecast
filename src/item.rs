@@ -170,6 +170,12 @@ impl Handler for Box<Handler> {
     }
 }
 
+impl Handler for Box<Handler + Sync + Send> {
+    fn handle(&self, item: &mut Item) -> compiler::Result {
+        (**self).handle(item)
+    }
+}
+
 impl<F> Handler for F where F: Fn(&mut Item) -> compiler::Result {
     fn handle(&self, item: &mut Item) -> compiler::Result {
         self(item)
