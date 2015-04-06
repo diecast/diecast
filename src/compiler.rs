@@ -1,13 +1,13 @@
 //! item::Handler behavior.
 
 use std::sync::Arc;
-use std::error::FromError;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::fs::PathExt;
 use std::fs;
 use std::path::Path;
+use std::marker::Reflect;
 
 use toml;
 
@@ -22,8 +22,8 @@ pub type Result = ::std::result::Result<(), Box<Error>>;
 
 impl<E> Error for E where E: ::std::error::Error {}
 
-impl<E> FromError<E> for Box<Error> where E: Error + 'static {
-    fn from_error(e: E) -> Box<Error> {
+impl<E> From<E> for Box<Error> where E: Error + 'static {
+    fn from(e: E) -> Box<Error> {
         Box::new(e)
     }
 }
@@ -211,7 +211,7 @@ pub fn write(item: &mut Item) -> Result {
             // TODO
             // should probably return a proper T: Error?
             println!("attempted to write outside of the output directory: {:?}", target);
-            ::exit(1);
+            ::std::process::exit(1);
         }
 
         if let Some(parent) = target.parent() {
@@ -291,7 +291,7 @@ pub fn render_markdown(item: &mut Item) -> Result {
 }
 
 pub fn inject_with<T>(t: Arc<T>) -> Box<item::Handler + Sync + Send>
-where T: Sync + Send + 'static {
+where T: Reflect + Sync + Send + 'static {
     Box::new(move |item: &mut Item| -> Result {
         item.data.insert(t.clone());
         Ok(())
@@ -395,8 +395,9 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
         let mut cache: HashMap<usize, Arc<PathBuf>> = HashMap::new();
 
         let mut router = |num: usize| -> Arc<PathBuf> {
-            cache.entry(num).get()
-                .unwrap_or_else(|v| v.insert(Arc::new(router(num)))).clone()
+            cache.entry(num)
+                .or_insert_with(|| Arc::new(router(num)))
+                .clone()
         };
 
         let first = (1, router(1));
@@ -514,8 +515,8 @@ pub fn tags(bind: &mut Bind) -> compiler::Result {
 
         if let Some(tags) = toml {
             for tag in tags {
-                tag_map.entry(tag.as_str().unwrap().to_string()).get()
-                    .unwrap_or_else(|v| v.insert(vec![]))
+                tag_map.entry(tag.as_str().unwrap().to_string())
+                    .or_insert(vec![])
                     .push(arc.clone());
             }
         }

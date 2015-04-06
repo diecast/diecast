@@ -164,7 +164,7 @@ impl<H> Handler for Arc<H> where H: Handler {
     }
 }
 
-impl<H: ?Sized> Handler for Box<H> where H: Handler {
+impl Handler for Box<Handler> {
     fn handle(&self, item: &mut Item) -> compiler::Result {
         (**self).handle(item)
     }

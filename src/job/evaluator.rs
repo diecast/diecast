@@ -27,7 +27,6 @@ impl<T> Canary<T> where T: Send {
     }
 }
 
-#[unsafe_destructor]
 impl<T> Drop for Canary<T> where T: Send {
     fn drop(&mut self) {
         if self.active {

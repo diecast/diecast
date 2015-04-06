@@ -89,7 +89,7 @@ where P1: Pattern, P2: Pattern {
 }
 
 /// Pattern that matches everything.
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct Everything;
 
 impl Pattern for Everything {

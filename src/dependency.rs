@@ -57,12 +57,12 @@ impl<T> Graph<T> where T: Ord + Clone + Hash {
 
     /// Register a dependency constraint.
     pub fn add_edge(&mut self, a: T, b: T) {
-        self.edges.entry(a.clone()).get()
-            .unwrap_or_else(|v| v.insert(BTreeSet::new()))
+        self.edges.entry(a.clone())
+            .or_insert(BTreeSet::new())
             .insert(b.clone());
 
-        self.reverse.entry(b).get()
-            .unwrap_or_else(|v| v.insert(BTreeSet::new()))
+        self.reverse.entry(b)
+            .or_insert(BTreeSet::new())
             .insert(a);
     }
 

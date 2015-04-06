@@ -1,7 +1,7 @@
 //! Site generation.
 
 use std::sync::Arc;
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::fs;
 
 use job::{self, Job};
@@ -80,7 +80,7 @@ impl Site {
 
             if !diff.is_empty() {
                 println!("`{}` depends on unregistered rule(s) `{:?}`", rule.name(), diff);
-                ::exit(1);
+                ::std::process::exit(1);
             }
         }
 

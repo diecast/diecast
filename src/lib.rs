@@ -8,13 +8,10 @@
 #![feature(plugin)]
 #![feature(core)]
 #![feature(rustc_private)]
-#![feature(std_misc)]
-#![feature(unsafe_destructor)]
 #![feature(path_ext)]
-#![feature(convert)]
 #![feature(fs_walk)]
 #![feature(path_relative_from)]
-#![feature(str_char)]
+#![feature(str_char)] // for char_at
 #![feature(into_cow)]
 #![feature(collections)]
 
@@ -65,6 +62,3 @@ pub mod configuration;
 pub mod job;
 pub mod rule;
 
-fn exit(code: usize) -> ! {
-    unsafe { libc::exit(code as libc::c_int) }
-}

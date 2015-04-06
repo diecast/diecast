@@ -21,21 +21,21 @@ log = "*"
 env_logger = "*"
 hoedown = "*"
 rustc-serialize = "*"
-# handlebars = "*"
+handlebars = "*"
 docopt = "*"
 toml = "*"
-# notify = "*"
+notify = "*"
 libc = "*"
 time = "*"
-# iron = "*"
-# static = "*"
-# mount = "*"
 threadpool = "*"
 tempdir = "*"
 num_cpus = "*"
+# iron = "*"
+# static = "*"
+# mount = "*"
 
-[dependencies.notify]
-path = "../rsnotify"
+# [dependencies.notify]
+# path = "../rsnotify"
 
 # [dependencies.rustc-serialize]
 # path = "../rustc-serialize"
@@ -43,8 +43,8 @@ path = "../rsnotify"
 # [dependencies.hoedown]
 # path = "../hoedown"
 
-[dependencies.handlebars]
-path = "../handlebars-rust"
+# [dependencies.handlebars]
+# path = "../handlebars-rust"
 
 [dependencies.anymap]
 path = "../anymap"

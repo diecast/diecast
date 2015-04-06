@@ -74,7 +74,7 @@ impl<E> Manager<E> where E: Evaluator {
 
             for name in names {
                 if dependents.contains(&name) {
-                    *self.dependencies.entry(name).get().unwrap_or_else(|v| v.insert(0)) -= 1;
+                    *self.dependencies.entry(name).or_insert(0) -= 1;
                 }
             }
         }
@@ -117,7 +117,7 @@ impl<E> Manager<E> where E: Evaluator {
                 let count = self.graph.dependency_count(&name);
                 trace!("{} has {} dependencies", name, count);
 
-                *self.dependencies.entry(name.clone()).get().unwrap_or_else(|v| v.insert(0)) += count;
+                *self.dependencies.entry(name.clone()).or_insert(0) += count;
 
                 return job;
             })
@@ -151,14 +151,14 @@ impl<E> Manager<E> where E: Evaluator {
                         },
                         None => {
                             println!("a job panicked. stopping everything");
-                            ::exit(1);
+                            ::std::process::exit(1);
                         }
                     }
                 }
             },
             Err(cycle) => {
                 println!("a dependency cycle was detected: {:?}", cycle);
-                ::exit(1);
+                ::std::process::exit(1);
             },
         }
 
@@ -203,7 +203,7 @@ impl<E> Manager<E> where E: Evaluator {
             let name = job.bind.data().name.clone();
             trace!("{} is ready", name);
 
-            deps_cache.entry(name.clone()).get().unwrap_or_else(|entry| {
+            deps_cache.entry(name.clone()).or_insert_with(|| {
                 let mut deps = BTreeMap::new();
 
                 // use Borrow?
@@ -214,7 +214,7 @@ impl<E> Manager<E> where E: Evaluator {
                     }
                 }
 
-                entry.insert(Arc::new(deps))
+                Arc::new(deps)
             });
 
             let deps = deps_cache[&name].clone();

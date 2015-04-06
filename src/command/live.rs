@@ -10,8 +10,7 @@ use tempdir::TempDir;
 
 use command::Command;
 
-use std::time::duration::Duration;
-use time::SteadyTime;
+use time::{SteadyTime, Duration};
 
 use notify::{RecommendedWatcher, Error, Watcher};
 use std::sync::mpsc::channel;
@@ -106,7 +105,7 @@ impl Command for Live {
                     Ok(_) => {},
                     Err(e) => {
                         println!("some error with the live command");
-                        ::exit(1);
+                        ::std::process::exit(1);
                     },
                 }
 
@@ -146,7 +145,7 @@ impl Command for Live {
                                 ::notify::Error::WatchNotFound => trace!("Error: Watch Not Found"),
                             }
                             println!("notification error");
-                            ::exit(1);
+                            ::std::process::exit(1);
                         }
                     }
 
@@ -161,7 +160,7 @@ impl Command for Live {
                     if let Some(ref path) = event.path {
                         while !path.exists() {
                             // TODO: this should probably be thread::yield_now
-                            thread::park_timeout(Duration::milliseconds(10));
+                            thread::park_timeout_ms(10);
                         }
                     }
 

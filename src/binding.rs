@@ -78,7 +78,7 @@ impl<C> Handler for Arc<C> where C: Handler {
     }
 }
 
-impl<C: ?Sized> Handler for Box<C> where C: Handler {
+impl Handler for Box<Handler + Sync + Send> {
     fn handle(&self, bind: &mut Bind) -> compiler::Result {
         (**self).handle(bind)
     }
