@@ -46,7 +46,7 @@ use rustc_serialize::json::{Json, ToJson};
 fn article_handler(item: &Item) -> Json {
     let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
-    if let Some(ref meta) = item.data.get::<Metadata>() {
+    if let Some(meta) = item.data.get::<Metadata>() {
         if let Some(body) = item.data.get::<Buffer>() {
             bt.insert("body".to_string(), body.as_str().unwrap().to_json());
         }
@@ -139,7 +139,7 @@ fn main() {
                     let mut titles = String::new();
 
                     for post in &item.bind().dependencies["posts"].items[page.range] {
-                        if let Some(ref meta) = post.data.get::<Metadata>() {
+                        if let Some(meta) = post.data.get::<Metadata>() {
                             let meta =
                                 meta.data.lookup("title").and_then(|t| t.as_str()) ;
 
