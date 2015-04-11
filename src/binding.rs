@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
-use std::path::PathBuf;
 use anymap::AnyMap;
 
 use item::{Item, Dependencies, Route};

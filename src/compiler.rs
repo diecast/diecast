@@ -313,9 +313,7 @@ pub fn render_template<H>(name: &'static str, handler: H)
     -> Box<item::Handler + Sync + Send>
 where H: Fn(&Item) -> Json + Sync + Send + 'static {
     Box::new(move |item: &mut Item| -> Result {
-        let mut rendered = String::new();
-
-        let rendered = {
+        item.body = {
             let data = item.bind().data.read().unwrap();
             let registry = data.get::<Arc<Handlebars>>().unwrap();
 
@@ -324,7 +322,6 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
             registry.render(name, &json).unwrap()
         };
 
-        item.body = rendered;
 
         Ok(())
     })

@@ -59,12 +59,18 @@ impl Route {
     // reading routes to readwrite
     // writing routes to new write
     // readwrite routes to new write
-    pub fn route_to<R>(&self, router: R) -> Route
+    pub fn route_to<R>(self, router: R) -> Route
     where R: Fn(&Path) -> PathBuf {
-        match *self {
-            Route::Read(ref from) => Route::ReadWrite(from.clone(), router(from)),
-            Route::Write(ref to) => Route::Write(router(to)),
-            Route::ReadWrite(ref from, _) => Route::ReadWrite(from.clone(), router(from)),
+        match self {
+            Route::Read(from) => {
+                let target = router(&from);
+                Route::ReadWrite(from, target)
+            },
+            Route::Write(to) => Route::Write(router(&to)),
+            Route::ReadWrite(from, _) => {
+                let target = router(&from);
+                Route::ReadWrite(from, target)
+            },
         }
     }
 }
@@ -134,7 +140,7 @@ impl Item {
 
     pub fn route<R>(&mut self, router: R)
     where R: Fn(&Path) -> PathBuf {
-        self.route = self.route.route_to(router);
+        self.route = ::std::mem::replace(&mut self.route, Route::Read(PathBuf::new())).route_to(router);
     }
 
     pub fn bind(&self) -> &binding::Data {
