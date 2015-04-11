@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use std::path::PathBuf;
 use anymap::AnyMap;
 
-use item::{Item, Dependencies};
+use item::{Item, Dependencies, Route};
 use configuration::Configuration;
 use compiler;
 
@@ -58,8 +58,8 @@ impl Bind {
     }
 
     // TODO: this isn't thread-safe, does it matter?
-    pub fn new_item(&mut self, from: Option<PathBuf>, to: Option<PathBuf>) -> &mut Item {
-        self.items.push(Item::new(from, to, self.data.clone()));
+    pub fn new_item(&mut self, route: Route) -> &mut Item {
+        self.items.push(Item::new(route, self.data.clone()));
         self.items.last_mut().unwrap()
     }
 }

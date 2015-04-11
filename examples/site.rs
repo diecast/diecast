@@ -1,5 +1,4 @@
 #![feature(plugin)]
-#![feature(convert)]
 
 #![plugin(regex_macros)]
 
@@ -82,8 +81,6 @@ fn main() {
 
     let posts_compiler =
         Pooled::new(ItemChain::new()
-        // TODO: this should probably be bind-level data
-        .link(compiler::inject_with(template_registry))
         .link(compiler::read)
         .link(compiler::parse_metadata));
 
@@ -92,6 +89,11 @@ fn main() {
         .link(compiler::render_markdown)
         .link(compiler::render_template("article", article_handler))
         .link(router::set_extension("html"))
+        .link(|item: &mut Item| -> compiler::Result {
+            trace!("item data for {:?}:", item);
+            trace!("body:\n{}", item.body);
+            Ok(())
+        })
         .link(compiler::write));
 
     let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
@@ -100,6 +102,7 @@ fn main() {
         Rule::new("posts")
         .compiler(
             BindChain::new()
+            .link(compiler::inject_bind_data(template_registry))
             .link(compiler::from_pattern(posts_pattern))
             .link(posts_compiler)
             .link(compiler::retain(publishable))

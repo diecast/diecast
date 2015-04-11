@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::fmt::{self, Debug};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 use binding::{self, Bind};
 use compiler;
@@ -33,25 +33,62 @@ pub type Dependencies = Arc<BTreeMap<String, Arc<Bind>>>;
 // TODO: use a UUID?
 
 #[derive(Clone)]
+pub enum Route {
+    Read(PathBuf),
+    Write(PathBuf),
+    ReadWrite(PathBuf, PathBuf),
+}
+
+impl Route {
+    pub fn reading(&self) -> Option<&Path> {
+        match *self {
+            Route::Write(_) => None,
+            Route::Read(ref path) | Route::ReadWrite(ref path, _) => Some(path),
+        }
+    }
+
+    pub fn writing(&self) -> Option<&Path> {
+        match *self {
+            Route::Read(_) => None,
+            Route::Write(ref path) | Route::ReadWrite(_, ref path) => Some(path),
+        }
+    }
+
+    // routing:
+    //
+    // reading routes to readwrite
+    // writing routes to new write
+    // readwrite routes to new write
+    pub fn route_to<R>(&self, router: R) -> Route
+    where R: Fn(&Path) -> PathBuf {
+        match *self {
+            Route::Read(ref from) => Route::ReadWrite(from.clone(), router(from)),
+            Route::Write(ref to) => Route::Write(router(to)),
+            Route::ReadWrite(ref from, _) => Route::ReadWrite(from.clone(), router(from)),
+        }
+    }
+}
+
+impl Debug for Route {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Route::Read(ref path) => try!(write!(f, "Reading {}", path.display())),
+            Route::Write(ref path) => try!(write!(f, "Writing {}", path.display())),
+            Route::ReadWrite(ref from, ref to) => {
+                try!(write!(f, "Reading {}, Writing {}", from.display(), to.display()))
+            },
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
 pub struct Item {
     bind: Arc<binding::Data>,
 
-    //  TODO
-    //  this doesn't feel right
-    //  if Create, then from shouldn't exist
-    //  if Matching, then both might exist
-    //      but it could also be that it's just reading,
-    //      not creating
-    //  enum Route {
-    //      Creating(PathBuf),
-    //      Matching(PathBuf, Option<PathBuf>),
-    //  }
-    //  it seems like routing should only affect Matching's to
-    pub from: Option<PathBuf>,
-    pub to: Option<PathBuf>,
+    pub route: Route,
 
-    // TODO: just make this a straight up string? empty string
-    // means no body
     /// The Item's body which will fill the target file.
     pub body: String,
 
@@ -68,21 +105,19 @@ pub struct Item {
 // TODO: Item::from and Item::to
 impl Item {
     pub fn new(
-        from: Option<PathBuf>,
-        to: Option<PathBuf>,
+        route: Route,
         bind: Arc<binding::Data>,
     ) -> Item {
         use std::fs::PathExt;
 
-        if let Some(ref from) = from {
+        if let Route::Read(ref from) = route {
             println!("from: {:?}", from);
             assert!(bind.configuration.input.join(from).is_file())
         }
 
         // ensure that the source is a file
         Item {
-            from: from,
-            to: to,
+            route: route,
             body: String::new(),
             data: AnyMap::new(),
             bind: bind,
@@ -90,11 +125,16 @@ impl Item {
     }
 
     pub fn from(path: PathBuf, bind: Arc<binding::Data>) -> Item {
-        Item::new(Some(path), None, bind)
+        Item::new(Route::Read(path), bind)
     }
 
     pub fn to(path: PathBuf, bind: Arc<binding::Data>) -> Item {
-        Item::new(None, Some(path), bind)
+        Item::new(Route::Write(path), bind)
+    }
+
+    pub fn route<R>(&mut self, router: R)
+    where R: Fn(&Path) -> PathBuf {
+        self.route = self.route.route_to(router);
     }
 
     pub fn bind(&self) -> &binding::Data {
@@ -102,7 +142,7 @@ impl Item {
     }
 
     pub fn read(&mut self) {
-        if let Some(ref path) = self.from {
+        if let Route::Read(ref path) = self.route {
             let mut buf = String::new();
 
             File::open(&self.bind.configuration.input.join(path))
@@ -115,7 +155,7 @@ impl Item {
     }
 
     pub fn write(&mut self) {
-        if let Some(ref path) = self.to {
+        if let Route::Write(ref path) = self.route {
             File::create(path)
                 .unwrap()
                 .write_all(self.body.as_bytes())
@@ -132,21 +172,7 @@ impl fmt::Display for Item {
 
 impl Debug for Item {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(ref path) = self.from {
-            try!(write!(f, "{}", path.display()));
-        } else {
-            try!(write!(f, "None"));
-        }
-
-        try!(write!(f, " → "));
-
-        if let Some(ref path) = self.to {
-            try!(write!(f, "{}", path.display()));
-        } else {
-            try!(write!(f, "None"));
-        }
-
-        Ok(())
+        self.route.fmt(f)
     }
 }
 

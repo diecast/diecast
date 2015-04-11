@@ -7,12 +7,12 @@ use std::ops::Range;
 use std::fs::PathExt;
 use std::fs;
 use std::path::Path;
-use std::marker::Reflect;
+use std::any::Any;
 
 use toml;
 
 use compiler;
-use item::{self, Item};
+use item::{self, Item, Route};
 use binding::{self, Bind};
 use pattern::Pattern;
 use job::evaluator::Pool;
@@ -183,11 +183,11 @@ pub fn read(item: &mut Item) -> Result {
     use std::fs::File;
     use std::io::Read;
 
-    if let Some(ref path) = item.from {
+    if let Some(from) = item.route.reading() {
         let mut buf = String::new();
 
         // TODO: use try!
-        File::open(&item.bind().configuration.input.join(path))
+        File::open(&item.bind().configuration.input.join(from))
             .unwrap()
             .read_to_string(&mut buf)
             .unwrap();
@@ -203,9 +203,9 @@ pub fn write(item: &mut Item) -> Result {
     use std::fs::{self, File};
     use std::io::Write;
 
-    if let Some(ref path) = item.to {
+    if let Some(to) = item.route.writing() {
         let conf_out = &item.bind().configuration.output;
-        let target = conf_out.join(path);
+        let target = conf_out.join(to);
 
         if !target.starts_with(&conf_out) {
             // TODO
@@ -221,7 +221,7 @@ pub fn write(item: &mut Item) -> Result {
             let _ = fs::create_dir_all(parent);
         }
 
-        let file = conf_out.join(path);
+        let file = conf_out.join(to);
 
         trace!("writing file {:?}", file);
 
@@ -258,7 +258,7 @@ pub fn parse_metadata(item: &mut Item) -> Result {
                 r"\A---\s*\n",
                 r"(?P<metadata>.*?\n?)",
                 r"^---\s*$",
-                r"\n?",
+                r"\n*",
                 r"(?P<body>.*)"));
 
     let body = if let Some(captures) = re.captures(&item.body) {
@@ -290,10 +290,18 @@ pub fn render_markdown(item: &mut Item) -> Result {
     Ok(())
 }
 
-pub fn inject_with<T>(t: Arc<T>) -> Box<item::Handler + Sync + Send>
-where T: Reflect + Sync + Send + 'static {
+pub fn inject_item_data<T>(t: Arc<T>) -> Box<item::Handler + Sync + Send>
+where T: Any + Sync + Send + 'static {
     Box::new(move |item: &mut Item| -> Result {
         item.data.insert(t.clone());
+        Ok(())
+    })
+}
+
+pub fn inject_bind_data<T>(t: Arc<T>) -> Box<binding::Handler + Sync + Send>
+where T: Any + Sync + Send + 'static {
+    Box::new(move |bind: &mut Bind| -> Result {
+        bind.data().data.write().unwrap().insert(t.clone());
         Ok(())
     })
 }
@@ -301,13 +309,22 @@ where T: Reflect + Sync + Send + 'static {
 use rustc_serialize::json::Json;
 use handlebars::Handlebars;
 
-pub fn render_template<H>(name: &'static str, handler: H) -> Box<item::Handler + Sync + Send>
+pub fn render_template<H>(name: &'static str, handler: H)
+    -> Box<item::Handler + Sync + Send>
 where H: Fn(&Item) -> Json + Sync + Send + 'static {
     Box::new(move |item: &mut Item| -> Result {
-        if let Some(ref registry) = item.data.get::<Arc<Handlebars>>() {
+        let mut rendered = String::new();
+
+        let rendered = {
+            let data = item.bind().data.read().unwrap();
+            let registry = data.get::<Arc<Handlebars>>().unwrap();
+
+            trace!("rendering template for {:?}", item);
             let json = handler(item);
-            item.body = registry.render(name, &json).unwrap();
-        }
+            registry.render(name, &json).unwrap()
+        };
+
+        item.body = rendered;
 
         Ok(())
     })
@@ -440,7 +457,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                     range: start .. end,
                 };
 
-            let page = bind.new_item(None, Some((*target).clone()));
+            let page = bind.new_item(Route::Write((*target).clone()));
             page.data.insert::<Page>(page_struct);
         }
 
@@ -479,7 +496,7 @@ where P: Pattern + Sync + Send + 'static {
                 .to_path_buf();
 
             if pattern.matches(&relative) {
-                bind.new_item(Some(relative), None);
+                bind.new_item(Route::Read(relative));
             }
         }
 
@@ -489,7 +506,7 @@ where P: Pattern + Sync + Send + 'static {
 
 pub fn creating(path: PathBuf) -> Box<binding::Handler + Sync + Send> {
     Box::new(move |bind: &mut Bind| -> compiler::Result {
-        bind.new_item(None, Some(path.clone()));
+        bind.new_item(Route::Write(path.clone()));
 
         Ok(())
     })

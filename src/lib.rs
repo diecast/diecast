@@ -6,8 +6,6 @@
 //! This crate facilitates the creation of static site generators.
 
 #![feature(plugin)]
-#![feature(core)]
-#![feature(rustc_private)]
 #![feature(path_ext)]
 #![feature(fs_walk)]
 #![feature(path_relative_from)]
@@ -19,7 +17,6 @@
 extern crate glob;
 extern crate anymap;
 extern crate regex;
-extern crate graphviz;
 extern crate toml;
 extern crate threadpool;
 
