@@ -118,7 +118,7 @@ fn main() {
         Rule::new("post index")
         .compiler(
             BindChain::new()
-            .link(paginate(5, |page: usize| -> PathBuf {
+            .link(paginate("posts", 5, |page: usize| -> PathBuf {
                 if page == 0 {
                     PathBuf::from("index.html")
                 } else {
@@ -134,7 +134,10 @@ fn main() {
 
                     for post in &item.bind().dependencies["posts"].items[page.range] {
                         if let Some(ref meta) = post.data.get::<Metadata>() {
-                            if let Some(title) = meta.data.lookup("title").and_then(|t| t.as_str()) {
+                            let meta =
+                                meta.data.lookup("title").and_then(|t| t.as_str()) ;
+
+                            if let Some(title) = meta {
                                 titles.push_str(&format!("> {}\n", title));
                             }
                         }

@@ -8,6 +8,7 @@ use std::fs::PathExt;
 use std::fs;
 use std::path::Path;
 use std::any::Any;
+use std::borrow::Cow;
 
 use toml;
 
@@ -389,10 +390,15 @@ pub struct Page {
     pub posts_per_page: usize,
 }
 
-pub fn paginate<R>(factor: usize, router: R) -> Box<binding::Handler + Sync + Send>
+// TODO: this should actually use a Dependency -> name trait
+// we probably have to re-introduce it
+pub fn paginate<'a, R, S: Into<Cow<'a, str>>>(dependency: S, factor: usize, router: R)
+    -> Box<binding::Handler + Sync + Send>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
+    let dependency = dependency.into().into_owned();
+
     Box::new(move |bind: &mut Bind| -> compiler::Result {
-        let post_count = bind.data().dependencies["posts"].items.len();
+        let post_count = bind.data().dependencies[&dependency].items.len();
 
         let page_count = {
             let (div, rem) = (post_count / factor, post_count % factor);
