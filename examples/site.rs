@@ -28,7 +28,7 @@ use diecast::handler;
 use diecast::util::router;
 use diecast::util::handlers;
 use diecast::util::handlers::binding::{
-    self, BindChain, paginate, Page, Pooled};
+    self, BindChain, Page, Pooled};
 use diecast::util::handlers::item::{
     self, Metadata, ItemChain};
 use hoedown::buffer::Buffer;
@@ -124,7 +124,7 @@ fn main() {
         Rule::new("post index")
         .compiler(
             BindChain::new()
-            .link(paginate("posts", 5, |page: usize| -> PathBuf {
+            .link(handlers::binding::paginate("posts", 5, |page: usize| -> PathBuf {
                 if page == 0 {
                     PathBuf::from("index.html")
                 } else {
