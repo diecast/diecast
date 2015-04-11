@@ -13,6 +13,7 @@ extern crate hoedown;
 extern crate handlebars;
 extern crate toml;
 extern crate rustc_serialize;
+extern crate time;
 
 use diecast::{
     Configuration,
@@ -27,6 +28,8 @@ use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page, Po
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
+use time::PreciseTime;
+
 use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
@@ -160,7 +163,13 @@ fn main() {
     command.site().register(posts);
     command.site().register(index);
 
+    let start = PreciseTime::now();
+
     command.run();
+
+    let end = PreciseTime::now();
+
+    println!("time elapsed: {}", start.to(end));
 
     // FIXME: main thread doesn't wait for children?
     println!("EXITING");
