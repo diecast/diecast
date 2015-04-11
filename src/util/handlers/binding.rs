@@ -1,36 +1,19 @@
-//! item::Handler behavior.
-
 use std::sync::Arc;
-use std::path::PathBuf;
-use std::collections::HashMap;
-use std::ops::Range;
-use std::fs::PathExt;
-use std::fs;
-use std::path::Path;
 use std::any::Any;
+use std::path::{PathBuf, Path};
+use std::ops::Range;
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::fs;
 
-use toml;
-
-use compiler;
-use item::{self, Item, Route};
-use binding::{self, Bind};
-use pattern::Pattern;
 use job::evaluator::Pool;
-
-pub trait Error: ::std::error::Error {}
-pub type Result = ::std::result::Result<(), Box<Error>>;
-
-impl<E> Error for E where E: ::std::error::Error {}
-
-impl<E> From<E> for Box<Error> where E: Error + 'static {
-    fn from(e: E) -> Box<Error> {
-        Box::new(e)
-    }
-}
+use item::{Item, Route};
+use binding::Bind;
+use handler::{self, Handler};
+use pattern::Pattern;
 
 pub struct BindChain {
-    handlers: Vec<Box<binding::Handler + Sync + Send>>,
+    handlers: Vec<Box<Handler<Bind> + Sync + Send>>,
 }
 
 impl BindChain {
@@ -41,14 +24,14 @@ impl BindChain {
     }
 
     pub fn link<H>(mut self, compiler: H) -> BindChain
-    where H: binding::Handler + Sync + Send + 'static {
+    where H: Handler<Bind> + Sync + Send + 'static {
         self.handlers.push(Box::new(compiler));
         self
     }
 }
 
-impl binding::Handler for BindChain {
-    fn handle(&self, binding: &mut Bind) -> compiler::Result {
+impl Handler<Bind> for BindChain {
+    fn handle(&self, binding: &mut Bind) -> handler::Result {
         for handler in &self.handlers {
             try!(handler.handle(binding));
         }
@@ -59,13 +42,13 @@ impl binding::Handler for BindChain {
 
 // TODO: should the chunk be in configuration or a parameter?
 pub struct Pooled<H>
-where H: item::Handler + Sync + Send + 'static {
+where H: Handler<Item> + Sync + Send + 'static {
     chunk: usize,
     handler: Arc<H>,
 }
 
 impl<H> Pooled<H>
-where H: item::Handler + Sync + Send + 'static {
+where H: Handler<Item> + Sync + Send + 'static {
     pub fn new(handler: H) -> Pooled<H> {
         Pooled {
             chunk: 1,
@@ -79,9 +62,9 @@ where H: item::Handler + Sync + Send + 'static {
     }
 }
 
-impl<H> binding::Handler for Pooled<H>
-where H: item::Handler + Sync + Send + 'static {
-    fn handle(&self, bind: &mut Bind) -> compiler::Result {
+impl<H> Handler<Bind> for Pooled<H>
+where H: Handler<Item> + Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> handler::Result {
         let pool: Pool<Vec<Item>> = Pool::new(bind.data().configuration.threads);
         let item_count = bind.items.len();
 
@@ -111,7 +94,7 @@ where H: item::Handler + Sync + Send + 'static {
                 let mut results = vec![];
 
                 for mut item in items {
-                    match item::Handler::handle(&handler, &mut item) {
+                    match <Handler<Item>>::handle(&handler, &mut item) {
                         Ok(()) => results.push(item),
                         Err(e) => {
                             println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n", item, e);
@@ -136,194 +119,15 @@ where H: item::Handler + Sync + Send + 'static {
     }
 }
 
-pub struct ItemChain {
-    handlers: Vec<Box<item::Handler + Sync + Send>>,
-}
-
-impl ItemChain {
-    pub fn new() -> ItemChain {
-        ItemChain {
-            handlers: vec![],
-        }
-    }
-
-    pub fn link<H>(mut self, compiler: H) -> ItemChain
-    where H: item::Handler + Sync + Send + 'static {
-        self.handlers.push(Box::new(compiler));
-        self
-    }
-}
-
-impl item::Handler for ItemChain {
-    fn handle(&self, item: &mut Item) -> compiler::Result {
-        for handler in &self.handlers {
-            try!(handler.handle(item));
-        }
-
-        Ok(())
-    }
-}
-
-impl binding::Handler for ItemChain {
-    fn handle(&self, binding: &mut Bind) -> compiler::Result {
-        for item in &mut binding.items {
-            try!(item::Handler::handle(self, item));
-        }
-
-        Ok(())
-    }
-}
-
-pub fn stub(_bind: &mut Bind) -> Result {
+pub fn stub(_bind: &mut Bind) -> handler::Result {
     trace!("stub compiler");
     Ok(())
 }
 
-/// item::Handler that reads the `Item`'s body.
-pub fn read(item: &mut Item) -> Result {
-    use std::fs::File;
-    use std::io::Read;
-
-    if let Some(from) = item.route.reading() {
-        let mut buf = String::new();
-
-        // TODO: use try!
-        File::open(&item.bind().configuration.input.join(from))
-            .unwrap()
-            .read_to_string(&mut buf)
-            .unwrap();
-
-        item.body = buf;
-    }
-
-    Ok(())
-}
-
-/// item::Handler that writes the `Item`'s body.
-pub fn write(item: &mut Item) -> Result {
-    use std::fs::{self, File};
-    use std::io::Write;
-
-    if let Some(to) = item.route.writing() {
-        let conf_out = &item.bind().configuration.output;
-        let target = conf_out.join(to);
-
-        if !target.starts_with(&conf_out) {
-            // TODO
-            // should probably return a proper T: Error?
-            println!("attempted to write outside of the output directory: {:?}", target);
-            ::std::process::exit(1);
-        }
-
-        if let Some(parent) = target.parent() {
-            trace!("mkdir -p {:?}", parent);
-
-            // TODO: this errors out if the path already exists? dumb
-            let _ = fs::create_dir_all(parent);
-        }
-
-        let file = conf_out.join(to);
-
-        trace!("writing file {:?}", file);
-
-        File::create(&file)
-            .unwrap()
-            .write_all(item.body.as_bytes())
-            .unwrap();
-    }
-
-    Ok(())
-}
-
-
-/// item::Handler that prints the `Item`'s body.
-pub fn print(item: &mut Item) -> Result {
-    println!("{}", item.body);
-
-    Ok(())
-}
-
-#[derive(Clone)]
-pub struct Metadata {
-    pub data: toml::Value,
-}
-
-pub fn parse_metadata(item: &mut Item) -> Result {
-    // TODO:
-    // should probably allow arbitrary amount of
-    // newlines after metadata block?
-    let re =
-        regex!(
-            concat!(
-                "(?ms)",
-                r"\A---\s*\n",
-                r"(?P<metadata>.*?\n?)",
-                r"^---\s*$",
-                r"\n*",
-                r"(?P<body>.*)"));
-
-    let body = if let Some(captures) = re.captures(&item.body) {
-        if let Some(metadata) = captures.name("metadata") {
-            if let Ok(parsed) = metadata.parse() {
-                item.data.insert(Metadata { data: parsed });
-            }
-        }
-
-        captures.name("body").map(|b| b.to_string())
-    } else { None };
-
-    if let Some(body) = body {
-        item.body = body;
-    }
-
-    Ok(())
-}
-
-pub fn render_markdown(item: &mut Item) -> Result {
-    use hoedown::Markdown;
-    use hoedown::renderer::html;
-
-    let document = Markdown::new(item.body.as_bytes());
-    let renderer = html::Html::new(html::Flags::empty(), 0);
-    let buffer = document.render_to_buffer(renderer);
-    item.data.insert(buffer);
-
-    Ok(())
-}
-
-pub fn inject_item_data<T>(t: Arc<T>) -> Box<item::Handler + Sync + Send>
+pub fn inject_bind_data<T>(t: Arc<T>) -> Box<Handler<Bind> + Sync + Send>
 where T: Any + Sync + Send + 'static {
-    Box::new(move |item: &mut Item| -> Result {
-        item.data.insert(t.clone());
-        Ok(())
-    })
-}
-
-pub fn inject_bind_data<T>(t: Arc<T>) -> Box<binding::Handler + Sync + Send>
-where T: Any + Sync + Send + 'static {
-    Box::new(move |bind: &mut Bind| -> Result {
+    Box::new(move |bind: &mut Bind| -> handler::Result {
         bind.data().data.write().unwrap().insert(t.clone());
-        Ok(())
-    })
-}
-
-use rustc_serialize::json::Json;
-use handlebars::Handlebars;
-
-pub fn render_template<H>(name: &'static str, handler: H)
-    -> Box<item::Handler + Sync + Send>
-where H: Fn(&Item) -> Json + Sync + Send + 'static {
-    Box::new(move |item: &mut Item| -> Result {
-        item.body = {
-            let data = item.bind().data.read().unwrap();
-            let registry = data.get::<Arc<Handlebars>>().unwrap();
-
-            trace!("rendering template for {:?}", item);
-            let json = handler(item);
-            registry.render(name, &json).unwrap()
-        };
-
-
         Ok(())
     })
 }
@@ -332,9 +136,9 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
 // even if we're not actually doing it more than once
 // in general this means that it can only be used with a function
 // perhaps should make the bound be Clone once Copy: Clone is implemented
-pub fn retain<C>(condition: C) -> Box<binding::Handler + Sync + Send>
+pub fn retain<C>(condition: C) -> Box<Handler<Bind> + Sync + Send>
 where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
-    Box::new(move |bind: &mut Bind| -> Result {
+    Box::new(move |bind: &mut Bind| -> handler::Result {
         bind.items.retain(condition);
         Ok(())
     })
@@ -346,7 +150,7 @@ pub struct Adjacent {
     next: Option<Arc<Item>>,
 }
 
-pub fn next_prev(bind: &mut Bind) -> compiler::Result {
+pub fn next_prev(bind: &mut Bind) -> handler::Result {
     let count = bind.items.len();
 
     let last_num = if count == 0 {
@@ -393,11 +197,11 @@ pub struct Page {
 // TODO: this should actually use a Dependency -> name trait
 // we probably have to re-introduce it
 pub fn paginate<'a, R, S: Into<Cow<'a, str>>>(dependency: S, factor: usize, router: R)
-    -> Box<binding::Handler + Sync + Send>
+    -> Box<Handler<Bind> + Sync + Send>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     let dependency = dependency.into().into_owned();
 
-    Box::new(move |bind: &mut Bind| -> compiler::Result {
+    Box::new(move |bind: &mut Bind| -> handler::Result {
         let post_count = bind.data().dependencies[&dependency].items.len();
 
         let page_count = {
@@ -471,9 +275,11 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 }
 
 // TODO: problem here is that the dir is being walked multiple times
-pub fn from_pattern<P>(pattern: P) -> Box<binding::Handler + Sync + Send>
+pub fn from_pattern<P>(pattern: P) -> Box<Handler<Bind> + Sync + Send>
 where P: Pattern + Sync + Send + 'static {
-    Box::new(move |bind: &mut Bind| -> compiler::Result {
+    use std::fs::PathExt;
+
+    Box::new(move |bind: &mut Bind| -> handler::Result {
         let paths =
             fs::walk_dir(&bind.data().configuration.input).unwrap()
             .filter_map(|p| {
@@ -507,8 +313,8 @@ where P: Pattern + Sync + Send + 'static {
     })
 }
 
-pub fn creating(path: PathBuf) -> Box<binding::Handler + Sync + Send> {
-    Box::new(move |bind: &mut Bind| -> compiler::Result {
+pub fn creating(path: PathBuf) -> Box<Handler<Bind> + Sync + Send> {
+    Box::new(move |bind: &mut Bind| -> handler::Result {
         bind.new_item(Route::Write(path.clone()));
 
         Ok(())
@@ -520,12 +326,12 @@ pub struct Tags {
     map: HashMap<String, Vec<Arc<Item>>>,
 }
 
-pub fn tags(bind: &mut Bind) -> compiler::Result {
+pub fn tags(bind: &mut Bind) -> handler::Result {
     let mut tag_map = ::std::collections::HashMap::new();
 
     for item in &bind.items {
         let toml =
-            item.data.get::<Metadata>()
+            item.data.get::<super::item::Metadata>()
             .and_then(|m| {
                 m.data.lookup("tags")
             })

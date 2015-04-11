@@ -1,6 +1,6 @@
-use item::{self, Item};
+use item::Item;
+use handler::{self, Handler};
 use std::path::{PathBuf, Path};
-use compiler;
 
 use regex;
 
@@ -19,8 +19,8 @@ pub fn identity(item: &mut Item) {
     });
 }
 
-pub fn set_extension(extension: &'static str) -> Box<item::Handler + Sync + Send> {
-    Box::new(move |item: &mut Item| -> compiler::Result {
+pub fn set_extension(extension: &'static str) -> Box<Handler<Item> + Sync + Send> {
+    Box::new(move |item: &mut Item| -> handler::Result {
         item.route(|path: &Path| -> PathBuf {
             path.with_extension(extension)
         });
@@ -44,8 +44,8 @@ impl SetExtension {
     }
 }
 
-impl item::Handler for SetExtension {
-    fn handle(&self, item: &mut Item) -> compiler::Result {
+impl Handler<Item> for SetExtension {
+    fn handle(&self, item: &mut Item) -> handler::Result {
         item.route(|path: &Path| -> PathBuf {
             path.with_extension(self.extension)
         });
@@ -78,8 +78,8 @@ impl Regex {
     }
 }
 
-impl item::Handler for Regex {
-    fn handle(&self, item: &mut Item) -> compiler::Result {
+impl Handler<Item> for Regex {
+    fn handle(&self, item: &mut Item) -> handler::Result {
         item.route(|path: &Path| -> PathBuf {
             let caps = self.regex.captures(path.to_str().unwrap()).unwrap();
             PathBuf::from(&caps.expand(self.template))

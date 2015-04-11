@@ -2,13 +2,14 @@ use std::sync::Arc;
 use std::collections::HashSet;
 use std::borrow::Cow;
 
-use binding;
-use compiler;
+use binding::Bind;
+use util;
+use handler::Handler;
 
 // TODO: optimization: Arc<String> ?
 pub struct Rule {
     name: String,
-    compiler: Arc<Box<binding::Handler + Sync + Send>>,
+    compiler: Arc<Box<Handler<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
 }
 
@@ -16,18 +17,18 @@ impl Rule {
     pub fn new<'a, S: Into<Cow<'a, str>>>(name: S) -> Rule {
         Rule {
             name: name.into().into_owned(),
-            compiler: Arc::new(Box::new(compiler::stub)),
+            compiler: Arc::new(Box::new(util::handlers::binding::stub)),
             dependencies: HashSet::new(),
         }
     }
 
     pub fn compiler<H>(mut self, compiler: H) -> Rule
-    where H: binding::Handler + Sync + Send + 'static {
+    where H: Handler<Bind> + Sync + Send + 'static {
         self.compiler = Arc::new(Box::new(compiler));
         self
     }
 
-    pub fn get_compiler(&self) -> &Arc<Box<binding::Handler + Sync + Send + 'static>> {
+    pub fn get_compiler(&self) -> &Arc<Box<Handler<Bind> + Sync + Send + 'static>> {
         &self.compiler
     }
 

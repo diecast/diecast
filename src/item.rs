@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::path::{PathBuf, Path};
 
 use binding::{self, Bind};
-use compiler;
 
 // TODO:
 // pinning down the type like this has the effect of also
@@ -179,51 +178,6 @@ impl fmt::Display for Item {
 impl Debug for Item {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.route.fmt(f)
-    }
-}
-
-/// Behavior of a compiler.
-///
-/// There's a single method that takes a mutable
-/// reference to the `Item` being compiled.
-pub trait Handler {
-    fn handle(&self, item: &mut Item) -> compiler::Result;
-}
-
-impl<H> Handler for Arc<H> where H: Handler {
-    fn handle(&self, item: &mut Item) -> compiler::Result {
-        (**self).handle(item)
-    }
-}
-
-impl Handler for Box<Handler> {
-    fn handle(&self, item: &mut Item) -> compiler::Result {
-        (**self).handle(item)
-    }
-}
-
-impl Handler for Box<Handler + Sync + Send> {
-    fn handle(&self, item: &mut Item) -> compiler::Result {
-        (**self).handle(item)
-    }
-}
-
-impl<F> Handler for F where F: Fn(&mut Item) -> compiler::Result {
-    fn handle(&self, item: &mut Item) -> compiler::Result {
-        self(item)
-    }
-}
-
-// TODO: should this be an impl for [H] or for &[H]?
-// FIXME: this can't work because a single H type is chosen
-//        which ends up expecting all of the elements to be the same type
-impl<'a, H> Handler for &'a [H] where H: Handler {
-    fn handle(&self, item: &mut Item) -> compiler::Result {
-        for handler in *self {
-            try!(handler.handle(item));
-        }
-
-        Ok(())
     }
 }
 

@@ -4,7 +4,6 @@ use anymap::AnyMap;
 
 use item::{Item, Dependencies, Route};
 use configuration::Configuration;
-use compiler;
 
 // FIXME
 // problem is that an item handler can easily change
@@ -60,48 +59,6 @@ impl Bind {
     pub fn new_item(&mut self, route: Route) -> &mut Item {
         self.items.push(Item::new(route, self.data.clone()));
         self.items.last_mut().unwrap()
-    }
-}
-
-pub trait Handler {
-    fn handle(&self, bind: &mut Bind) -> compiler::Result;
-}
-
-/// Behavior of a handler.
-///
-/// There's a single method that takes a mutable
-/// reference to the `Bind` being handled.
-impl<C> Handler for Arc<C> where C: Handler {
-    fn handle(&self, bind: &mut Bind) -> compiler::Result {
-        (**self).handle(bind)
-    }
-}
-
-impl Handler for Box<Handler> {
-    fn handle(&self, bind: &mut Bind) -> compiler::Result {
-        (**self).handle(bind)
-    }
-}
-
-impl Handler for Box<Handler + Sync + Send> {
-    fn handle(&self, bind: &mut Bind) -> compiler::Result {
-        (**self).handle(bind)
-    }
-}
-
-impl<F> Handler for F where F: Fn(&mut Bind) -> compiler::Result {
-    fn handle(&self, bind: &mut Bind) -> compiler::Result {
-        self(bind)
-    }
-}
-
-impl<'a, C> Handler for &'a [C] where C: Handler {
-    fn handle(&self, bind: &mut Bind) -> compiler::Result {
-        for handler in *self {
-            try!(handler.handle(bind));
-        }
-
-        Ok(())
     }
 }
 

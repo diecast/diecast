@@ -22,9 +22,15 @@ use diecast::{
     Item,
 };
 
-use diecast::router;
+use diecast::util;
 use diecast::command;
-use diecast::compiler::{self, Metadata, BindChain, ItemChain, paginate, Page, Pooled};
+use diecast::handler;
+use diecast::util::router;
+use diecast::util::handlers;
+use diecast::util::handlers::binding::{
+    self, BindChain, paginate, Page, Pooled};
+use diecast::util::handlers::item::{
+    self, Metadata, ItemChain};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -84,20 +90,20 @@ fn main() {
 
     let posts_compiler =
         Pooled::new(ItemChain::new()
-        .link(compiler::read)
-        .link(compiler::parse_metadata));
+        .link(handlers::item::read)
+        .link(handlers::item::parse_metadata));
 
     let posts_compiler_post =
         Pooled::new(ItemChain::new()
-        .link(compiler::render_markdown)
-        .link(compiler::render_template("article", article_handler))
+        .link(handlers::item::render_markdown)
+        .link(handlers::item::render_template("article", article_handler))
         .link(router::set_extension("html"))
-        .link(|item: &mut Item| -> compiler::Result {
+        .link(|item: &mut Item| -> handler::Result {
             trace!("item data for {:?}:", item);
             trace!("body:\n{}", item.body);
             Ok(())
         })
-        .link(compiler::write));
+        .link(handlers::item::write));
 
     let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
 
@@ -105,13 +111,13 @@ fn main() {
         Rule::new("posts")
         .compiler(
             BindChain::new()
-            .link(compiler::inject_bind_data(template_registry))
-            .link(compiler::from_pattern(posts_pattern))
+            .link(handlers::binding::inject_bind_data(template_registry))
+            .link(handlers::binding::from_pattern(posts_pattern))
             .link(posts_compiler)
-            .link(compiler::retain(publishable))
-            .link(compiler::tags)
+            .link(handlers::binding::retain(publishable))
+            .link(handlers::binding::tags)
             .link(posts_compiler_post)
-            .link(compiler::next_prev));
+            .link(handlers::binding::next_prev));
 
     // this feels awkward
     let index =
@@ -127,7 +133,7 @@ fn main() {
             }))
             .link(
                 Pooled::new(ItemChain::new()
-                .link(|item: &mut Item| -> compiler::Result {
+                .link(|item: &mut Item| -> handler::Result {
                     let page = item.data.remove::<Page>().unwrap();
 
                     let mut titles = String::new();
@@ -147,8 +153,8 @@ fn main() {
 
                     Ok(())
                 })
-                .link(compiler::print)
-                .link(compiler::write))))
+                .link(handlers::item::print)
+                .link(handlers::item::write))))
         .depends_on(&posts);
 
     let config =
