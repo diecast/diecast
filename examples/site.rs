@@ -30,9 +30,9 @@ use diecast::{
 
 use diecast::command;
 use diecast::util::router;
-use diecast::util::handlers::{self, Chain};
-use diecast::util::handlers::binding::{Page, Pooled};
-use diecast::util::handlers::item::Metadata;
+use diecast::util::handler::{self, Chain};
+use diecast::util::handler::binding::{Page, Pooled};
+use diecast::util::handler::item::Metadata;
 
 fn main() {
     env_logger::init().unwrap();
@@ -49,13 +49,13 @@ fn main() {
 
     let posts_handler =
         Pooled::new(Chain::new()
-        .link(handlers::item::read)
-        .link(handlers::item::parse_metadata));
+        .link(handler::item::read)
+        .link(handler::item::parse_metadata));
 
     let posts_handler_post =
         Pooled::new(Chain::new()
-        .link(handlers::item::render_markdown)
-        .link(handlers::item::render_template("article", |item: &Item| -> Json {
+        .link(handler::item::render_markdown)
+        .link(handler::item::render_template("article", |item: &Item| -> Json {
             let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
             if let Some(meta) = item.data.get::<Metadata>() {
@@ -76,7 +76,7 @@ fn main() {
             trace!("body:\n{}", item.body);
             Ok(())
         })
-        .link(handlers::item::write));
+        .link(handler::item::write));
 
     let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
 
@@ -84,20 +84,20 @@ fn main() {
         Rule::new("posts")
         .handler(
             Chain::new()
-            .link(handlers::binding::select(posts_pattern))
-            .link(handlers::inject_data(Arc::new(handlebars)))
+            .link(handler::binding::select(posts_pattern))
+            .link(handler::inject_data(Arc::new(handlebars)))
             .link(posts_handler)
-            .link(handlers::binding::retain(handlers::item::publishable))
-            .link(handlers::binding::tags)
+            .link(handler::binding::retain(handler::item::publishable))
+            .link(handler::binding::tags)
             .link(posts_handler_post)
-            .link(handlers::binding::next_prev));
+            .link(handler::binding::next_prev));
 
     // this feels awkward
     let index =
         Rule::new("post index")
         .handler(
             Chain::new()
-            .link(handlers::binding::paginate("posts", 5, |page: usize| -> PathBuf {
+            .link(handler::binding::paginate("posts", 5, |page: usize| -> PathBuf {
                 if page == 0 {
                     PathBuf::from("index.html")
                 } else {
@@ -126,8 +126,8 @@ fn main() {
 
                     Ok(())
                 })
-                .link(handlers::item::print)
-                .link(handlers::item::write))))
+                .link(handler::item::print)
+                .link(handler::item::write))))
         .depends_on(&posts);
 
     let config =

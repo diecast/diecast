@@ -23,7 +23,7 @@ impl Rule {
     pub fn new<'a, S: Into<Cow<'a, str>>>(name: S) -> Rule {
         Rule {
             name: name.into().into_owned(),
-            handler: Arc::new(Box::new(util::handlers::binding::stub)),
+            handler: Arc::new(Box::new(util::handler::binding::stub)),
             dependencies: HashSet::new(),
         }
     }

@@ -1,6 +1,6 @@
 // TODO: when ready, this prevents it from building
 //       if there are missing docs or warnings
-// #![deny(missing_doc)]
+// #![warn(missing_docs)]
 // #![deny(warnings)]
 
 //! This crate facilitates the creation of static site generators.
