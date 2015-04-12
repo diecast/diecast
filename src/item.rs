@@ -20,17 +20,6 @@ use binding::{self, Bind};
 // I think this should be its own type
 pub type Dependencies = Arc<BTreeMap<String, Arc<Bind>>>;
 
-/// Represents a compilation unit.
-///
-/// This represents either a file read, a file write, or
-/// a mapping from a file read to a file write.
-///
-/// It includes a body field which represents the read or to-be-written data.
-///
-/// It also includes an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html) which is used to represent miscellaneous data.
-
-// TODO: use a UUID?
-
 #[derive(Clone)]
 pub enum Route {
     Read(PathBuf),
@@ -87,6 +76,15 @@ impl Debug for Route {
         Ok(())
     }
 }
+
+/// Represents a compilation unit.
+///
+/// This represents either a file read, a file write, or
+/// a mapping from a file read to a file write.
+///
+/// It includes a body field which represents the read or to-be-written data.
+///
+/// It also includes an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html) which is used to represent miscellaneous data.
 
 #[derive(Clone)]
 pub struct Item {

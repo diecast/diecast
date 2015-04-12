@@ -31,7 +31,7 @@ Options:
 ";
 
 pub struct Live {
-    temp_dir: TempDir,
+    _temp_dir: TempDir,
     site: Site,
 }
 
@@ -66,7 +66,7 @@ impl Live {
 
         Live {
             site: Site::new(configuration),
-            temp_dir: temp_dir,
+            _temp_dir: temp_dir,
         }
     }
 }
@@ -92,7 +92,7 @@ impl Command for Live {
             Ok(mut watcher) => {
                 match watcher.watch(&self.site.configuration().input) {
                     Ok(_) => {},
-                    Err(e) => {
+                    Err(_) => {
                         println!("some error with the live command");
                         ::std::process::exit(1);
                     },

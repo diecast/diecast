@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use regex::Regex;
+use rustc_serialize::json::Json;
+use handlebars::Handlebars;
 use toml;
 
 use handle::{self, Handle, Result};
@@ -98,14 +101,15 @@ pub fn parse_metadata(item: &mut Item) -> handle::Result {
     // should probably allow arbitrary amount of
     // newlines after metadata block?
     let re =
-        regex!(
+        Regex::new(
             concat!(
                 "(?ms)",
                 r"\A---\s*\n",
                 r"(?P<metadata>.*?\n?)",
                 r"^---\s*$",
                 r"\n*",
-                r"(?P<body>.*)"));
+                r"(?P<body>.*)"))
+            .unwrap();
 
     let body = if let Some(captures) = re.captures(&item.body) {
         if let Some(metadata) = captures.name("metadata") {
@@ -135,9 +139,6 @@ pub fn render_markdown(item: &mut Item) -> handle::Result {
 
     Ok(())
 }
-
-use rustc_serialize::json::Json;
-use handlebars::Handlebars;
 
 pub struct RenderTemplate<H>
 where H: Fn(&Item) -> Json + Sync + Send + 'static {
@@ -170,3 +171,16 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
     }
 }
 
+pub fn is_draft(item: &Item) -> bool {
+    item.data.get::<Metadata>()
+        .map(|meta| {
+            meta.data.lookup("draft")
+                .and_then(::toml::Value::as_bool)
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
+}
+
+pub fn publishable(item: &Item) -> bool {
+    !(is_draft(item) && !item.bind().configuration.is_preview)
+}

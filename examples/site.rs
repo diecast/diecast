@@ -1,8 +1,3 @@
-#![feature(plugin)]
-
-#![plugin(regex_macros)]
-
-#[macro_use]
 extern crate diecast;
 extern crate regex;
 extern crate glob;
@@ -15,24 +10,6 @@ extern crate toml;
 extern crate rustc_serialize;
 extern crate time;
 
-use diecast::{
-    Configuration,
-    Rule,
-    Bind,
-    Item,
-};
-
-use diecast::command;
-use diecast::handle;
-use diecast::util::router;
-use diecast::util::handlers::{self, Chain};
-use diecast::util::handlers::binding::{Page, Pooled};
-use diecast::util::handlers::item::Metadata;
-use hoedown::buffer::Buffer;
-
-use handlebars::Handlebars;
-use time::PreciseTime;
-
 use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
@@ -40,35 +17,22 @@ use std::sync::Arc;
 use std::path::PathBuf;
 use rustc_serialize::json::{Json, ToJson};
 
-fn article_handler(item: &Item) -> Json {
-    let mut bt: BTreeMap<String, Json> = BTreeMap::new();
+use regex::Regex;
+use hoedown::buffer::Buffer;
+use handlebars::Handlebars;
+use time::PreciseTime;
 
-    if let Some(meta) = item.data.get::<Metadata>() {
-        if let Some(body) = item.data.get::<Buffer>() {
-            bt.insert("body".to_string(), body.as_str().unwrap().to_json());
-        }
+use diecast::{
+    Configuration,
+    Rule,
+    Item,
+};
 
-        if let Some(title) = meta.data.lookup("title") {
-            bt.insert("title".to_string(), title.as_str().unwrap().to_json());
-        }
-    }
-
-    Json::Object(bt)
-}
-
-fn is_draft(item: &Item) -> bool {
-    item.data.get::<Metadata>()
-        .map(|meta| {
-            meta.data.lookup("draft")
-                .and_then(::toml::Value::as_bool)
-                .unwrap_or(false)
-        })
-        .unwrap_or(false)
-}
-
-fn publishable(item: &Item) -> bool {
-    !(is_draft(item) && !item.bind().configuration.is_preview)
-}
+use diecast::command;
+use diecast::util::router;
+use diecast::util::handlers::{self, Chain};
+use diecast::util::handlers::binding::{Page, Pooled};
+use diecast::util::handlers::item::Metadata;
 
 fn main() {
     env_logger::init().unwrap();
@@ -91,9 +55,23 @@ fn main() {
     let posts_handler_post =
         Pooled::new(Chain::new()
         .link(handlers::item::render_markdown)
-        .link(handlers::item::render_template("article", article_handler))
+        .link(handlers::item::render_template("article", |item: &Item| -> Json {
+            let mut bt: BTreeMap<String, Json> = BTreeMap::new();
+
+            if let Some(meta) = item.data.get::<Metadata>() {
+                if let Some(body) = item.data.get::<Buffer>() {
+                    bt.insert("body".to_string(), body.as_str().unwrap().to_json());
+                }
+
+                if let Some(title) = meta.data.lookup("title") {
+                    bt.insert("title".to_string(), title.as_str().unwrap().to_json());
+                }
+            }
+
+            Json::Object(bt)
+        }))
         .link(router::set_extension("html"))
-        .link(|item: &mut Item| -> handle::Result {
+        .link(|item: &mut Item| -> diecast::Result {
             trace!("item data for {:?}:", item);
             trace!("body:\n{}", item.body);
             Ok(())
@@ -109,7 +87,7 @@ fn main() {
             .link(handlers::binding::select(posts_pattern))
             .link(handlers::inject_data(Arc::new(handlebars)))
             .link(posts_handler)
-            .link(handlers::binding::retain(publishable))
+            .link(handlers::binding::retain(handlers::item::publishable))
             .link(handlers::binding::tags)
             .link(posts_handler_post)
             .link(handlers::binding::next_prev));
@@ -128,7 +106,7 @@ fn main() {
             }))
             .link(
                 Pooled::new(Chain::new()
-                .link(|item: &mut Item| -> handle::Result {
+                .link(|item: &mut Item| -> diecast::Result {
                     let page = item.data.remove::<Page>().unwrap();
 
                     let mut titles = String::new();
@@ -154,7 +132,7 @@ fn main() {
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
-        .ignore(regex!(r"^\.|^#|~$|\.swp$|4913"));
+        .ignore(Regex::new(r"^\.|^#|~$|\.swp$|4913").unwrap());
 
     if let Some(i) = config.toml().lookup("age").and_then(toml::Value::as_integer) {
         println!("age: {}", i);

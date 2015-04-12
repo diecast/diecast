@@ -197,8 +197,8 @@ mod test {
         let intro_to_rust = Path::new("posts/long/introduction-to-rust.md");
         let this_week_in_rust = Path::new("posts/short/this-week-in-rust.md");
 
-        assert!(regex!(r"introduction").matches(&intro_to_rust));
-        assert!(!regex!(r"introduction").matches(&this_week_in_rust));
+        assert!(Regex::new(r"introduction").unwrap().matches(&intro_to_rust));
+        assert!(!Regex::new(r"introduction").unwrap().matches(&this_week_in_rust));
     }
 
     #[test]

@@ -5,14 +5,11 @@
 
 //! This crate facilitates the creation of static site generators.
 
-#![feature(plugin)]
 #![feature(path_ext)]
 #![feature(fs_walk)]
 #![feature(path_relative_from)]
 #![feature(str_char)] // for char_at
 #![feature(collections)]
-
-#![plugin(regex_macros)]
 
 extern crate glob;
 extern crate anymap;
@@ -43,19 +40,21 @@ pub use rule::Rule;
 pub use configuration::Configuration;
 pub use item::{Item, Dependencies};
 pub use binding::Bind;
+pub use handle::{Handle, Result};
+
+mod handle;
+mod job;
+mod dependency;
 
 #[macro_use]
 pub mod macros;
-pub mod deploy;
-pub mod pattern;
-pub mod handle;
 pub mod item;
 pub mod binding;
+pub mod rule;
+pub mod pattern;
 pub mod site;
-pub mod dependency;
 pub mod command;
 pub mod configuration;
-pub mod job;
-pub mod rule;
 pub mod util;
+pub mod deploy;
 
