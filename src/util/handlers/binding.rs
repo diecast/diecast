@@ -12,34 +12,6 @@ use binding::Bind;
 use handler::{self, Handler};
 use pattern::Pattern;
 
-pub struct BindChain {
-    handlers: Vec<Box<Handler<Bind> + Sync + Send>>,
-}
-
-impl BindChain {
-    pub fn new() -> BindChain {
-        BindChain {
-            handlers: vec![],
-        }
-    }
-
-    pub fn link<H>(mut self, compiler: H) -> BindChain
-    where H: Handler<Bind> + Sync + Send + 'static {
-        self.handlers.push(Box::new(compiler));
-        self
-    }
-}
-
-impl Handler<Bind> for BindChain {
-    fn handle(&self, binding: &mut Bind) -> handler::Result {
-        for handler in &self.handlers {
-            try!(handler.handle(binding));
-        }
-
-        Ok(())
-    }
-}
-
 // TODO: should the chunk be in configuration or a parameter?
 pub struct Pooled<H>
 where H: Handler<Item> + Sync + Send + 'static {

@@ -5,45 +5,6 @@ use toml;
 
 use handler::{self, Handler};
 use item::Item;
-use binding::Bind;
-
-pub struct ItemChain {
-    handlers: Vec<Box<Handler<Item> + Sync + Send>>,
-}
-
-impl ItemChain {
-    pub fn new() -> ItemChain {
-        ItemChain {
-            handlers: vec![],
-        }
-    }
-
-    pub fn link<H>(mut self, compiler: H) -> ItemChain
-    where H: Handler<Item> + Sync + Send + 'static {
-        self.handlers.push(Box::new(compiler));
-        self
-    }
-}
-
-impl Handler<Item> for ItemChain {
-    fn handle(&self, item: &mut Item) -> handler::Result {
-        for handler in &self.handlers {
-            try!(handler.handle(item));
-        }
-
-        Ok(())
-    }
-}
-
-impl Handler<Bind> for ItemChain {
-    fn handle(&self, binding: &mut Bind) -> handler::Result {
-        for item in &mut binding.items {
-            try!(<Handler<Item>>::handle(self, item));
-        }
-
-        Ok(())
-    }
-}
 
 /// Handler<Item> that reads the `Item`'s body.
 pub fn read(item: &mut Item) -> handler::Result {

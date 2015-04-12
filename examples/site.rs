@@ -23,11 +23,11 @@ use diecast::{
 };
 
 use diecast::command;
-use diecast::handler;
+use diecast::handler::{self, Chain};
 use diecast::util::router;
 use diecast::util::handlers;
-use diecast::util::handlers::binding::{BindChain, Page, Pooled};
-use diecast::util::handlers::item::{Metadata, ItemChain};
+use diecast::util::handlers::binding::{Page, Pooled};
+use diecast::util::handlers::item::Metadata;
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;
@@ -86,12 +86,12 @@ fn main() {
     let template_registry = Arc::new(handlebars);
 
     let posts_compiler =
-        Pooled::new(ItemChain::new()
+        Pooled::new(Chain::new()
         .link(handlers::item::read)
         .link(handlers::item::parse_metadata));
 
     let posts_compiler_post =
-        Pooled::new(ItemChain::new()
+        Pooled::new(Chain::new()
         .link(handlers::item::render_markdown)
         .link(handlers::item::render_template("article", article_handler))
         .link(router::set_extension("html"))
@@ -107,7 +107,7 @@ fn main() {
     let posts =
         Rule::new("posts")
         .compiler(
-            BindChain::new()
+            Chain::new()
             .link(handlers::binding::inject_bind_data(template_registry))
             .link(handlers::binding::from_pattern(posts_pattern))
             .link(posts_compiler)
@@ -120,7 +120,7 @@ fn main() {
     let index =
         Rule::new("post index")
         .compiler(
-            BindChain::new()
+            Chain::new()
             .link(handlers::binding::paginate("posts", 5, |page: usize| -> PathBuf {
                 if page == 0 {
                     PathBuf::from("index.html")
@@ -129,7 +129,7 @@ fn main() {
                 }
             }))
             .link(
-                Pooled::new(ItemChain::new()
+                Pooled::new(Chain::new()
                 .link(|item: &mut Item| -> handler::Result {
                     let page = item.data.remove::<Page>().unwrap();
 
