@@ -4,34 +4,43 @@ use std::borrow::Cow;
 
 use binding::Bind;
 use util;
-use handler::Handler;
+use handle::Handle;
 
-// TODO: optimization: Arc<String> ?
+/// Represents a rule that the static site generator must follow.
+///
+/// A rule consists of a name and handler, as well as any dependencies
+/// it may have.
 pub struct Rule {
     name: String,
-    compiler: Arc<Box<Handler<Bind> + Sync + Send>>,
+    handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
 }
 
 impl Rule {
+    /// Requires the name of the rule.
+    ///
+    /// The parameter type can be an `&str` or `String`.
     pub fn new<'a, S: Into<Cow<'a, str>>>(name: S) -> Rule {
         Rule {
             name: name.into().into_owned(),
-            compiler: Arc::new(Box::new(util::handlers::binding::stub)),
+            handler: Arc::new(Box::new(util::handlers::binding::stub)),
             dependencies: HashSet::new(),
         }
     }
 
-    pub fn compiler<H>(mut self, compiler: H) -> Rule
-    where H: Handler<Bind> + Sync + Send + 'static {
-        self.compiler = Arc::new(Box::new(compiler));
+    /// Associate a handler with this rule.
+    pub fn handler<H>(mut self, handler: H) -> Rule
+    where H: Handle<Bind> + Sync + Send + 'static {
+        self.handler = Arc::new(Box::new(handler));
         self
     }
 
-    pub fn get_compiler(&self) -> &Arc<Box<Handler<Bind> + Sync + Send + 'static>> {
-        &self.compiler
+    /// Access the handler.
+    pub fn get_handler(&self) -> &Arc<Box<Handle<Bind> + Sync + Send + 'static>> {
+        &self.handler
     }
 
+    /// Register a dependency for this rule.
     pub fn depends_on<R: ?Sized>(mut self, dependency: &R) -> Rule
     where R: Register {
         dependency.register(&mut self.dependencies);
@@ -58,12 +67,6 @@ impl Register for Rule {
         dependencies.insert(self.name.clone());
     }
 }
-
-// impl<R> Register for R where R: Register {
-//     fn register(&self, dependencies: &mut HashSet<String>) {
-//         (**self).register(dependencies);
-//     }
-// }
 
 // TODO: this has potential for adding string many times despite being the same
 // each having diff ref-count

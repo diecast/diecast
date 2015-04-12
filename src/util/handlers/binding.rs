@@ -8,22 +8,22 @@ use std::fs;
 use job::evaluator::Pool;
 use item::{Item, Route};
 use binding::Bind;
-use handler::{self, Handler, Result};
+use handle::{self, Handle, Result};
 use pattern::Pattern;
 
 use super::{Chain, Injector};
 
-impl Handler<Bind> for Chain<Item> {
+impl Handle<Bind> for Chain<Item> {
     fn handle(&self, binding: &mut Bind) -> Result {
         for item in &mut binding.items {
-            try!(<Handler<Item>>::handle(self, item));
+            try!(<Handle<Item>>::handle(self, item));
         }
 
         Ok(())
     }
 }
 
-impl Handler<Bind> for Chain<Bind> {
+impl Handle<Bind> for Chain<Bind> {
     fn handle(&self, binding: &mut Bind) -> Result {
         for handler in &self.handlers {
             try!(handler.handle(binding));
@@ -33,8 +33,8 @@ impl Handler<Bind> for Chain<Bind> {
     }
 }
 
-impl<T> Handler<Bind> for Injector<T> where T: Sync + Send + Clone + 'static {
-    fn handle(&self, bind: &mut Bind) -> handler::Result {
+impl<T> Handle<Bind> for Injector<T> where T: Sync + Send + Clone + 'static {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
         bind.data().data.write().unwrap().insert(self.payload.clone());
         Ok(())
     }
@@ -42,13 +42,13 @@ impl<T> Handler<Bind> for Injector<T> where T: Sync + Send + Clone + 'static {
 
 // TODO: should the chunk be in configuration or a parameter?
 pub struct Pooled<H>
-where H: Handler<Item> + Sync + Send + 'static {
+where H: Handle<Item> + Sync + Send + 'static {
     chunk: usize,
     handler: Arc<H>,
 }
 
 impl<H> Pooled<H>
-where H: Handler<Item> + Sync + Send + 'static {
+where H: Handle<Item> + Sync + Send + 'static {
     pub fn new(handler: H) -> Pooled<H> {
         Pooled {
             chunk: 1,
@@ -62,9 +62,9 @@ where H: Handler<Item> + Sync + Send + 'static {
     }
 }
 
-impl<H> Handler<Bind> for Pooled<H>
-where H: Handler<Item> + Sync + Send + 'static {
-    fn handle(&self, bind: &mut Bind) -> handler::Result {
+impl<H> Handle<Bind> for Pooled<H>
+where H: Handle<Item> + Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
         let pool: Pool<Vec<Item>> = Pool::new(bind.data().configuration.threads);
         let item_count = bind.items.len();
 
@@ -94,7 +94,7 @@ where H: Handler<Item> + Sync + Send + 'static {
                 let mut results = vec![];
 
                 for mut item in items {
-                    match <Handler<Item>>::handle(&handler, &mut item) {
+                    match <Handle<Item>>::handle(&handler, &mut item) {
                         Ok(()) => results.push(item),
                         Err(e) => {
                             println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n", item, e);
@@ -119,8 +119,8 @@ where H: Handler<Item> + Sync + Send + 'static {
     }
 }
 
-pub fn stub(_bind: &mut Bind) -> handler::Result {
-    trace!("stub compiler");
+pub fn stub(_bind: &mut Bind) -> handle::Result {
+    trace!("stub handler");
     Ok(())
 }
 
@@ -129,9 +129,9 @@ where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
     condition: C,
 }
 
-impl<C> Handler<Bind> for Retain<C>
+impl<C> Handle<Bind> for Retain<C>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
-    fn handle(&self, bind: &mut Bind) -> handler::Result {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
         bind.items.retain(&self.condition);
         Ok(())
     }
@@ -151,7 +151,7 @@ pub struct Adjacent {
     next: Option<Arc<Item>>,
 }
 
-pub fn next_prev(bind: &mut Bind) -> handler::Result {
+pub fn next_prev(bind: &mut Bind) -> handle::Result {
     let count = bind.items.len();
 
     let last_num = if count == 0 {
@@ -202,9 +202,9 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     router: R
 }
 
-impl<R> Handler<Bind> for Paginate<R>
+impl<R> Handle<Bind> for Paginate<R>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
-    fn handle(&self, bind: &mut Bind) -> handler::Result {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
         let post_count = bind.data().dependencies[&self.target].items.len();
 
         let page_count = {
@@ -295,9 +295,9 @@ where P: Pattern + Sync + Send + 'static {
     pattern: P,
 }
 
-impl<P> Handler<Bind> for Select<P>
+impl<P> Handle<Bind> for Select<P>
 where P: Pattern + Sync + Send + 'static {
-    fn handle(&self, bind: &mut Bind) -> handler::Result {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
         use std::fs::PathExt;
 
         let paths =
@@ -346,8 +346,8 @@ pub struct Create {
     path: PathBuf,
 }
 
-impl Handler<Bind> for Create {
-    fn handle(&self, bind: &mut Bind) -> handler::Result {
+impl Handle<Bind> for Create {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
         bind.new_item(Route::Write(self.path.clone()));
 
         Ok(())
@@ -366,7 +366,7 @@ pub struct Tags {
     map: HashMap<String, Vec<Arc<Item>>>,
 }
 
-pub fn tags(bind: &mut Bind) -> handler::Result {
+pub fn tags(bind: &mut Bind) -> handle::Result {
     let mut tag_map = ::std::collections::HashMap::new();
 
     for item in &bind.items {

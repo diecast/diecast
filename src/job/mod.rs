@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::fmt;
 
 use binding::Bind;
-use handler::{self, Handler};
+use handle::{self, Handle};
 
 pub mod evaluator;
 mod manager;
@@ -12,7 +12,7 @@ pub use self::manager::Manager;
 
 pub struct Job {
     pub bind: Bind,
-    pub compiler: Arc<Box<Handler<Bind> + Sync + Send>>,
+    pub handler: Arc<Box<Handle<Bind> + Sync + Send>>,
 }
 
 impl fmt::Debug for Job {
@@ -22,11 +22,11 @@ impl fmt::Debug for Job {
 }
 
 impl Job {
-    pub fn new<C>(bind: Bind, compiler: C) -> Job
-    where C: Handler<Bind> + Sync + Send + 'static {
+    pub fn new<H>(bind: Bind, handler: H) -> Job
+    where H: Handle<Bind> + Sync + Send + 'static {
         Job {
             bind: bind,
-            compiler: Arc::new(Box::new(compiler)),
+            handler: Arc::new(Box::new(handler)),
         }
     }
 
@@ -34,9 +34,9 @@ impl Job {
         self.bind
     }
 
-    pub fn process(&mut self) -> handler::Result {
-        // <Compiler as binding::Handler>::handle(&self.compiler, &mut self.bind)
-        self.compiler.handle(&mut self.bind)
+    pub fn process(&mut self) -> handle::Result {
+        // <handler as binding::Handle>::handle(&self.handler, &mut self.bind)
+        self.handler.handle(&mut self.bind)
     }
 }
 

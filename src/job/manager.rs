@@ -55,9 +55,9 @@ impl<E> Manager<E> where E: Evaluator {
         // operate on a binding-level
         self.count += 1;
 
-        // if there's no compiler then no need to dispatch a job
+        // if there's no handler then no need to dispatch a job
         // or anything like that
-        self.waiting.push_front(Job::new(bind, rule.get_compiler().clone()));
+        self.waiting.push_front(Job::new(bind, rule.get_handler().clone()));
 
         self.graph.add_node(binding.clone());
 

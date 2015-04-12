@@ -23,7 +23,7 @@ use diecast::{
 };
 
 use diecast::command;
-use diecast::handler;
+use diecast::handle;
 use diecast::util::router;
 use diecast::util::handlers::{self, Chain};
 use diecast::util::handlers::binding::{Page, Pooled};
@@ -83,17 +83,17 @@ fn main() {
     let mut handlebars = Handlebars::new();
     handlebars.register_template_string("article", layout).unwrap();
 
-    let posts_compiler =
+    let posts_handler =
         Pooled::new(Chain::new()
         .link(handlers::item::read)
         .link(handlers::item::parse_metadata));
 
-    let posts_compiler_post =
+    let posts_handler_post =
         Pooled::new(Chain::new()
         .link(handlers::item::render_markdown)
         .link(handlers::item::render_template("article", article_handler))
         .link(router::set_extension("html"))
-        .link(|item: &mut Item| -> handler::Result {
+        .link(|item: &mut Item| -> handle::Result {
             trace!("item data for {:?}:", item);
             trace!("body:\n{}", item.body);
             Ok(())
@@ -104,20 +104,20 @@ fn main() {
 
     let posts =
         Rule::new("posts")
-        .compiler(
+        .handler(
             Chain::new()
             .link(handlers::binding::select(posts_pattern))
             .link(handlers::inject_data(Arc::new(handlebars)))
-            .link(posts_compiler)
+            .link(posts_handler)
             .link(handlers::binding::retain(publishable))
             .link(handlers::binding::tags)
-            .link(posts_compiler_post)
+            .link(posts_handler_post)
             .link(handlers::binding::next_prev));
 
     // this feels awkward
     let index =
         Rule::new("post index")
-        .compiler(
+        .handler(
             Chain::new()
             .link(handlers::binding::paginate("posts", 5, |page: usize| -> PathBuf {
                 if page == 0 {
@@ -128,7 +128,7 @@ fn main() {
             }))
             .link(
                 Pooled::new(Chain::new()
-                .link(|item: &mut Item| -> handler::Result {
+                .link(|item: &mut Item| -> handle::Result {
                     let page = item.data.remove::<Page>().unwrap();
 
                     let mut titles = String::new();

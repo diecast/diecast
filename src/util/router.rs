@@ -1,11 +1,11 @@
 use item::Item;
-use handler::{self, Handler};
+use handle::{self, Handle};
 use std::path::{PathBuf, Path};
 
 use regex;
 
 // perhaps routing should occur until after all
-// of the compilers run but before the file is (possibly) written
+// of the handlers run but before the file is (possibly) written
 // and it should take an Item so it could route based on metadata?
 //
 // e.g. to route to a folder named after the year the post was published
@@ -33,8 +33,8 @@ pub struct SetExtension {
     extension: &'static str,
 }
 
-impl Handler<Item> for SetExtension {
-    fn handle(&self, item: &mut Item) -> handler::Result {
+impl Handle<Item> for SetExtension {
+    fn handle(&self, item: &mut Item) -> handle::Result {
         item.route(|path: &Path| -> PathBuf {
             path.with_extension(self.extension)
         });
@@ -67,8 +67,8 @@ impl Regex {
     }
 }
 
-impl Handler<Item> for Regex {
-    fn handle(&self, item: &mut Item) -> handler::Result {
+impl Handle<Item> for Regex {
+    fn handle(&self, item: &mut Item) -> handle::Result {
         item.route(|path: &Path| -> PathBuf {
             let caps = self.regex.captures(path.to_str().unwrap()).unwrap();
             PathBuf::from(&caps.expand(self.template))

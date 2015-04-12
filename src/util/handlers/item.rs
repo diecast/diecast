@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use toml;
 
-use handler::{self, Handler, Result};
+use handle::{self, Handle, Result};
 use item::Item;
 
 use super::{Chain, Injector};
 
-impl Handler<Item> for Chain<Item> {
+impl Handle<Item> for Chain<Item> {
     fn handle(&self, item: &mut Item) -> Result {
         for handler in &self.handlers {
             try!(handler.handle(item));
@@ -17,15 +17,15 @@ impl Handler<Item> for Chain<Item> {
     }
 }
 
-impl<T> Handler<Item> for Injector<T> where T: Sync + Send + Clone + 'static {
-    fn handle(&self, item: &mut Item) -> handler::Result {
+impl<T> Handle<Item> for Injector<T> where T: Sync + Send + Clone + 'static {
+    fn handle(&self, item: &mut Item) -> handle::Result {
         item.data.insert(self.payload.clone());
         Ok(())
     }
 }
 
-/// Handler<Item> that reads the `Item`'s body.
-pub fn read(item: &mut Item) -> handler::Result {
+/// Handle<Item> that reads the `Item`'s body.
+pub fn read(item: &mut Item) -> handle::Result {
     use std::fs::File;
     use std::io::Read;
 
@@ -44,8 +44,8 @@ pub fn read(item: &mut Item) -> handler::Result {
     Ok(())
 }
 
-/// Handler<Item> that writes the `Item`'s body.
-pub fn write(item: &mut Item) -> handler::Result {
+/// Handle<Item> that writes the `Item`'s body.
+pub fn write(item: &mut Item) -> handle::Result {
     use std::fs::{self, File};
     use std::io::Write;
 
@@ -81,8 +81,8 @@ pub fn write(item: &mut Item) -> handler::Result {
 }
 
 
-/// Handler<Item> that prints the `Item`'s body.
-pub fn print(item: &mut Item) -> handler::Result {
+/// Handle<Item> that prints the `Item`'s body.
+pub fn print(item: &mut Item) -> handle::Result {
     println!("{}", item.body);
 
     Ok(())
@@ -93,7 +93,7 @@ pub struct Metadata {
     pub data: toml::Value,
 }
 
-pub fn parse_metadata(item: &mut Item) -> handler::Result {
+pub fn parse_metadata(item: &mut Item) -> handle::Result {
     // TODO:
     // should probably allow arbitrary amount of
     // newlines after metadata block?
@@ -124,7 +124,7 @@ pub fn parse_metadata(item: &mut Item) -> handler::Result {
     Ok(())
 }
 
-pub fn render_markdown(item: &mut Item) -> handler::Result {
+pub fn render_markdown(item: &mut Item) -> handle::Result {
     use hoedown::Markdown;
     use hoedown::renderer::html;
 
@@ -145,9 +145,9 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
     handler: H,
 }
 
-impl<H> Handler<Item> for RenderTemplate<H>
+impl<H> Handle<Item> for RenderTemplate<H>
 where H: Fn(&Item) -> Json + Sync + Send + 'static {
-    fn handle(&self, item: &mut Item) -> handler::Result {
+    fn handle(&self, item: &mut Item) -> handle::Result {
         item.body = {
             let data = item.bind().data.read().unwrap();
             let registry = data.get::<Arc<Handlebars>>().unwrap();

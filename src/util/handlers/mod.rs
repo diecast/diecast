@@ -1,12 +1,12 @@
-//! item::Handler behavior.
+//! item::Handle behavior.
 
-use handler::Handler;
+use handle::Handle;
 
 pub mod item;
 pub mod binding;
 
 pub struct Chain<T> {
-    handlers: Vec<Box<Handler<T> + Sync + Send>>,
+    handlers: Vec<Box<Handle<T> + Sync + Send>>,
 }
 
 impl<T> Chain<T> {
@@ -17,7 +17,7 @@ impl<T> Chain<T> {
     }
 
     pub fn link<H>(mut self, handler: H) -> Chain<T>
-    where H: Handler<T> + Sync + Send + 'static {
+    where H: Handle<T> + Sync + Send + 'static {
         self.handlers.push(Box::new(handler));
         self
     }

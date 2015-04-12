@@ -48,7 +48,7 @@ pub use binding::Bind;
 pub mod macros;
 pub mod deploy;
 pub mod pattern;
-pub mod handler;
+pub mod handle;
 pub mod item;
 pub mod binding;
 pub mod site;
