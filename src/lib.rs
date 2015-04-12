@@ -32,9 +32,10 @@ extern crate libc;
 extern crate time;
 extern crate tempdir;
 extern crate num_cpus;
-// extern crate iron;
-// extern crate "static" as static_file;
-// extern crate mount;
+
+extern crate iron;
+extern crate staticfile;
+extern crate mount;
 
 pub use pattern::Pattern;
 pub use site::Site;

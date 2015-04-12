@@ -22,15 +22,12 @@ use diecast::{
     Item,
 };
 
-use diecast::util;
 use diecast::command;
 use diecast::handler;
 use diecast::util::router;
 use diecast::util::handlers;
-use diecast::util::handlers::binding::{
-    self, BindChain, Page, Pooled};
-use diecast::util::handlers::item::{
-    self, Metadata, ItemChain};
+use diecast::util::handlers::binding::{BindChain, Page, Pooled};
+use diecast::util::handlers::item::{Metadata, ItemChain};
 use hoedown::buffer::Buffer;
 
 use handlebars::Handlebars;

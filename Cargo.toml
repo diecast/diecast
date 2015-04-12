@@ -30,12 +30,12 @@ time = "*"
 threadpool = "*"
 tempdir = "*"
 num_cpus = "*"
-# iron = "*"
+iron = "*"
 # static = "*"
-# mount = "*"
+mount = "*"
 
-# [dependencies.notify]
-# path = "../rsnotify"
+[dependencies.staticfile]
+path = "../staticfile"
 
 # [dependencies.rustc-serialize]
 # path = "../rustc-serialize"

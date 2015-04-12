@@ -1,19 +1,19 @@
-use docopt::Docopt;
-use site::Site;
-use configuration::Configuration;
-
 use std::fs::PathExt;
 use std::process::Command as Server;
+use std::sync::mpsc::channel;
 use std::thread;
 
+use docopt::Docopt;
 use tempdir::TempDir;
+use time::{SteadyTime, Duration};
+use notify::{RecommendedWatcher, Error, Watcher};
+use iron::Iron;
+use mount::Mount;
+use staticfile::Static;
 
 use command::Command;
-
-use time::{SteadyTime, Duration};
-
-use notify::{RecommendedWatcher, Error, Watcher};
-use std::sync::mpsc::channel;
+use site::Site;
+use configuration::Configuration;
 
 #[derive(RustcDecodable, Debug)]
 struct Options {
@@ -81,23 +81,13 @@ impl Command for Live {
         let (tx, rx) = channel();
         let w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
 
-        // TODO: once iron gets fixed, use that instead
-        Server::new("python2")
-            .arg("-m")
-            .arg("SimpleHTTPServer")
-            .arg("3000")
-            .current_dir(&self.site.configuration().output)
-            .spawn();
+        let mut mount = Mount::new();
+        mount.mount("/", Static::new(&self.site.configuration().output));
 
-        // let mut mount = Mount::new();
-        // mount.mount(
-        //     "/",
-        //     Static::new(configuration.output.file_name().unwrap().to_str().unwrap()).unwrap());
-
-        // Iron::new(mount).listen((Ipv4Addr(127, 0, 0, 1), 3000)).unwrap();
+        let _guard = Iron::new(mount).http("0.0.0.0:3000").unwrap();
 
         let mut last_event = SteadyTime::now();
-        let debounce = Duration::milliseconds(100);
+        let debounce = Duration::seconds(1);
 
         match w {
             Ok(mut watcher) => {
@@ -140,9 +130,12 @@ impl Command for Live {
                             match e {
                                 ::notify::Error::Generic(e) => trace!("Error: {}", e),
                                 ::notify::Error::Io(e) => trace!("Error: {:?}", e),
-                                ::notify::Error::NotImplemented => trace!("Error: Not Implemented"),
-                                ::notify::Error::PathNotFound => trace!("Error: Path Not Found"),
-                                ::notify::Error::WatchNotFound => trace!("Error: Watch Not Found"),
+                                ::notify::Error::NotImplemented =>
+                                    trace!("Error: Not Implemented"),
+                                ::notify::Error::PathNotFound =>
+                                    trace!("Error: Path Not Found"),
+                                ::notify::Error::WatchNotFound =>
+                                    trace!("Error: Watch Not Found"),
                             }
                             println!("notification error");
                             ::std::process::exit(1);
