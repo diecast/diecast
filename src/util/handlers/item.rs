@@ -1,10 +1,28 @@
-use std::any::Any;
 use std::sync::Arc;
 
 use toml;
 
-use handler::{self, Handler};
+use handler::{self, Handler, Result};
 use item::Item;
+
+use super::{Chain, Injector};
+
+impl Handler<Item> for Chain<Item> {
+    fn handle(&self, item: &mut Item) -> Result {
+        for handler in &self.handlers {
+            try!(handler.handle(item));
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> Handler<Item> for Injector<T> where T: Sync + Send + Clone + 'static {
+    fn handle(&self, item: &mut Item) -> handler::Result {
+        item.data.insert(self.payload.clone());
+        Ok(())
+    }
+}
 
 /// Handler<Item> that reads the `Item`'s body.
 pub fn read(item: &mut Item) -> handler::Result {
@@ -118,32 +136,37 @@ pub fn render_markdown(item: &mut Item) -> handler::Result {
     Ok(())
 }
 
-pub fn inject_item_data<T>(t: Arc<T>) -> Box<Handler<Item> + Sync + Send>
-where T: Any + Sync + Send + 'static {
-    Box::new(move |item: &mut Item| -> handler::Result {
-        item.data.insert(t.clone());
-        Ok(())
-    })
-}
-
 use rustc_serialize::json::Json;
 use handlebars::Handlebars;
 
-pub fn render_template<H>(name: &'static str, handler: H)
-    -> Box<Handler<Item> + Sync + Send>
+pub struct RenderTemplate<H>
 where H: Fn(&Item) -> Json + Sync + Send + 'static {
-    Box::new(move |item: &mut Item| -> handler::Result {
+    name: &'static str,
+    handler: H,
+}
+
+impl<H> Handler<Item> for RenderTemplate<H>
+where H: Fn(&Item) -> Json + Sync + Send + 'static {
+    fn handle(&self, item: &mut Item) -> handler::Result {
         item.body = {
             let data = item.bind().data.read().unwrap();
             let registry = data.get::<Arc<Handlebars>>().unwrap();
 
             trace!("rendering template for {:?}", item);
-            let json = handler(item);
-            registry.render(name, &json).unwrap()
+            let json = (self.handler)(item);
+            registry.render(self.name, &json).unwrap()
         };
 
-
         Ok(())
-    })
+    }
+}
+
+#[inline]
+pub fn render_template<H>(name: &'static str, handler: H) -> RenderTemplate<H>
+where H: Fn(&Item) -> Json + Sync + Send + 'static {
+    RenderTemplate {
+        name: name,
+        handler: handler,
+    }
 }
 

@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::any::Any;
 use std::path::{PathBuf, Path};
 use std::ops::Range;
 use std::borrow::Cow;
@@ -9,8 +8,37 @@ use std::fs;
 use job::evaluator::Pool;
 use item::{Item, Route};
 use binding::Bind;
-use handler::{self, Handler};
+use handler::{self, Handler, Result};
 use pattern::Pattern;
+
+use super::{Chain, Injector};
+
+impl Handler<Bind> for Chain<Item> {
+    fn handle(&self, binding: &mut Bind) -> Result {
+        for item in &mut binding.items {
+            try!(<Handler<Item>>::handle(self, item));
+        }
+
+        Ok(())
+    }
+}
+
+impl Handler<Bind> for Chain<Bind> {
+    fn handle(&self, binding: &mut Bind) -> Result {
+        for handler in &self.handlers {
+            try!(handler.handle(binding));
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> Handler<Bind> for Injector<T> where T: Sync + Send + Clone + 'static {
+    fn handle(&self, bind: &mut Bind) -> handler::Result {
+        bind.data().data.write().unwrap().insert(self.payload.clone());
+        Ok(())
+    }
+}
 
 // TODO: should the chunk be in configuration or a parameter?
 pub struct Pooled<H>
@@ -96,24 +124,25 @@ pub fn stub(_bind: &mut Bind) -> handler::Result {
     Ok(())
 }
 
-pub fn inject_bind_data<T>(t: Arc<T>) -> Box<Handler<Bind> + Sync + Send>
-where T: Any + Sync + Send + 'static {
-    Box::new(move |bind: &mut Bind| -> handler::Result {
-        bind.data().data.write().unwrap().insert(t.clone());
-        Ok(())
-    })
+pub struct Retain<C>
+where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
+    condition: C,
 }
 
-// TODO: this needs Copy so it can be 'moved' to the retain method more than once
-// even if we're not actually doing it more than once
-// in general this means that it can only be used with a function
-// perhaps should make the bound be Clone once Copy: Clone is implemented
-pub fn retain<C>(condition: C) -> Box<Handler<Bind> + Sync + Send>
-where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
-    Box::new(move |bind: &mut Bind| -> handler::Result {
-        bind.items.retain(condition);
+impl<C> Handler<Bind> for Retain<C>
+where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> handler::Result {
+        bind.items.retain(&self.condition);
         Ok(())
-    })
+    }
+}
+
+#[inline]
+pub fn retain<C>(condition: C) -> Retain<C>
+where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
+    Retain {
+        condition: condition,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -166,18 +195,20 @@ pub struct Page {
     pub posts_per_page: usize,
 }
 
-// TODO: this should actually use a Dependency -> name trait
-// we probably have to re-introduce it
-pub fn paginate<'a, R, S: Into<Cow<'a, str>>>(dependency: S, factor: usize, router: R)
-    -> Box<Handler<Bind> + Sync + Send>
+pub struct Paginate<R>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
-    let dependency = dependency.into().into_owned();
+    target: String,
+    factor: usize,
+    router: R
+}
 
-    Box::new(move |bind: &mut Bind| -> handler::Result {
-        let post_count = bind.data().dependencies[&dependency].items.len();
+impl<R> Handler<Bind> for Paginate<R>
+where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> handler::Result {
+        let post_count = bind.data().dependencies[&self.target].items.len();
 
         let page_count = {
-            let (div, rem) = (post_count / factor, post_count % factor);
+            let (div, rem) = (post_count / self.factor, post_count % self.factor);
 
             if rem == 0 {
                 div
@@ -192,7 +223,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 
         let mut router = |num: usize| -> Arc<PathBuf> {
             cache.entry(num)
-                .or_insert_with(|| Arc::new(router(num)))
+                .or_insert_with(|| Arc::new((self.router)(num)))
                 .clone()
         };
 
@@ -208,8 +239,8 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                 if current == last_num { None }
                 else { let num = current + 1; Some((num, router(num))) };
 
-            let start = current * factor;
-            let end = ::std::cmp::min(post_count, (current + 1) * factor);
+            let start = current * self.factor;
+            let end = ::std::cmp::min(post_count, (current + 1) * self.factor);
 
             println!("page {} has a range of [{}, {})", current, start, end);
 
@@ -231,7 +262,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 
                     page_count: page_count,
                     post_count: post_count,
-                    posts_per_page: factor,
+                    posts_per_page: self.factor,
 
                     range: start .. end,
                 };
@@ -243,15 +274,32 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
         println!("finished pagination");
 
         Ok(())
-    })
+    }
 }
 
-// TODO: problem here is that the dir is being walked multiple times
-pub fn from_pattern<P>(pattern: P) -> Box<Handler<Bind> + Sync + Send>
-where P: Pattern + Sync + Send + 'static {
-    use std::fs::PathExt;
+// TODO: this should actually use a Dependency -> name trait
+// we probably have to re-introduce it
+#[inline]
+pub fn paginate<'a, R, S: Into<Cow<'a, str>>>(target: S, factor: usize, router: R)
+    -> Paginate<R>
+where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
+    Paginate {
+        target: target.into().into_owned(),
+        factor: factor,
+        router: router,
+    }
+}
 
-    Box::new(move |bind: &mut Bind| -> handler::Result {
+pub struct Select<P>
+where P: Pattern + Sync + Send + 'static {
+    pattern: P,
+}
+
+impl<P> Handler<Bind> for Select<P>
+where P: Pattern + Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> handler::Result {
+        use std::fs::PathExt;
+
         let paths =
             fs::walk_dir(&bind.data().configuration.input).unwrap()
             .filter_map(|p| {
@@ -276,21 +324,41 @@ where P: Pattern + Sync + Send + 'static {
                 path.relative_from(&bind.data().configuration.input).unwrap()
                 .to_path_buf();
 
-            if pattern.matches(&relative) {
+            if self.pattern.matches(&relative) {
                 bind.new_item(Route::Read(relative));
             }
         }
 
         Ok(())
-    })
+    }
 }
 
-pub fn creating(path: PathBuf) -> Box<Handler<Bind> + Sync + Send> {
-    Box::new(move |bind: &mut Bind| -> handler::Result {
-        bind.new_item(Route::Write(path.clone()));
+// TODO: problem here is that the dir is being walked multiple times
+#[inline]
+pub fn select<P>(pattern: P) -> Select<P>
+where P: Pattern + Sync + Send + 'static {
+    Select {
+        pattern: pattern,
+    }
+}
+
+pub struct Create {
+    path: PathBuf,
+}
+
+impl Handler<Bind> for Create {
+    fn handle(&self, bind: &mut Bind) -> handler::Result {
+        bind.new_item(Route::Write(self.path.clone()));
 
         Ok(())
-    })
+    }
+}
+
+#[inline]
+pub fn create(path: PathBuf) -> Create {
+    Create {
+        path: path,
+    }
 }
 
 #[derive(Clone)]

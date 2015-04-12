@@ -19,14 +19,11 @@ pub fn identity(item: &mut Item) {
     });
 }
 
-pub fn set_extension(extension: &'static str) -> Box<Handler<Item> + Sync + Send> {
-    Box::new(move |item: &mut Item| -> handler::Result {
-        item.route(|path: &Path| -> PathBuf {
-            path.with_extension(extension)
-        });
-
-        Ok(())
-    })
+#[inline]
+pub fn set_extension(extension: &'static str) -> SetExtension {
+    SetExtension {
+        extension: extension,
+    }
 }
 
 /// file.txt -> file.html
@@ -34,14 +31,6 @@ pub fn set_extension(extension: &'static str) -> Box<Handler<Item> + Sync + Send
 #[derive(Copy, Clone)]
 pub struct SetExtension {
     extension: &'static str,
-}
-
-impl SetExtension {
-    pub fn new(extension: &'static str) -> SetExtension {
-        SetExtension {
-            extension: extension,
-        }
-    }
 }
 
 impl Handler<Item> for SetExtension {

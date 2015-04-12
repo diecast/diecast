@@ -23,9 +23,9 @@ use diecast::{
 };
 
 use diecast::command;
-use diecast::handler::{self, Chain};
+use diecast::handler;
 use diecast::util::router;
-use diecast::util::handlers;
+use diecast::util::handlers::{self, Chain};
 use diecast::util::handlers::binding::{Page, Pooled};
 use diecast::util::handlers::item::Metadata;
 use hoedown::buffer::Buffer;
@@ -108,8 +108,8 @@ fn main() {
         Rule::new("posts")
         .compiler(
             Chain::new()
-            .link(handlers::binding::inject_bind_data(template_registry))
-            .link(handlers::binding::from_pattern(posts_pattern))
+            .link(handlers::inject_data(template_registry))
+            .link(handlers::binding::select(posts_pattern))
             .link(posts_compiler)
             .link(handlers::binding::retain(publishable))
             .link(handlers::binding::tags)
