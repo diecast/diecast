@@ -83,8 +83,6 @@ fn main() {
     let mut handlebars = Handlebars::new();
     handlebars.register_template_string("article", layout).unwrap();
 
-    let template_registry = Arc::new(handlebars);
-
     let posts_compiler =
         Pooled::new(Chain::new()
         .link(handlers::item::read)
@@ -108,8 +106,8 @@ fn main() {
         Rule::new("posts")
         .compiler(
             Chain::new()
-            .link(handlers::inject_data(template_registry))
             .link(handlers::binding::select(posts_pattern))
+            .link(handlers::inject_data(Arc::new(handlebars)))
             .link(posts_compiler)
             .link(handlers::binding::retain(publishable))
             .link(handlers::binding::tags)
