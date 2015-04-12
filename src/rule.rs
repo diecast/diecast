@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::collections::HashSet;
-use std::borrow::Cow;
 use std::convert::Into;
 
 use binding::Bind;
@@ -21,9 +20,10 @@ impl Rule {
     /// Requires the name of the rule.
     ///
     /// The parameter type can be an `&str` or `String`.
-    pub fn new<'a, S: Into<Cow<'a, str>>>(name: S) -> Rule {
+    pub fn new<S>(name: S) -> Rule
+    where S: Into<String> {
         Rule {
-            name: name.into().into_owned(),
+            name: name.into(),
             handler: Arc::new(Box::new(util::handler::binding::stub)),
             dependencies: HashSet::new(),
         }
