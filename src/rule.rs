@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::collections::HashSet;
 use std::borrow::Cow;
+use std::convert::Into;
 
 use binding::Bind;
 use util;
@@ -41,9 +42,9 @@ impl Rule {
     }
 
     /// Register a dependency for this rule.
-    pub fn depends_on<D: ?Sized>(mut self, dependency: &D) -> Rule
-    where D: Dependency {
-        self.dependencies.insert(dependency.name());
+    pub fn depends_on<D>(mut self, dependency: D) -> Rule
+    where D: Into<String> {
+        self.dependencies.insert(dependency.into());
 
         return self;
     }
@@ -58,19 +59,9 @@ impl Rule {
     }
 }
 
-pub trait Dependency {
-    fn name(&self) -> String;
-}
-
-impl Dependency for Rule {
-    fn name(&self) -> String {
+impl<'a> Into<String> for &'a Rule {
+    fn into(self) -> String {
         self.name.clone()
-    }
-}
-
-impl Dependency for str {
-    fn name(&self) -> String {
-        self.to_string()
     }
 }
 
