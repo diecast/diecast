@@ -41,9 +41,9 @@ impl Rule {
     }
 
     /// Register a dependency for this rule.
-    pub fn depends_on<R: ?Sized>(mut self, dependency: &R) -> Rule
-    where R: Register {
-        dependency.register(&mut self.dependencies);
+    pub fn depends_on<D: ?Sized>(mut self, dependency: &D) -> Rule
+    where D: Dependency {
+        self.dependencies.insert(dependency.name());
 
         return self;
     }
@@ -58,29 +58,19 @@ impl Rule {
     }
 }
 
-pub trait Register {
-    fn register(&self, dependencies: &mut HashSet<String>);
+pub trait Dependency {
+    fn name(&self) -> String;
 }
 
-impl Register for Rule {
-    fn register(&self, dependencies: &mut HashSet<String>) {
-        dependencies.insert(self.name.clone());
+impl Dependency for Rule {
+    fn name(&self) -> String {
+        self.name.clone()
     }
 }
 
-// TODO: this has potential for adding string many times despite being the same
-// each having diff ref-count
-impl Register for str {
-    fn register(&self, dependencies: &mut HashSet<String>) {
-        dependencies.insert(self.to_string());
-    }
-}
-
-impl<'a, I> Register for &'a [I] where I: Register {
-    fn register(&self, dependencies: &mut HashSet<String>) {
-        for i in *self {
-            i.register(dependencies);
-        }
+impl Dependency for str {
+    fn name(&self) -> String {
+        self.to_string()
     }
 }
 
