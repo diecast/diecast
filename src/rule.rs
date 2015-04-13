@@ -24,7 +24,7 @@ impl Rule {
     where S: Into<String> {
         Rule {
             name: name.into(),
-            handler: Arc::new(Box::new(util::handler::binding::stub)),
+            handler: Arc::new(Box::new(util::handle::binding::stub)),
             dependencies: HashSet::new(),
         }
     }

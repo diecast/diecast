@@ -32,10 +32,10 @@ use diecast::{
 };
 
 use diecast::command;
-use diecast::util::router;
-use diecast::util::handler::{self, Chain};
-use diecast::util::handler::binding::{Page, Pooled};
-use diecast::util::handler::item::Metadata;
+use diecast::util::route;
+use diecast::util::handle::{self, Chain};
+use diecast::util::handle::binding::{Page, Pooled};
+use diecast::util::handle::item::Metadata;
 
 fn main() {
     env_logger::init().unwrap();
@@ -58,8 +58,8 @@ fn main() {
         Rule::new("templates")
         .handler(
             Chain::new()
-            .link(handler::binding::select(Glob::new("templates/*.html").unwrap()))
-            .link(handler::binding::each(handler::item::read))
+            .link(handle::binding::select(Glob::new("templates/*.html").unwrap()))
+            .link(handle::binding::each(handle::item::read))
             .link(|bind: &mut Bind| -> diecast::Result {
                 let mut registry = Handlebars::new();
 
@@ -74,14 +74,14 @@ fn main() {
 
     let posts_handler =
         Pooled::new(Chain::new()
-        .link(handler::item::read)
-        .link(handler::item::parse_metadata));
+        .link(handle::item::read)
+        .link(handle::item::parse_metadata));
 
     let posts_handler_post =
         Pooled::new(Chain::new()
-        .link(handler::item::render_markdown)
-        .link(router::pretty)
-        .link(handler::item::render_template("post", |item: &Item| -> Json {
+        .link(handle::item::render_markdown)
+        .link(route::pretty)
+        .link(handle::item::render_template("post", |item: &Item| -> Json {
             let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
             if let Some(meta) = item.data.get::<Metadata>() {
@@ -100,20 +100,20 @@ fn main() {
 
             Json::Object(bt)
         }))
-        .link(handler::item::render_template("layout", |item: &Item| -> Json {
+        .link(handle::item::render_template("layout", |item: &Item| -> Json {
             let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
             bt.insert("body".to_string(), item.body.to_json());
 
             Json::Object(bt)
         }))
-        .link(handler::item::write));
+        .link(handle::item::write));
 
     let statics =
         Rule::new("statics")
         .handler(
             Chain::new()
-            .link(handler::binding::select(or!(
+            .link(handle::binding::select(or!(
                 Glob::new("images/**/*").unwrap(),
                 Glob::new("static/**/*").unwrap(),
                 Glob::new("js/**/*").unwrap(),
@@ -121,10 +121,10 @@ fn main() {
                 "CNAME"
             )))
             .link(
-                handler::binding::each(
+                handle::binding::each(
                     Chain::new()
-                    .link(router::identity)
-                    .link(handler::item::copy))));
+                    .link(route::identity)
+                    .link(handle::item::copy))));
 
     fn compile_scss(bind: &mut Bind) -> diecast::Result {
         use std::fs;
@@ -151,19 +151,19 @@ fn main() {
         Rule::new("scss")
         .handler(
             Chain::new()
-            .link(handler::binding::select(Glob::new("scss/**/*.scss").unwrap()))
+            .link(handle::binding::select(Glob::new("scss/**/*.scss").unwrap()))
             .link(compile_scss));
 
     let posts =
         Rule::new("posts")
         .handler(
             Chain::new()
-            .link(handler::binding::select(Glob::new("posts/*.markdown").unwrap()))
+            .link(handle::binding::select(Glob::new("posts/*.markdown").unwrap()))
             .link(posts_handler)
-            .link(handler::binding::retain(handler::item::publishable))
-            .link(handler::binding::tags)
+            .link(handle::binding::retain(handle::item::publishable))
+            .link(handle::binding::tags)
             .link(posts_handler_post)
-            .link(handler::binding::next_prev))
+            .link(handle::binding::next_prev))
         .depends_on(&templates);
 
     // this feels awkward
@@ -171,7 +171,7 @@ fn main() {
         Rule::new("post index")
         .handler(
             Chain::new()
-            .link(handler::binding::paginate("posts", 5, |page: usize| -> PathBuf {
+            .link(handle::binding::paginate("posts", 5, |page: usize| -> PathBuf {
                 if page == 0 {
                     PathBuf::from("index.html")
                 } else {
@@ -182,7 +182,7 @@ fn main() {
                 Pooled::new(Chain::new()
                 // TODO: render_template needs a param to determine
                 // where the templates reside
-                .link(handler::item::render_template("index", |item: &Item| -> Json {
+                .link(handle::item::render_template("index", |item: &Item| -> Json {
                     let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
                     let mut items = vec![];
@@ -217,14 +217,14 @@ fn main() {
 
                     Json::Object(bt)
                 }))
-                .link(handler::item::render_template("layout", |item: &Item| -> Json {
+                .link(handle::item::render_template("layout", |item: &Item| -> Json {
                     let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
                     bt.insert("body".to_string(), item.body.to_json());
 
                     Json::Object(bt)
                 }))
-                .link(handler::item::write))))
+                .link(handle::item::write))))
         .depends_on(&posts)
         .depends_on(&templates);
 
