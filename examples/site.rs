@@ -1,3 +1,4 @@
+#[macro_use]
 extern crate diecast;
 extern crate regex;
 extern crate glob;
@@ -14,18 +15,20 @@ use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use rustc_serialize::json::{Json, ToJson};
 
 use regex::Regex;
 use hoedown::buffer::Buffer;
 use handlebars::Handlebars;
 use time::PreciseTime;
+use glob::Pattern as Glob;
 
 use diecast::{
     Configuration,
     Rule,
     Item,
+    Bind,
 };
 
 use diecast::command;
@@ -37,15 +40,37 @@ use diecast::util::handler::item::Metadata;
 fn main() {
     env_logger::init().unwrap();
 
-    let mut layout = String::new();
+    fn load_template(path: &Path, registry: &mut Handlebars) {
+        let mut template = String::new();
 
-    File::open("tests/fixtures/input/layouts/article.handlebars")
-    .unwrap()
-    .read_to_string(&mut layout)
-    .unwrap();
+        File::open(path)
+        .unwrap()
+        .read_to_string(&mut template)
+        .unwrap();
 
-    let mut handlebars = Handlebars::new();
-    handlebars.register_template_string("article", layout).unwrap();
+        let path = path.with_extension("");
+        let name = path.file_name().unwrap().to_str().unwrap();
+
+        registry.register_template_string(name, template).unwrap();
+    }
+
+    let templates =
+        Rule::new("templates")
+        .handler(
+            Chain::new()
+            .link(handler::binding::select(Glob::new("templates/*.html").unwrap()))
+            .link(Chain::new().link(handler::item::read))
+            .link(|bind: &mut Bind| -> diecast::Result {
+                let mut registry = Handlebars::new();
+
+                for item in &bind.items {
+                    load_template(item.reading().unwrap(), &mut registry);
+                }
+
+                bind.data().data.write().unwrap().insert(Arc::new(registry));
+
+                Ok(())
+            }));
 
     let posts_handler =
         Pooled::new(Chain::new()
@@ -55,7 +80,8 @@ fn main() {
     let posts_handler_post =
         Pooled::new(Chain::new()
         .link(handler::item::render_markdown)
-        .link(handler::item::render_template("article", |item: &Item| -> Json {
+        .link(router::pretty)
+        .link(handler::item::render_template("post", |item: &Item| -> Json {
             let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
             if let Some(meta) = item.data.get::<Metadata>() {
@@ -66,31 +92,78 @@ fn main() {
                 if let Some(title) = meta.data.lookup("title") {
                     bt.insert("title".to_string(), title.as_str().unwrap().to_json());
                 }
+
+                if let Some(path) = item.relative_writing() {
+                    bt.insert("url".to_string(), path.to_str().unwrap().to_json());
+                }
             }
 
             Json::Object(bt)
         }))
-        .link(router::set_extension("html"))
-        .link(|item: &mut Item| -> diecast::Result {
-            trace!("item data for {:?}:", item);
-            trace!("body:\n{}", item.body);
-            Ok(())
-        })
+        .link(handler::item::render_template("layout", |item: &Item| -> Json {
+            let mut bt: BTreeMap<String, Json> = BTreeMap::new();
+
+            bt.insert("body".to_string(), item.body.to_json());
+
+            Json::Object(bt)
+        }))
         .link(handler::item::write));
 
-    let posts_pattern = glob::Pattern::new("posts/*.markdown").unwrap();
+    let statics =
+        Rule::new("statics")
+        .handler(
+            Chain::new()
+            .link(handler::binding::select(or!(
+                Glob::new("images/**/*").unwrap(),
+                Glob::new("static/**/*").unwrap(),
+                Glob::new("js/**/*").unwrap(),
+                Glob::new("favicon.png").unwrap(),
+                Glob::new("CNAME").unwrap()
+            )))
+            .link(
+                Chain::new()
+                .link(router::identity)
+                .link(handler::item::copy)));
+
+    fn compile_scss(bind: &mut Bind) -> diecast::Result {
+        use std::fs;
+
+        trace!("compiling scss");
+
+        let _ = fs::create_dir(bind.data().configuration.output.join("css"));
+
+        // TODO: this needs to be more general, perhaps give it the "screen.css" part
+        // as a parameter, and the input/output pair
+        try! {
+            ::std::process::Command::new("scss")
+            .arg("-I")
+            .arg(bind.data().configuration.input.join("scss").to_str().unwrap())
+            .arg(bind.data().configuration.input.join("scss/screen.scss"))
+            .arg(bind.data().configuration.output.join("css/screen.css").to_str().unwrap())
+            .status()
+        };
+
+        Ok(())
+    }
+
+    let scss =
+        Rule::new("scss")
+        .handler(
+            Chain::new()
+            .link(handler::binding::select(Glob::new("scss/**/*.scss").unwrap()))
+            .link(compile_scss));
 
     let posts =
         Rule::new("posts")
         .handler(
             Chain::new()
-            .link(handler::binding::select(posts_pattern))
-            .link(handler::inject_data(Arc::new(handlebars)))
+            .link(handler::binding::select(Glob::new("posts/*.markdown").unwrap()))
             .link(posts_handler)
             .link(handler::binding::retain(handler::item::publishable))
             .link(handler::binding::tags)
             .link(posts_handler_post)
-            .link(handler::binding::next_prev));
+            .link(handler::binding::next_prev))
+        .depends_on(&templates);
 
     // this feels awkward
     let index =
@@ -106,29 +179,53 @@ fn main() {
             }))
             .link(
                 Pooled::new(Chain::new()
-                .link(|item: &mut Item| -> diecast::Result {
-                    let page = item.data.remove::<Page>().unwrap();
+                // TODO: render_template needs a param to determine
+                // where the templates reside
+                .link(handler::item::render_template("index", |item: &Item| -> Json {
+                    let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
-                    let mut titles = String::new();
+                    let mut items = vec![];
 
-                    for post in &item.bind().dependencies["posts"].items[page.range] {
+                    let page = item.data.get::<Page>().unwrap();
+
+                    for post in &item.bind().dependencies["posts"].items[page.range.clone()] {
+                        let mut itm: BTreeMap<String, Json> = BTreeMap::new();
+
                         if let Some(meta) = post.data.get::<Metadata>() {
-                            let meta =
-                                meta.data.lookup("title").and_then(|t| t.as_str()) ;
+                            if let Some(title) = meta.data.lookup("title") {
+                                itm.insert("title".to_string(), title.as_str().unwrap().to_json());
+                            }
 
-                            if let Some(title) = meta {
-                                titles.push_str(&format!("> {}\n", title));
+                            if let Some(path) = post.relative_writing() {
+                                itm.insert("url".to_string(), path.parent().unwrap().to_str().unwrap().to_json());
                             }
                         }
+
+                        items.push(itm);
                     }
 
-                    item.body = titles;
+                    bt.insert("items".to_string(), items.to_json());
 
-                    Ok(())
-                })
-                .link(handler::item::print)
+                    if let Some((_, ref path)) = page.prev {
+                        bt.insert("prev".to_string(), path.parent().unwrap().to_str().unwrap().to_json());
+                    }
+
+                    if let Some((_, ref path)) = page.next {
+                        bt.insert("next".to_string(), path.parent().unwrap().to_str().unwrap().to_json());
+                    }
+
+                    Json::Object(bt)
+                }))
+                .link(handler::item::render_template("layout", |item: &Item| -> Json {
+                    let mut bt: BTreeMap<String, Json> = BTreeMap::new();
+
+                    bt.insert("body".to_string(), item.body.to_json());
+
+                    Json::Object(bt)
+                }))
                 .link(handler::item::write))))
-        .depends_on(&posts);
+        .depends_on(&posts)
+        .depends_on(&templates);
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
@@ -142,6 +239,9 @@ fn main() {
 
     let mut command = command::from_args(config);
 
+    command.site().register(templates);
+    command.site().register(statics);
+    command.site().register(scss);
     command.site().register(posts);
     command.site().register(index);
 

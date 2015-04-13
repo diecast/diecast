@@ -12,11 +12,23 @@ use regex;
 
 /// file.txt -> file.txt
 /// gen.route(Identity)
-pub fn identity(item: &mut Item) {
+pub fn identity(item: &mut Item) -> handle::Result {
     item.route(|path: &Path| -> PathBuf {
         trace!("routing {} with the identity router", path.display());
         path.to_path_buf()
     });
+
+    Ok(())
+}
+
+pub fn pretty(item: &mut Item) -> handle::Result {
+    item.route(|path: &Path| -> PathBuf {
+        let mut result = path.with_extension("");
+        result.push("index.html");
+        result
+    });
+
+    Ok(())
 }
 
 #[inline]

@@ -1,8 +1,7 @@
 //! Compilation unit for the `Generator`.
 
 use anymap::AnyMap;
-use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::fmt::{self, Debug};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -90,37 +89,35 @@ impl Debug for Route {
 pub struct Item {
     bind: Arc<binding::Data>,
 
-    pub route: Route,
+    route: Route,
+
+    from: Option<PathBuf>,
+    to: Option<PathBuf>,
 
     /// The Item's body which will fill the target file.
     pub body: String,
 
-    /// Any additional data (post metadata)
-    ///
-    /// * Title
-    /// * Date
-    /// * Comments
-    /// * TOC
-    /// * Tags
+    /// Any additional data
     pub data: AnyMap,
 }
 
 // TODO: Item::from and Item::to
 impl Item {
-    pub fn new(
-        route: Route,
-        bind: Arc<binding::Data>,
-    ) -> Item {
+    pub fn new(route: Route, bind: Arc<binding::Data>) -> Item {
         use std::fs::PathExt;
 
         if let Route::Read(ref from) = route {
-            println!("from: {:?}", from);
-            assert!(bind.configuration.input.join(from).is_file())
+            assert!(bind.configuration.input.join(&from).is_file())
         }
+
+        let from = route.reading().map(|path| bind.configuration.input.join(&path));
+        let to = route.writing().map(|path| bind.configuration.output.join(&path));
 
         // ensure that the source is a file
         Item {
             route: route,
+            from: from,
+            to: to,
             body: String::new(),
             data: AnyMap::new(),
             bind: bind,
@@ -135,35 +132,58 @@ impl Item {
         Item::new(Route::Write(path), bind)
     }
 
+    fn update_paths(&mut self) {
+        self.from = self.route.reading().map(|path| {
+            self.bind.configuration.input.join(&path)
+        });
+
+        self.to = self.route.writing().map(|path| {
+            self.bind.configuration.output.join(&path)
+        });
+    }
+
     pub fn route<R>(&mut self, router: R)
     where R: Fn(&Path) -> PathBuf {
-        self.route = ::std::mem::replace(&mut self.route, Route::Read(PathBuf::new())).route_to(router);
+        self.route =
+            ::std::mem::replace(
+                &mut self.route,
+                Route::Read(PathBuf::new()))
+            .route_to(router);
+
+        self.update_paths();
+    }
+
+    pub fn relative_reading(&self) -> Option<&Path> {
+        self.route.reading()
+    }
+
+    pub fn relative_writing(&self) -> Option<&Path> {
+        self.route.writing()
+    }
+
+    // TODO:
+    // this is a preliminary solution
+    // we preferably don't want to keep performing this computation
+    // instead it should only done when the route changes and then
+    // it should be saved somewhere
+    pub fn reading(&self) -> Option<&Path> {
+        if let Some(ref from) = self.from {
+            Some(from)
+        } else {
+            None
+        }
+    }
+
+    pub fn writing(&self) -> Option<&Path> {
+        if let Some(ref to) = self.to {
+            Some(to)
+        } else {
+            None
+        }
     }
 
     pub fn bind(&self) -> &binding::Data {
         &self.bind
-    }
-
-    pub fn read(&mut self) {
-        if let Route::Read(ref path) = self.route {
-            let mut buf = String::new();
-
-            File::open(&self.bind.configuration.input.join(path))
-                .unwrap()
-                .read_to_string(&mut buf)
-                .unwrap();
-
-            self.body = buf;
-        }
-    }
-
-    pub fn write(&mut self) {
-        if let Route::Write(ref path) = self.route {
-            File::create(path)
-                .unwrap()
-                .write_all(self.body.as_bytes())
-                .unwrap();
-        }
     }
 }
 
