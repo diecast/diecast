@@ -59,7 +59,7 @@ fn main() {
         .handler(
             Chain::new()
             .link(handler::binding::select(Glob::new("templates/*.html").unwrap()))
-            .link(Chain::new().link(handler::item::read))
+            .link(handler::binding::each(handler::item::read))
             .link(|bind: &mut Bind| -> diecast::Result {
                 let mut registry = Handlebars::new();
 
@@ -121,9 +121,10 @@ fn main() {
                 "CNAME"
             )))
             .link(
-                Chain::new()
-                .link(router::identity)
-                .link(handler::item::copy)));
+                handler::binding::each(
+                    Chain::new()
+                    .link(router::identity)
+                    .link(handler::item::copy))));
 
     fn compile_scss(bind: &mut Bind) -> diecast::Result {
         use std::fs;

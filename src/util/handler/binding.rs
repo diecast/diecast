@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
 use std::ops::Range;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 
@@ -13,10 +12,23 @@ use pattern::Pattern;
 
 use super::{Chain, Injector};
 
-impl Handle<Bind> for Chain<Item> {
+pub fn each<H>(handler: H) -> Each<H>
+where H: Handle<Item> {
+    Each {
+        handler: handler,
+    }
+}
+
+pub struct Each<H>
+where H: Handle<Item> {
+    handler: H,
+}
+
+impl<H> Handle<Bind> for Each<H>
+where H: Handle<Item> {
     fn handle(&self, binding: &mut Bind) -> Result {
         for item in &mut binding.items {
-            try!(<Handle<Item>>::handle(self, item));
+            try!(self.handler.handle(item));
         }
 
         Ok(())
@@ -33,7 +45,8 @@ impl Handle<Bind> for Chain<Bind> {
     }
 }
 
-impl<T> Handle<Bind> for Injector<T> where T: Sync + Send + Clone + 'static {
+impl<T> Handle<Bind> for Injector<T>
+where T: Sync + Send + Clone + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
         bind.data().data.write().unwrap().insert(self.payload.clone());
         Ok(())
@@ -276,11 +289,10 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 // TODO: this should actually use a Dependency -> name trait
 // we probably have to re-introduce it
 #[inline]
-pub fn paginate<'a, R, S: Into<Cow<'a, str>>>(target: S, factor: usize, router: R)
-    -> Paginate<R>
+pub fn paginate<S: Into<String>, R>(target: S, factor: usize, router: R) -> Paginate<R>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     Paginate {
-        target: target.into().into_owned(),
+        target: target.into(),
         factor: factor,
         router: router,
     }
