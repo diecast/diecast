@@ -117,8 +117,8 @@ fn main() {
                 Glob::new("images/**/*").unwrap(),
                 Glob::new("static/**/*").unwrap(),
                 Glob::new("js/**/*").unwrap(),
-                Glob::new("favicon.png").unwrap(),
-                Glob::new("CNAME").unwrap()
+                "favicon.png",
+                "CNAME"
             )))
             .link(
                 Chain::new()
