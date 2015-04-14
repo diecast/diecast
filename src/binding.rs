@@ -14,7 +14,7 @@ pub struct Data {
     pub name: String,
     pub dependencies: Dependencies,
     pub configuration: Arc<Configuration>,
-    pub data: Arc<RwLock<AnyMap>>,
+    pub extensions: Arc<RwLock<AnyMap>>,
 }
 
 pub struct Bind {
@@ -31,7 +31,7 @@ impl Bind {
                 name: name,
                 dependencies: Arc::new(BTreeMap::new()),
                 configuration: configuration,
-                data: Arc::new(RwLock::new(AnyMap::new())),
+                extensions: Arc::new(RwLock::new(AnyMap::new())),
             };
 
         Bind {

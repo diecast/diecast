@@ -23,7 +23,7 @@ impl Handle<Item> for Chain<Item> {
 impl<T> Handle<Item> for Injector<T>
 where T: Sync + Send + Clone + 'static {
     fn handle(&self, item: &mut Item) -> handle::Result {
-        item.data.insert(self.payload.clone());
+        item.extensions.insert(self.payload.clone());
         Ok(())
     }
 }
@@ -124,7 +124,7 @@ pub fn parse_metadata(item: &mut Item) -> handle::Result {
     let body = if let Some(captures) = re.captures(&item.body) {
         if let Some(metadata) = captures.name("metadata") {
             if let Ok(parsed) = metadata.parse() {
-                item.data.insert(Metadata { data: parsed });
+                item.extensions.insert(Metadata { data: parsed });
             }
         }
 
@@ -145,7 +145,7 @@ pub fn render_markdown(item: &mut Item) -> handle::Result {
     let document = Markdown::new(item.body.as_bytes());
     let renderer = html::Html::new(html::Flags::empty(), 0);
     let buffer = document.render_to_buffer(renderer);
-    item.data.insert(buffer);
+    item.extensions.insert(buffer);
 
     Ok(())
 }
@@ -162,7 +162,7 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
         item.body = {
             let data =
                 item.bind().dependencies["templates"]
-                .data().data.read().unwrap();
+                .data().extensions.read().unwrap();
             let registry = data.get::<Arc<Handlebars>>().unwrap();
 
             trace!("rendering template for {:?}", item);
@@ -185,7 +185,7 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
 }
 
 pub fn is_draft(item: &Item) -> bool {
-    item.data.get::<Metadata>()
+    item.extensions.get::<Metadata>()
         .map(|meta| {
             meta.data.lookup("draft")
                 .and_then(::toml::Value::as_bool)

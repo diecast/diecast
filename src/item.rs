@@ -98,7 +98,7 @@ pub struct Item {
     pub body: String,
 
     /// Any additional data
-    pub data: AnyMap,
+    pub extensions: AnyMap,
 }
 
 // TODO: Item::from and Item::to
@@ -119,7 +119,7 @@ impl Item {
             from: from,
             to: to,
             body: String::new(),
-            data: AnyMap::new(),
+            extensions: AnyMap::new(),
             bind: bind,
         }
     }

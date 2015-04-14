@@ -67,7 +67,7 @@ fn main() {
                     load_template(item.reading().unwrap(), &mut registry);
                 }
 
-                bind.data().data.write().unwrap().insert(Arc::new(registry));
+                bind.data().extensions.write().unwrap().insert(Arc::new(registry));
 
                 Ok(())
             }));
@@ -84,8 +84,8 @@ fn main() {
         .link(handle::item::render_template("post", |item: &Item| -> Json {
             let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
-            if let Some(meta) = item.data.get::<Metadata>() {
-                if let Some(body) = item.data.get::<Buffer>() {
+            if let Some(meta) = item.extensions.get::<Metadata>() {
+                if let Some(body) = item.extensions.get::<Buffer>() {
                     bt.insert("body".to_string(), body.as_str().unwrap().to_json());
                 }
 
@@ -187,12 +187,12 @@ fn main() {
 
                     let mut items = vec![];
 
-                    let page = item.data.get::<Page>().unwrap();
+                    let page = item.extensions.get::<Page>().unwrap();
 
                     for post in &item.bind().dependencies["posts"].items[page.range.clone()] {
                         let mut itm: BTreeMap<String, Json> = BTreeMap::new();
 
-                        if let Some(meta) = post.data.get::<Metadata>() {
+                        if let Some(meta) = post.extensions.get::<Metadata>() {
                             if let Some(title) = meta.data.lookup("title") {
                                 itm.insert("title".to_string(), title.as_str().unwrap().to_json());
                             }

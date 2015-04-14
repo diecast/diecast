@@ -48,7 +48,7 @@ impl Handle<Bind> for Chain<Bind> {
 impl<T> Handle<Bind> for Injector<T>
 where T: Sync + Send + Clone + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        bind.data().data.write().unwrap().insert(self.payload.clone());
+        bind.data().extensions.write().unwrap().insert(self.payload.clone());
         Ok(())
     }
 }
@@ -184,7 +184,7 @@ pub fn next_prev(bind: &mut Bind) -> handle::Result {
             if idx == last_num { None }
             else { let num = idx + 1; Some(cloned[num].clone()) };
 
-        item.data.insert::<Adjacent>(Adjacent {
+        item.extensions.insert::<Adjacent>(Adjacent {
             previous: prev,
             next: next,
         });
@@ -279,7 +279,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                 };
 
             let page = bind.new_item(Route::Write((*target).clone()));
-            page.data.insert::<Page>(page_struct);
+            page.extensions.insert::<Page>(page_struct);
         }
 
         Ok(())
@@ -381,7 +381,7 @@ pub fn tags(bind: &mut Bind) -> handle::Result {
 
     for item in &bind.items {
         let toml =
-            item.data.get::<super::item::Metadata>()
+            item.extensions.get::<super::item::Metadata>()
             .and_then(|m| {
                 m.data.lookup("tags")
             })
@@ -398,7 +398,7 @@ pub fn tags(bind: &mut Bind) -> handle::Result {
         }
     }
 
-    bind.data().data.write().unwrap().insert::<Tags>(Tags { map: tag_map });
+    bind.data().extensions.write().unwrap().insert::<Tags>(Tags { map: tag_map });
 
     Ok(())
 }
