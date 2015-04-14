@@ -28,11 +28,13 @@ where T: Sync + Send + Clone + 'static {
     Injector::new(payload)
 }
 
-pub struct Injector<T> where T: Sync + Send + Clone + 'static {
+pub struct Injector<T>
+where T: Sync + Send + Clone + 'static {
     payload: T,
 }
 
-impl<T> Injector<T> where T: Sync + Send + Clone + 'static {
+impl<T> Injector<T>
+where T: Sync + Send + Clone + 'static {
     pub fn new(data: T) -> Injector<T> {
         Injector {
             payload: data,

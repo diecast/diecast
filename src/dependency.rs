@@ -18,7 +18,8 @@ use std::borrow::Borrow;
 ///
 /// This graph tracks items and is able to produce an ordering
 /// of the items that respects dependency constraints.
-pub struct Graph<T> where T: Ord + Clone + Hash {
+pub struct Graph<T>
+where T: Ord + Clone + Hash {
     /// Edges in the graph; implicitly stores nodes.
     ///
     /// There's a key for every node in the graph, even if
@@ -37,7 +38,8 @@ pub struct Graph<T> where T: Ord + Clone + Hash {
     reverse: BTreeMap<T, BTreeSet<T>>,
 }
 
-impl<T> Graph<T> where T: Ord + Clone + Hash {
+impl<T> Graph<T>
+where T: Ord + Clone + Hash {
     pub fn new() -> Graph<T> {
         Graph {
             edges: BTreeMap::new(),
@@ -120,7 +122,8 @@ pub type Cycle<T> = VecDeque<T>;
 /// Performs a topological sorting of the provided graph
 /// via a depth-first search. This ordering is such that
 /// every node comes before the node(s) that depends on it.
-struct Topological<'a, T: 'a> where T: Ord + Clone + Hash {
+struct Topological<'a, T: 'a>
+where T: Ord + Clone + Hash {
     /// The graph to traverse.
     graph: &'a Graph<T>,
 
@@ -134,7 +137,8 @@ struct Topological<'a, T: 'a> where T: Ord + Clone + Hash {
     edge_to: BTreeMap<T, T>,
 }
 
-impl<'a, T: 'a> Topological<'a, T> where T: Ord + Clone + Hash {
+impl<'a, T: 'a> Topological<'a, T>
+where T: Ord + Clone + Hash {
     /// Construct the initial algorithm state.
     fn new(graph: &'a Graph<T>) -> Topological<'a, T> {
         Topological {

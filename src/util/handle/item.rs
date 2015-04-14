@@ -20,7 +20,8 @@ impl Handle<Item> for Chain<Item> {
     }
 }
 
-impl<T> Handle<Item> for Injector<T> where T: Sync + Send + Clone + 'static {
+impl<T> Handle<Item> for Injector<T>
+where T: Sync + Send + Clone + 'static {
     fn handle(&self, item: &mut Item) -> handle::Result {
         item.data.insert(self.payload.clone());
         Ok(())

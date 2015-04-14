@@ -8,7 +8,8 @@ use binding::Bind;
 use super::evaluator::Evaluator;
 use super::Job;
 
-pub struct Manager<E> where E: Evaluator {
+pub struct Manager<E>
+where E: Evaluator {
     graph: Graph<String>,
 
     /// the dependency count of each binding
@@ -34,7 +35,8 @@ pub struct Manager<E> where E: Evaluator {
 /// later:
 ///   manager.update_path(path);
 
-impl<E> Manager<E> where E: Evaluator {
+impl<E> Manager<E>
+where E: Evaluator {
     pub fn new(evaluator: E) -> Manager<E> {
         Manager {
             graph: Graph::new(),

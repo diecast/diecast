@@ -29,7 +29,8 @@ pub trait Pattern {
     fn matches(&self, &Path) -> bool;
 }
 
-impl<P> Pattern for Box<P> where P: Pattern {
+impl<P> Pattern for Box<P>
+where P: Pattern {
     fn matches(&self, path: &Path) -> bool {
         (**self).matches(path)
     }

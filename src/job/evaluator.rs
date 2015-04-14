@@ -9,12 +9,14 @@ pub trait Evaluator {
     fn dequeue(&mut self) -> Option<Job>;
 }
 
-struct Canary<T> where T: Send {
+struct Canary<T>
+where T: Send {
     tx: Sender<Option<T>>,
     active: bool
 }
 
-impl<T> Canary<T> where T: Send {
+impl<T> Canary<T>
+where T: Send {
     fn new(tx: Sender<Option<T>>) -> Canary<T> {
         Canary {
             tx: tx,
@@ -27,7 +29,8 @@ impl<T> Canary<T> where T: Send {
     }
 }
 
-impl<T> Drop for Canary<T> where T: Send {
+impl<T> Drop for Canary<T>
+where T: Send {
     fn drop(&mut self) {
         if self.active {
             self.tx.send(None).unwrap();
@@ -35,14 +38,16 @@ impl<T> Drop for Canary<T> where T: Send {
     }
 }
 
-pub struct Pool<T> where T: Send {
+pub struct Pool<T>
+where T: Send {
     result_tx: Sender<Option<T>>,
     result_rx: Receiver<Option<T>>,
 
     pool: ThreadPool,
 }
 
-impl<T> Pool<T> where T: Send {
+impl<T> Pool<T>
+where T: Send {
     pub fn new(threads: usize) -> Pool<T> {
         assert!(threads >= 1);
         trace!("using {} threads", threads);

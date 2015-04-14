@@ -15,7 +15,8 @@ pub trait Command {
     fn run(&mut self);
 }
 
-impl<C: ?Sized> Command for Box<C> where C: Command {
+impl<C: ?Sized> Command for Box<C>
+where C: Command {
     fn run(&mut self) {
         (**self).run();
     }
