@@ -40,7 +40,7 @@ pub fn copy(item: &mut Item) -> handle::Result {
                 let _ = fs::create_dir_all(parent);
             }
 
-            try!(fs::copy(&from, &to));
+            try!(fs::copy(from, to));
         }
     }
 
