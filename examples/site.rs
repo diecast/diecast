@@ -58,7 +58,7 @@ fn main() {
         Rule::new("templates")
         .handler(
             Chain::new()
-            .link(handle::binding::select(Glob::new("templates/*.html").unwrap()))
+            .link(handle::binding::select("templates/*.html".parse::<Glob>().unwrap()))
             .link(handle::binding::each(handle::item::read))
             .link(|bind: &mut Bind| -> diecast::Result {
                 let mut registry = Handlebars::new();
@@ -151,14 +151,14 @@ fn main() {
         Rule::new("scss")
         .handler(
             Chain::new()
-            .link(handle::binding::select(Glob::new("scss/**/*.scss").unwrap()))
+            .link(handle::binding::select("scss/**/*.scss".parse::<Glob>().unwrap()))
             .link(compile_scss));
 
     let posts =
         Rule::new("posts")
         .handler(
             Chain::new()
-            .link(handle::binding::select(Glob::new("posts/*.markdown").unwrap()))
+            .link(handle::binding::select("posts/*.markdown".parse::<Glob>().unwrap()))
             .link(posts_handler)
             .link(handle::binding::retain(handle::item::publishable))
             .link(handle::binding::tags)
