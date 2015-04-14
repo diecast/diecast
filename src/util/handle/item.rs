@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::path::PathBuf;
+use std::ops::Range;
 
 use regex::Regex;
 use rustc_serialize::json::Json;
@@ -197,3 +199,19 @@ pub fn is_draft(item: &Item) -> bool {
 pub fn publishable(item: &Item) -> bool {
     !(is_draft(item) && !item.bind().configuration.is_preview)
 }
+
+#[derive(Clone)]
+pub struct Page {
+    pub first: (usize, Arc<PathBuf>),
+    pub next: Option<(usize, Arc<PathBuf>)>,
+    pub curr: (usize, Arc<PathBuf>),
+    pub prev: Option<(usize, Arc<PathBuf>)>,
+    pub last: (usize, Arc<PathBuf>),
+
+    pub range: Range<usize>,
+
+    pub page_count: usize,
+    pub post_count: usize,
+    pub posts_per_page: usize,
+}
+

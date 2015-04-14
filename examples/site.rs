@@ -33,9 +33,7 @@ use diecast::{
 
 use diecast::command;
 use diecast::util::route;
-use diecast::util::handle::{self, Chain};
-use diecast::util::handle::binding::{Page, Pooled};
-use diecast::util::handle::item::Metadata;
+use diecast::util::handle::{Chain, binding, item};
 
 fn main() {
     env_logger::init().unwrap();
@@ -58,8 +56,8 @@ fn main() {
         Rule::new("templates")
         .handler(
             Chain::new()
-            .link(handle::binding::select("templates/*.html".parse::<Glob>().unwrap()))
-            .link(handle::binding::each(handle::item::read))
+            .link(binding::select("templates/*.html".parse::<Glob>().unwrap()))
+            .link(binding::each(item::read))
             .link(|bind: &mut Bind| -> diecast::Result {
                 let mut registry = Handlebars::new();
 
@@ -73,18 +71,18 @@ fn main() {
             }));
 
     let posts_handler =
-        Pooled::new(Chain::new()
-        .link(handle::item::read)
-        .link(handle::item::parse_metadata));
+        binding::parallel_each(Chain::new()
+        .link(item::read)
+        .link(item::parse_metadata));
 
     let posts_handler_post =
-        Pooled::new(Chain::new()
-        .link(handle::item::render_markdown)
+        binding::parallel_each(Chain::new()
+        .link(item::render_markdown)
         .link(route::pretty)
-        .link(handle::item::render_template("post", |item: &Item| -> Json {
+        .link(item::render_template("post", |item: &Item| -> Json {
             let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
-            if let Some(meta) = item.extensions.get::<Metadata>() {
+            if let Some(meta) = item.extensions.get::<item::Metadata>() {
                 if let Some(body) = item.extensions.get::<Buffer>() {
                     bt.insert("body".to_string(), body.as_str().unwrap().to_json());
                 }
@@ -100,20 +98,20 @@ fn main() {
 
             Json::Object(bt)
         }))
-        .link(handle::item::render_template("layout", |item: &Item| -> Json {
+        .link(item::render_template("layout", |item: &Item| -> Json {
             let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
             bt.insert("body".to_string(), item.body.to_json());
 
             Json::Object(bt)
         }))
-        .link(handle::item::write));
+        .link(item::write));
 
     let statics =
         Rule::new("statics")
         .handler(
             Chain::new()
-            .link(handle::binding::select(or!(
+            .link(binding::select(or!(
                 "images/**/*".parse::<Glob>().unwrap(),
                 "static/**/*".parse::<Glob>().unwrap(),
                 "js/**/*".parse::<Glob>().unwrap(),
@@ -121,10 +119,10 @@ fn main() {
                 "CNAME"
             )))
             .link(
-                handle::binding::each(
+                binding::each(
                     Chain::new()
                     .link(route::identity)
-                    .link(handle::item::copy))));
+                    .link(item::copy))));
 
     fn compile_scss(bind: &mut Bind) -> diecast::Result {
         use std::fs;
@@ -151,7 +149,7 @@ fn main() {
         Rule::new("scss")
         .handler(
             Chain::new()
-            .link(handle::binding::select("scss/**/*.scss".parse::<Glob>().unwrap()))
+            .link(binding::select("scss/**/*.scss".parse::<Glob>().unwrap()))
             .link(compile_scss));
 
     let posts =
@@ -159,12 +157,12 @@ fn main() {
         .depends_on(&templates)
         .handler(
             Chain::new()
-            .link(handle::binding::select("posts/*.markdown".parse::<Glob>().unwrap()))
+            .link(binding::select("posts/*.markdown".parse::<Glob>().unwrap()))
             .link(posts_handler)
-            .link(handle::binding::retain(handle::item::publishable))
-            .link(handle::binding::tags)
+            .link(binding::retain(item::publishable))
+            .link(binding::tags)
             .link(posts_handler_post)
-            .link(handle::binding::next_prev));
+            .link(binding::next_prev));
 
     // this feels awkward
     let index =
@@ -173,7 +171,7 @@ fn main() {
         .depends_on(&templates)
         .handler(
             Chain::new()
-            .link(handle::binding::paginate("posts", 5, |page: usize| -> PathBuf {
+            .link(binding::paginate("posts", 5, |page: usize| -> PathBuf {
                 if page == 0 {
                     PathBuf::from("index.html")
                 } else {
@@ -181,20 +179,20 @@ fn main() {
                 }
             }))
             .link(
-                Pooled::new(Chain::new()
+                binding::parallel_each(Chain::new()
                 // TODO: render_template needs a param to determine
                 // where the templates reside
-                .link(handle::item::render_template("index", |item: &Item| -> Json {
+                .link(item::render_template("index", |item: &Item| -> Json {
                     let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
                     let mut items = vec![];
 
-                    let page = item.extensions.get::<Page>().unwrap();
+                    let page = item.extensions.get::<item::Page>().unwrap();
 
                     for post in &item.bind().dependencies["posts"].items[page.range.clone()] {
                         let mut itm: BTreeMap<String, Json> = BTreeMap::new();
 
-                        if let Some(meta) = post.extensions.get::<Metadata>() {
+                        if let Some(meta) = post.extensions.get::<item::Metadata>() {
                             if let Some(title) = meta.data.lookup("title") {
                                 itm.insert("title".to_string(), title.as_str().unwrap().to_json());
                             }
@@ -219,14 +217,14 @@ fn main() {
 
                     Json::Object(bt)
                 }))
-                .link(handle::item::render_template("layout", |item: &Item| -> Json {
+                .link(item::render_template("layout", |item: &Item| -> Json {
                     let mut bt: BTreeMap<String, Json> = BTreeMap::new();
 
                     bt.insert("body".to_string(), item.body.to_json());
 
                     Json::Object(bt)
                 }))
-                .link(handle::item::write))));
+                .link(item::write))));
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")

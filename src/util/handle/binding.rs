@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
-use std::ops::Range;
 use std::collections::HashMap;
 use std::fs;
 
@@ -11,6 +10,7 @@ use handle::{self, Handle, Result};
 use pattern::Pattern;
 
 use super::{Chain, Injector};
+use super::item;
 
 pub fn each<H>(handler: H) -> Each<H>
 where H: Handle<Item> {
@@ -53,29 +53,30 @@ where T: Sync + Send + Clone + 'static {
     }
 }
 
+pub fn parallel_each<H>(handler: H) -> ParallelEach<H>
+where H: Handle<Item> + Sync + Send + 'static {
+    ParallelEach {
+        chunk: 1,
+        handler: Arc::new(handler),
+    }
+}
+
 // TODO: should the chunk be in configuration or a parameter?
-pub struct Pooled<H>
+pub struct ParallelEach<H>
 where H: Handle<Item> + Sync + Send + 'static {
     chunk: usize,
     handler: Arc<H>,
 }
 
-impl<H> Pooled<H>
+impl<H> ParallelEach<H>
 where H: Handle<Item> + Sync + Send + 'static {
-    pub fn new(handler: H) -> Pooled<H> {
-        Pooled {
-            chunk: 1,
-            handler: Arc::new(handler),
-        }
-    }
-
-    pub fn chunk(mut self, size: usize) -> Pooled<H> {
+    pub fn chunk(mut self, size: usize) -> ParallelEach<H> {
         self.chunk = size;
         self
     }
 }
 
-impl<H> Handle<Bind> for Pooled<H>
+impl<H> Handle<Bind> for ParallelEach<H>
 where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
         let pool: Pool<Vec<Item>> = Pool::new(bind.data().configuration.threads);
@@ -193,21 +194,6 @@ pub fn next_prev(bind: &mut Bind) -> handle::Result {
     Ok(())
 }
 
-#[derive(Clone)]
-pub struct Page {
-    pub first: (usize, Arc<PathBuf>),
-    pub next: Option<(usize, Arc<PathBuf>)>,
-    pub curr: (usize, Arc<PathBuf>),
-    pub prev: Option<(usize, Arc<PathBuf>)>,
-    pub last: (usize, Arc<PathBuf>),
-
-    pub range: Range<usize>,
-
-    pub page_count: usize,
-    pub post_count: usize,
-    pub posts_per_page: usize,
-}
-
 pub struct Paginate<R>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     target: String,
@@ -262,7 +248,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
             let curr = (current, target.clone());
 
             let page_struct =
-                Page {
+                item::Page {
                     first: first,
 
                     prev: prev,
@@ -279,7 +265,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                 };
 
             let page = bind.new_item(Route::Write((*target).clone()));
-            page.extensions.insert::<Page>(page_struct);
+            page.extensions.insert::<item::Page>(page_struct);
         }
 
         Ok(())
