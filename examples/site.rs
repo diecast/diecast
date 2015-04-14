@@ -156,6 +156,7 @@ fn main() {
 
     let posts =
         Rule::new("posts")
+        .depends_on(&templates)
         .handler(
             Chain::new()
             .link(handle::binding::select("posts/*.markdown".parse::<Glob>().unwrap()))
@@ -163,12 +164,13 @@ fn main() {
             .link(handle::binding::retain(handle::item::publishable))
             .link(handle::binding::tags)
             .link(posts_handler_post)
-            .link(handle::binding::next_prev))
-        .depends_on(&templates);
+            .link(handle::binding::next_prev));
 
     // this feels awkward
     let index =
         Rule::new("post index")
+        .depends_on(&posts)
+        .depends_on(&templates)
         .handler(
             Chain::new()
             .link(handle::binding::paginate("posts", 5, |page: usize| -> PathBuf {
@@ -224,9 +226,7 @@ fn main() {
 
                     Json::Object(bt)
                 }))
-                .link(handle::item::write))))
-        .depends_on(&posts)
-        .depends_on(&templates);
+                .link(handle::item::write))));
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
