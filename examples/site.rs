@@ -114,9 +114,9 @@ fn main() {
         .handler(
             Chain::new()
             .link(handle::binding::select(or!(
-                Glob::new("images/**/*").unwrap(),
-                Glob::new("static/**/*").unwrap(),
-                Glob::new("js/**/*").unwrap(),
+                "images/**/*".parse::<Glob>().unwrap(),
+                "static/**/*".parse::<Glob>().unwrap(),
+                "js/**/*".parse::<Glob>().unwrap(),
                 "favicon.png",
                 "CNAME"
             )))
