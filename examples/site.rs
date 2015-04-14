@@ -228,7 +228,7 @@ fn main() {
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
-        .ignore(Regex::new(r"^\.|^#|~$|\.swp$|4913").unwrap());
+        .ignore(r"^\.|^#|~$|\.swp$|4913".parse::<Regex>().unwrap());
 
     if let Some(i) = config.toml().lookup("age").and_then(toml::Value::as_integer) {
         println!("age: {}", i);
