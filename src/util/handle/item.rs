@@ -32,10 +32,6 @@ pub fn copy(item: &mut Item) -> handle::Result {
 
     if let Some(from) = item.reading() {
         if let Some(to) = item.writing() {
-            // TODO: this is very error-prone for the user since
-            // they have to remember to join the path, and they have
-            // to remember which path to join
-
             // TODO: once path normalization is in, make sure
             // writing to output folder
 
