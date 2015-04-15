@@ -3,21 +3,10 @@
 use anymap::AnyMap;
 use std::io::Write;
 use std::fmt::{self, Debug};
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
 
-use binding::{self, Bind};
-
-// TODO:
-// pinning down the type like this has the effect of also
-// pinning down the evaluation implementation no? this contains Arcs,
-// for example, which would nto be necessary in a single threaded evaluator?
-// perhaps the alternative is an associated type on a trait
-// or perhaps Arcs are fine anyways?
-// TODO
-// I think this should be its own type
-pub type Dependencies = Arc<BTreeMap<String, Arc<Bind>>>;
+use binding;
 
 #[derive(Clone)]
 pub enum Route {
@@ -27,10 +16,24 @@ pub enum Route {
 }
 
 impl Route {
+    pub fn is_reading(&self) -> bool {
+        match *self {
+            Route::Write(_) => false,
+            Route::Read(_) | Route::ReadWrite(..) => true,
+        }
+    }
+
     pub fn reading(&self) -> Option<&Path> {
         match *self {
             Route::Write(_) => None,
             Route::Read(ref path) | Route::ReadWrite(ref path, _) => Some(path),
+        }
+    }
+
+    pub fn is_writing(&self) -> bool {
+        match *self {
+            Route::Read(_) => false,
+            Route::Write(_) | Route::ReadWrite(..) => true,
         }
     }
 
@@ -41,34 +44,37 @@ impl Route {
         }
     }
 
-    // routing:
-    //
-    // reading routes to readwrite
-    // writing routes to new write
-    // readwrite routes to new write
-    pub fn route_to<R>(self, router: R) -> Route
+    pub fn route_with<R>(&mut self, router: R)
     where R: Fn(&Path) -> PathBuf {
-        match self {
+        use std::mem;
+
+        let current = mem::replace(self, Route::Read(PathBuf::new()));
+
+        *self = match current {
+            // a Read turns into a ReadWrite with the result
+            // of the router
             Route::Read(from) => {
                 let target = router(&from);
                 Route::ReadWrite(from, target)
             },
-            Route::Write(to) => Route::Write(router(&to)),
+            // a Write isn't be routed
+            Route::Write(_) => current,
+            // a ReadWrite simply re-routes the source path
             Route::ReadWrite(from, _) => {
                 let target = router(&from);
                 Route::ReadWrite(from, target)
             },
-        }
+        };
     }
 }
 
 impl Debug for Route {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Route::Read(ref path) => try!(write!(f, "Reading {}", path.display())),
-            Route::Write(ref path) => try!(write!(f, "Writing {}", path.display())),
+            Route::Read(ref path) => try!(write!(f, "R {}", path.display())),
+            Route::Write(ref path) => try!(write!(f, "W {}", path.display())),
             Route::ReadWrite(ref from, ref to) => {
-                try!(write!(f, "Reading {}, Writing {}", from.display(), to.display()))
+                try!(write!(f, "R {} → W {}", from.display(), to.display()))
             },
         }
 
@@ -83,16 +89,15 @@ impl Debug for Route {
 ///
 /// It includes a body field which represents the read or to-be-written data.
 ///
-/// It also includes an [`AnyMap`](http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html) which is used to represent miscellaneous data.
+/// It also includes an [`AnyMap`] which is used to represent miscellaneous data.
+///
+/// [`AnyMap`]: http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html
 
 #[derive(Clone)]
 pub struct Item {
     bind: Arc<binding::Data>,
 
-    route: Route,
-
-    from: Option<PathBuf>,
-    to: Option<PathBuf>,
+    pub route: Route,
 
     /// The Item's body which will fill the target file.
     pub body: String,
@@ -101,85 +106,33 @@ pub struct Item {
     pub extensions: AnyMap,
 }
 
-// TODO: Item::from and Item::to
 impl Item {
     pub fn new(route: Route, bind: Arc<binding::Data>) -> Item {
         use std::fs::PathExt;
 
-        if let Route::Read(ref from) = route {
-            assert!(bind.configuration.input.join(&from).is_file())
+        if let Some(path) = route.reading() {
+            assert!(bind.configuration.output.join(path).is_file())
         }
-
-        let from = route.reading().map(|path| bind.configuration.input.join(&path));
-        let to = route.writing().map(|path| bind.configuration.output.join(&path));
 
         // ensure that the source is a file
         Item {
             route: route,
-            from: from,
-            to: to,
             body: String::new(),
             extensions: AnyMap::new(),
             bind: bind,
         }
     }
 
-    pub fn from(path: PathBuf, bind: Arc<binding::Data>) -> Item {
-        Item::new(Route::Read(path), bind)
+    pub fn source(&self) -> Option<PathBuf> {
+        self.route.reading().map(|from| {
+            self.bind.configuration.input.join(from)
+        })
     }
 
-    pub fn to(path: PathBuf, bind: Arc<binding::Data>) -> Item {
-        Item::new(Route::Write(path), bind)
-    }
-
-    fn update_paths(&mut self) {
-        self.from = self.route.reading().map(|path| {
-            self.bind.configuration.input.join(&path)
-        });
-
-        self.to = self.route.writing().map(|path| {
-            self.bind.configuration.output.join(&path)
-        });
-    }
-
-    pub fn route<R>(&mut self, router: R)
-    where R: Fn(&Path) -> PathBuf {
-        self.route =
-            ::std::mem::replace(
-                &mut self.route,
-                Route::Read(PathBuf::new()))
-            .route_to(router);
-
-        self.update_paths();
-    }
-
-    pub fn relative_reading(&self) -> Option<&Path> {
-        self.route.reading()
-    }
-
-    pub fn relative_writing(&self) -> Option<&Path> {
-        self.route.writing()
-    }
-
-    // TODO:
-    // this is a preliminary solution
-    // we preferably don't want to keep performing this computation
-    // instead it should only done when the route changes and then
-    // it should be saved somewhere
-    pub fn reading(&self) -> Option<&Path> {
-        if let Some(ref from) = self.from {
-            Some(from)
-        } else {
-            None
-        }
-    }
-
-    pub fn writing(&self) -> Option<&Path> {
-        if let Some(ref to) = self.to {
-            Some(to)
-        } else {
-            None
-        }
+    pub fn target(&self) -> Option<PathBuf> {
+        self.route.writing().map(|from| {
+            self.bind.configuration.input.join(from)
+        })
     }
 
     pub fn bind(&self) -> &binding::Data {

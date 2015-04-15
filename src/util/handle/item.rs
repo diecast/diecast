@@ -33,8 +33,8 @@ where T: Sync + Send + Clone + 'static {
 pub fn copy(item: &mut Item) -> handle::Result {
     use std::fs;
 
-    if let Some(from) = item.reading() {
-        if let Some(to) = item.writing() {
+    if let Some(from) = item.route.reading() {
+        if let Some(to) = item.route.writing() {
             // TODO: once path normalization is in, make sure
             // writing to output folder
 
@@ -55,17 +55,17 @@ pub fn read(item: &mut Item) -> handle::Result {
     use std::fs::File;
     use std::io::Read;
 
-    let mut buf = String::new();
+    if let Some(from) = item.route.reading() {
+        let mut buf = String::new();
 
-    if let Some(from) = item.reading() {
         // TODO: use try!
         File::open(from)
             .unwrap()
             .read_to_string(&mut buf)
             .unwrap();
-    }
 
-    item.body = buf;
+        item.body = buf;
+    }
 
     Ok(())
 }
@@ -75,7 +75,7 @@ pub fn write(item: &mut Item) -> handle::Result {
     use std::fs::{self, File};
     use std::io::Write;
 
-    if let Some(to) = item.writing() {
+    if let Some(to) = item.route.writing() {
         // TODO: once path normalization is in, make sure
         // writing to output folder
 

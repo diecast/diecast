@@ -264,8 +264,9 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                     range: start .. end,
                 };
 
-            let page = bind.new_item(Route::Write((*target).clone()));
+            let mut page = bind.spawn(Route::Read((*target).clone()));
             page.extensions.insert::<item::Page>(page_struct);
+            bind.items.push(page);
         }
 
         Ok(())
@@ -321,7 +322,7 @@ where P: Pattern + Sync + Send + 'static {
             // TODO: JOIN STANDARDS
             // should insert path.clone()
             if self.pattern.matches(&relative) {
-                bind.new_item(Route::Read(relative));
+                bind.push(Route::Read(relative));
             }
         }
 
@@ -344,7 +345,7 @@ pub struct Create {
 
 impl Handle<Bind> for Create {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        bind.new_item(Route::Write(self.path.clone()));
+        bind.push(Route::Write(self.path.clone()));
 
         Ok(())
     }

@@ -62,10 +62,10 @@ fn main() {
                 let mut registry = Handlebars::new();
 
                 for item in &bind.items {
-                    load_template(item.reading().unwrap(), &mut registry);
+                    load_template(item.route.reading().unwrap(), &mut registry);
                 }
 
-                bind.data().extensions.write().unwrap().insert(Arc::new(registry));
+                bind.data().extensions.write().unwrap().insert::<Arc<Handlebars>>(Arc::new(registry));
 
                 Ok(())
             }));
@@ -80,7 +80,7 @@ fn main() {
         .link(item::render_markdown)
         .link(route::pretty)
         .link(item::render_template("post", |item: &Item| -> Json {
-            let mut bt: BTreeMap<String, Json> = BTreeMap::new();
+            let mut bt = BTreeMap::new();
 
             if let Some(meta) = item.extensions.get::<item::Metadata>() {
                 if let Some(body) = item.extensions.get::<Buffer>() {
@@ -91,7 +91,7 @@ fn main() {
                     bt.insert("title".to_string(), title.as_str().unwrap().to_json());
                 }
 
-                if let Some(path) = item.relative_writing() {
+                if let Some(path) = item.source() {
                     bt.insert("url".to_string(), path.to_str().unwrap().to_json());
                 }
             }
@@ -99,7 +99,7 @@ fn main() {
             Json::Object(bt)
         }))
         .link(item::render_template("layout", |item: &Item| -> Json {
-            let mut bt: BTreeMap<String, Json> = BTreeMap::new();
+            let mut bt = BTreeMap::new();
 
             bt.insert("body".to_string(), item.body.to_json());
 
@@ -183,21 +183,21 @@ fn main() {
                 // TODO: render_template needs a param to determine
                 // where the templates reside
                 .link(item::render_template("index", |item: &Item| -> Json {
-                    let mut bt: BTreeMap<String, Json> = BTreeMap::new();
+                    let mut bt = BTreeMap::new();
 
                     let mut items = vec![];
 
                     let page = item.extensions.get::<item::Page>().unwrap();
 
                     for post in &item.bind().dependencies["posts"].items[page.range.clone()] {
-                        let mut itm: BTreeMap<String, Json> = BTreeMap::new();
+                        let mut itm = BTreeMap::new();
 
                         if let Some(meta) = post.extensions.get::<item::Metadata>() {
                             if let Some(title) = meta.data.lookup("title") {
                                 itm.insert("title".to_string(), title.as_str().unwrap().to_json());
                             }
 
-                            if let Some(path) = post.relative_writing() {
+                            if let Some(path) = post.source() {
                                 itm.insert("url".to_string(), path.parent().unwrap().to_str().unwrap().to_json());
                             }
                         }
@@ -218,7 +218,7 @@ fn main() {
                     Json::Object(bt)
                 }))
                 .link(item::render_template("layout", |item: &Item| -> Json {
-                    let mut bt: BTreeMap<String, Json> = BTreeMap::new();
+                    let mut bt = BTreeMap::new();
 
                     bt.insert("body".to_string(), item.body.to_json());
 

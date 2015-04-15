@@ -38,7 +38,7 @@ pub use pattern::Pattern;
 pub use site::Site;
 pub use rule::Rule;
 pub use configuration::Configuration;
-pub use item::{Item, Dependencies};
+pub use item::Item;
 pub use binding::Bind;
 pub use handle::{Handle, Result};
 

@@ -2,8 +2,18 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use anymap::AnyMap;
 
-use item::{Item, Dependencies, Route};
+use item::{Item, Route};
 use configuration::Configuration;
+
+// TODO:
+// pinning down the type like this has the effect of also
+// pinning down the evaluation implementation no? this contains Arcs,
+// for example, which would nto be necessary in a single threaded evaluator?
+// perhaps the alternative is an associated type on a trait
+// or perhaps Arcs are fine anyways?
+// TODO
+// I think this should be its own type
+pub type Dependencies = Arc<BTreeMap<String, Arc<Bind>>>;
 
 // FIXME
 // problem is that an item handler can easily change
@@ -55,10 +65,15 @@ impl Bind {
         &self.data
     }
 
-    // TODO: this isn't thread-safe, does it matter?
-    pub fn new_item(&mut self, route: Route) -> &mut Item {
-        self.items.push(Item::new(route, self.data.clone()));
-        self.items.last_mut().unwrap()
+    /// Create and return an item associated with this binding
+    pub fn spawn(&mut self, route: Route) -> Item {
+        Item::new(route, self.data.clone())
+    }
+
+    /// Create and push an item associated with this binding
+    pub fn push(&mut self, route: Route) {
+        let item = self.spawn(route);
+        self.items.push(item);
     }
 }
 
