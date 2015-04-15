@@ -10,7 +10,7 @@ use toml;
 use handle::{self, Handle, Result};
 use item::Item;
 
-use super::{Chain, Injector};
+use super::{Chain, Extender};
 
 impl Handle<Item> for Chain<Item> {
     fn handle(&self, item: &mut Item) -> Result {
@@ -22,7 +22,7 @@ impl Handle<Item> for Chain<Item> {
     }
 }
 
-impl<T> Handle<Item> for Injector<T>
+impl<T> Handle<Item> for Extender<T>
 where T: Sync + Send + Clone + 'static {
     fn handle(&self, item: &mut Item) -> handle::Result {
         item.extensions.insert(self.payload.clone());

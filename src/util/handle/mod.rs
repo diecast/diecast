@@ -23,20 +23,20 @@ impl<T> Chain<T> {
     }
 }
 
-pub fn inject_data<T>(payload: T) -> Injector<T>
+pub fn extend<T>(payload: T) -> Extender<T>
 where T: Sync + Send + Clone + 'static {
-    Injector::new(payload)
+    Extender::new(payload)
 }
 
-pub struct Injector<T>
+pub struct Extender<T>
 where T: Sync + Send + Clone + 'static {
     payload: T,
 }
 
-impl<T> Injector<T>
+impl<T> Extender<T>
 where T: Sync + Send + Clone + 'static {
-    pub fn new(data: T) -> Injector<T> {
-        Injector {
+    pub fn new(data: T) -> Extender<T> {
+        Extender {
             payload: data,
         }
     }

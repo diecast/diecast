@@ -9,7 +9,7 @@ use binding::Bind;
 use handle::{self, Handle, Result};
 use pattern::Pattern;
 
-use super::{Chain, Injector};
+use super::{Chain, Extender};
 use super::item;
 
 pub fn each<H>(handler: H) -> Each<H>
@@ -45,7 +45,7 @@ impl Handle<Bind> for Chain<Bind> {
     }
 }
 
-impl<T> Handle<Bind> for Injector<T>
+impl<T> Handle<Bind> for Extender<T>
 where T: Sync + Send + Clone + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
         bind.data().extensions.write().unwrap().insert(self.payload.clone());
