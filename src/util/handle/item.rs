@@ -229,3 +229,50 @@ pub fn date(item: &mut Item) -> handle::Result {
     Ok(())
 }
 
+// TODO: might want to make this context-aware, idk
+pub fn abbreviate(item: &mut Item) -> handle::Result {
+    use std::collections::HashMap;
+    use regex::Captures;
+
+    trace!("abbreviating {:?}", item);
+
+    let pattern = Regex::new(r"(?m)^\*\[(?P<abbr>.+)\]: (?P<full>.+)$").unwrap();
+    let mut abbrs = HashMap::new();
+
+    // collect abbreviations
+    for capture in pattern.captures_iter(&item.body) {
+        let abbr = capture.name("abbr").unwrap().to_string();
+        let full = capture.name("full").unwrap().to_string();
+
+        assert!(!abbr.contains("|"), "abbreviations shouldn't contain the '|' character!");
+
+        abbrs.insert(abbr, full);
+    }
+
+    if abbrs.is_empty() {
+        return Ok(());
+    }
+
+    trace!("abbrs: {:?}", abbrs);
+
+    // remove abbreviation definitions
+    let clean = pattern.replace_all(&item.body, "");
+
+    // TODO: shouldn't have | in abbr
+    let joined: String = abbrs.keys().cloned().collect::<Vec<String>>().connect("|");
+    let matcher = Regex::new(&joined).unwrap();
+
+    // replace abbreviations with their full form
+    let replaced = matcher.replace_all(&clean, |caps: &Captures| -> String {
+        let abbr = caps.at(0).unwrap();
+        let full = abbrs.get(abbr).unwrap().clone();
+        trace!("replacing {:?} with {:?}", abbr, full);
+
+        format!(r#"<abbr title="{}">{}</abbr>"#, full, abbr)
+    });
+
+    item.body = replaced;
+
+    Ok(())
+}
+

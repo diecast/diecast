@@ -151,6 +151,7 @@ fn main() {
             .link(binding::retain(item::publishable))
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
+                .link(item::abbreviate)
                 .link(item::markdown(extensions, true))
                 .link(route::pretty)
                 .link(hbs::render_template(&templates, "post", post_template))
