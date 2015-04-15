@@ -264,7 +264,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                     range: start .. end,
                 };
 
-            let mut page = bind.spawn(Route::Read((*target).clone()));
+            let mut page = bind.spawn(Route::Write((*target).clone()));
             page.extensions.insert::<item::Page>(page_struct);
             bind.items.push(page);
         }
@@ -345,6 +345,7 @@ pub struct Create {
 
 impl Handle<Bind> for Create {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
+        println!("creating {:?}", self.path);
         bind.push(Route::Write(self.path.clone()));
 
         Ok(())

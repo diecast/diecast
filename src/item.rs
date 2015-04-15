@@ -111,7 +111,7 @@ impl Item {
         use std::fs::PathExt;
 
         if let Some(path) = route.reading() {
-            assert!(bind.configuration.output.join(path).is_file())
+            assert!(bind.configuration.input.join(path).is_file())
         }
 
         // ensure that the source is a file
@@ -130,8 +130,8 @@ impl Item {
     }
 
     pub fn target(&self) -> Option<PathBuf> {
-        self.route.writing().map(|from| {
-            self.bind.configuration.input.join(from)
+        self.route.writing().map(|to| {
+            self.bind.configuration.output.join(to)
         })
     }
 

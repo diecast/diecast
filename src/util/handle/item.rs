@@ -3,8 +3,6 @@ use std::path::PathBuf;
 use std::ops::Range;
 
 use regex::Regex;
-use rustc_serialize::json::Json;
-use handlebars::Handlebars;
 use toml;
 
 use handle::{self, Handle, Result};
@@ -33,8 +31,8 @@ where T: Sync + Send + Clone + 'static {
 pub fn copy(item: &mut Item) -> handle::Result {
     use std::fs;
 
-    if let Some(from) = item.route.reading() {
-        if let Some(to) = item.route.writing() {
+    if let Some(from) = item.source() {
+        if let Some(to) = item.target() {
             // TODO: once path normalization is in, make sure
             // writing to output folder
 
@@ -55,7 +53,7 @@ pub fn read(item: &mut Item) -> handle::Result {
     use std::fs::File;
     use std::io::Read;
 
-    if let Some(from) = item.route.reading() {
+    if let Some(from) = item.source() {
         let mut buf = String::new();
 
         // TODO: use try!
@@ -75,7 +73,7 @@ pub fn write(item: &mut Item) -> handle::Result {
     use std::fs::{self, File};
     use std::io::Write;
 
-    if let Some(to) = item.route.writing() {
+    if let Some(to) = item.target() {
         // TODO: once path normalization is in, make sure
         // writing to output folder
 
@@ -150,40 +148,6 @@ pub fn render_markdown(item: &mut Item) -> handle::Result {
     item.extensions.insert(buffer);
 
     Ok(())
-}
-
-pub struct RenderTemplate<H>
-where H: Fn(&Item) -> Json + Sync + Send + 'static {
-    name: &'static str,
-    handler: H,
-}
-
-impl<H> Handle<Item> for RenderTemplate<H>
-where H: Fn(&Item) -> Json + Sync + Send + 'static {
-    fn handle(&self, item: &mut Item) -> handle::Result {
-        item.body = {
-            let data =
-                item.bind().dependencies["templates"]
-                .data().extensions.read().unwrap();
-            let registry = data.get::<Arc<Handlebars>>().unwrap();
-
-            trace!("rendering template for {:?}", item);
-            let json = (self.handler)(item);
-
-            registry.render(self.name, &json).unwrap()
-        };
-
-        Ok(())
-    }
-}
-
-#[inline]
-pub fn render_template<H>(name: &'static str, handler: H) -> RenderTemplate<H>
-where H: Fn(&Item) -> Json + Sync + Send + 'static {
-    RenderTemplate {
-        name: name,
-        handler: handler,
-    }
 }
 
 pub fn is_draft(item: &Item) -> bool {

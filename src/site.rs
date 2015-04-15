@@ -72,8 +72,6 @@ impl Site {
     }
 
     pub fn register(&mut self, rule: Rule) {
-        println!("registering {}", rule.name());
-
         if !rule.dependencies().is_empty() {
             let names = self.rules.iter().map(|r| r.name().to_string()).collect();
             let diff: HashSet<_> = rule.dependencies().difference(&names).cloned().collect();
