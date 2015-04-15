@@ -24,6 +24,15 @@ where H: Handle<Item> {
     handler: H,
 }
 
+pub fn static_file<P>(pattern: P) -> Chain<Bind>
+where P: Pattern + Sync + Send + 'static {
+    Chain::new()
+    .link(select(pattern))
+    .link(each(Chain::new()
+        .link(::util::route::identity)
+        .link(item::copy)))
+}
+
 impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> {
     fn handle(&self, binding: &mut Bind) -> Result {

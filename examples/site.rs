@@ -13,7 +13,6 @@ extern crate time;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::convert::Into;
 use rustc_serialize::json::{Json, ToJson};
 
 use regex::Regex;
@@ -57,11 +56,9 @@ fn post_template(item: &Item) -> Json {
 }
 
 fn index_template(item: &Item) -> Json {
-    let mut bt = BTreeMap::new();
-
-    let mut items = vec![];
-
     let page = item.extensions.get::<item::Page>().unwrap();
+    let mut bt = BTreeMap::new();
+    let mut items = vec![];
 
     for post in &item.bind().dependencies["posts"].items[page.range.clone()] {
         let mut itm = BTreeMap::new();
@@ -105,66 +102,50 @@ fn main() {
 
     let templates =
         Rule::new("templates")
-        .handler(
-            Chain::new()
+        .handler(Chain::new()
             .link(binding::select("templates/*.html".parse::<Glob>().unwrap()))
             .link(binding::each(item::read))
             .link(hbs::register_templates));
 
-    let posts_handler =
-        binding::parallel_each(Chain::new()
-        .link(item::read)
-        .link(item::parse_metadata));
-
-    let posts_handler_post =
-        binding::parallel_each(Chain::new()
-        .link(item::render_markdown)
-        .link(route::pretty)
-        .link(hbs::render_template(&templates, "post", post_template))
-        .link(hbs::render_template(&templates, "layout", layout_template))
-        .link(item::write));
-
     let statics =
         Rule::new("statics")
-        .handler(
-            Chain::new()
-            .link(binding::select(or!(
-                "images/**/*".parse::<Glob>().unwrap(),
-                "static/**/*".parse::<Glob>().unwrap(),
-                "js/**/*".parse::<Glob>().unwrap(),
-                "favicon.png",
-                "CNAME"
-            )))
-            .link(binding::each(
-                Chain::new()
-                .link(route::identity)
-                .link(item::copy))));
+        .handler(binding::static_file(or!(
+            "images/**/*".parse::<Glob>().unwrap(),
+            "static/**/*".parse::<Glob>().unwrap(),
+            "js/**/*".parse::<Glob>().unwrap(),
+            "favicon.png",
+            "CNAME"
+        )));
 
     let scss =
         Rule::new("scss")
-        .handler(
-            Chain::new()
+        .handler(Chain::new()
             .link(binding::select("scss/**/*.scss".parse::<Glob>().unwrap()))
             .link(scss::scss("scss/screen.scss", "css/screen.css")));
 
     let posts =
         Rule::new("posts")
         .depends_on(&templates)
-        .handler(
-            Chain::new()
+        .handler(Chain::new()
             .link(binding::select("posts/*.markdown".parse::<Glob>().unwrap()))
-            .link(posts_handler)
+            .link(binding::parallel_each(Chain::new()
+                .link(item::read)
+                .link(item::parse_metadata)))
             .link(binding::retain(item::publishable))
             .link(binding::tags)
-            .link(posts_handler_post)
+            .link(binding::parallel_each(Chain::new()
+                .link(item::render_markdown)
+                .link(route::pretty)
+                .link(hbs::render_template(&templates, "post", post_template))
+                .link(hbs::render_template(&templates, "layout", layout_template))
+                .link(item::write)))
             .link(binding::next_prev));
 
     let index =
         Rule::new("post index")
         .depends_on(&posts)
         .depends_on(&templates)
-        .handler(
-            Chain::new()
+        .handler(Chain::new()
             .link(binding::paginate(&posts, 5, |page: usize| -> PathBuf {
                 if page == 0 {
                     PathBuf::from("index.html")
