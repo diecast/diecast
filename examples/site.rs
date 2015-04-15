@@ -39,9 +39,7 @@ fn post_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
 
     if let Some(meta) = item.extensions.get::<item::Metadata>() {
-        if let Some(body) = item.extensions.get::<Buffer>() {
-            bt.insert("body".to_string(), body.as_str().unwrap().to_json());
-        }
+        bt.insert("body".to_string(), item.body.to_json());
 
         if let Some(title) = meta.data.lookup("title") {
             bt.insert("title".to_string(), title.as_str().unwrap().to_json());
@@ -123,6 +121,9 @@ fn main() {
             .link(binding::select("scss/**/*.scss".parse::<Glob>().unwrap()))
             .link(scss::scss("scss/screen.scss", "css/screen.css")));
 
+    // let pages = _;
+    // let notes = _;
+
     let posts =
         Rule::new("posts")
         .depends_on(&templates)
@@ -134,7 +135,7 @@ fn main() {
             .link(binding::retain(item::publishable))
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
-                .link(item::render_markdown)
+                .link(item::markdown(extensions, true))
                 .link(route::pretty)
                 .link(hbs::render_template(&templates, "post", post_template))
                 .link(hbs::render_template(&templates, "layout", layout_template))

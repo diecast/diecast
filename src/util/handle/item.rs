@@ -4,6 +4,8 @@ use std::ops::Range;
 
 use regex::Regex;
 use toml;
+use hoedown;
+use hoedown::renderer::html;
 
 use handle::{self, Handle, Result};
 use item::Item;
@@ -138,16 +140,38 @@ pub fn parse_metadata(item: &mut Item) -> handle::Result {
     Ok(())
 }
 
-pub fn render_markdown(item: &mut Item) -> handle::Result {
-    use hoedown::Markdown;
-    use hoedown::renderer::html;
+pub fn markdown(extensions: hoedown::Extension, use_smartypants: bool) -> Markdown {
+    Markdown {
+        extensions: extensions,
+        use_smartypants: use_smartypants,
+    }
+}
 
-    let document = Markdown::new(item.body.as_bytes());
-    let renderer = html::Html::new(html::Flags::empty(), 0);
-    let buffer = document.render_to_buffer(renderer);
-    item.extensions.insert(buffer);
+pub struct Markdown {
+    extensions: hoedown::Extension,
+    use_smartypants: bool,
+}
 
-    Ok(())
+impl Handle<Item> for Markdown {
+    fn handle(&self, item: &mut Item) -> handle::Result {
+        let document =
+            hoedown::Markdown::new(item.body.as_bytes())
+            .with_extensions(self.extensions.clone());
+
+        let renderer = html::Html::new(html::Flags::empty(), 0);
+        let mut buffer = document.render_to_buffer(renderer);
+
+        if self.use_smartypants {
+            let mut smartypants = hoedown::buffer::Buffer::new(64);
+            html::smartypants(&mut smartypants, &mut buffer);
+
+            item.body = smartypants.as_str().unwrap().to_string();
+        } else {
+            item.body = buffer.as_str().unwrap().to_string();
+        }
+
+        Ok(())
+    }
 }
 
 pub fn is_draft(item: &Item) -> bool {
