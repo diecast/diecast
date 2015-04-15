@@ -10,6 +10,7 @@ extern crate handlebars;
 extern crate toml;
 extern crate rustc_serialize;
 extern crate time;
+extern crate chrono;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -124,6 +125,20 @@ fn main() {
     // let pages = _;
     // let notes = _;
 
+    let extensions = {
+        use hoedown::*;
+
+        AUTOLINK |
+        FENCED_CODE |
+        FOOTNOTES |
+        MATH |
+        MATH_EXPLICIT |
+        SPACE_HEADERS |
+        STRIKETHROUGH |
+        SUPERSCRIPT |
+        TABLES
+    };
+
     let posts =
         Rule::new("posts")
         .depends_on(&templates)
@@ -131,7 +146,8 @@ fn main() {
             .link(binding::select("posts/*.markdown".parse::<Glob>().unwrap()))
             .link(binding::parallel_each(Chain::new()
                 .link(item::read)
-                .link(item::parse_metadata)))
+                .link(item::parse_metadata)
+                .link(item::date)))
             .link(binding::retain(item::publishable))
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
@@ -140,7 +156,10 @@ fn main() {
                 .link(hbs::render_template(&templates, "post", post_template))
                 .link(hbs::render_template(&templates, "layout", layout_template))
                 .link(item::write)))
-            .link(binding::next_prev));
+            .link(binding::next_prev)
+            // .link(binding::sort_by(|a, b| a.body.cmp(&b.body))));
+            // TODO: audit
+            .link(binding::sort_by_extension::<chrono::NaiveDate, _>(|a, b| b.cmp(a))));
 
     let index =
         Rule::new("post index")

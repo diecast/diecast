@@ -3,6 +3,8 @@ use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use std::fs;
 
+use chrono;
+
 use job::evaluator::Pool;
 use item::{Item, Route};
 use binding::Bind;
@@ -399,3 +401,77 @@ pub fn tags(bind: &mut Bind) -> handle::Result {
 
     Ok(())
 }
+
+pub fn sort_by_date(bind: &mut Bind) -> handle::Result {
+    bind.items.sort_by(|a, b| -> ::std::cmp::Ordering {
+        let a = a.extensions.get::<chrono::NaiveDate>().unwrap();
+        let b = b.extensions.get::<chrono::NaiveDate>().unwrap();
+        b.cmp(a)
+    });
+
+    println!("sorted: {:?}", bind.items);
+
+    Ok(())
+}
+
+pub struct SortBy<F>
+where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
+      F: Sync + Send + 'static {
+    compare: F,
+}
+
+pub fn sort_by<F>(compare: F) -> SortBy<F>
+where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
+      F: Sync + Send + 'static {
+    SortBy {
+        compare: compare,
+    }
+}
+
+impl<F> Handle<Bind> for SortBy<F>
+where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
+      F: Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
+        bind.items.sort_by(|a, b| -> ::std::cmp::Ordering {
+            (self.compare)(a, b)
+        });
+
+        println!("sorted: {:?}", bind.items);
+
+        Ok(())
+    }
+}
+
+pub struct SortByExtension<T, F>
+where T: ::std::any::Any + Ord + Clone + Sync + Send + 'static,
+      F: Fn(&T, &T) -> ::std::cmp::Ordering,
+      F: Sync + Send + 'static {
+    compare: F,
+    _phantom: ::std::marker::PhantomData<T>,
+}
+
+pub fn sort_by_extension<T, F>(compare: F) -> SortByExtension<T, F>
+where T: ::std::any::Any + Ord + Clone + Sync + Send + 'static,
+      F: Fn(&T, &T) -> ::std::cmp::Ordering,
+      F: Sync + Send + 'static {
+    SortByExtension {
+        compare: compare,
+        _phantom: ::std::marker::PhantomData,
+    }
+}
+
+impl<T, F> Handle<Bind> for SortByExtension<T, F>
+where T: ::std::any::Any + Ord + Clone + Sync + Send + 'static,
+      F: Fn(&T, &T) -> ::std::cmp::Ordering,
+      F: Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
+        bind.items.sort_by(|a, b| -> ::std::cmp::Ordering {
+            (self.compare)(a.extensions.get::<T>().unwrap(), b.extensions.get::<T>().unwrap())
+        });
+
+        println!("sorted: {:?}", bind.items);
+
+        Ok(())
+    }
+}
+

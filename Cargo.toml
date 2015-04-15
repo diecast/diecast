@@ -33,6 +33,7 @@ num_cpus = "*"
 iron = "*"
 # static = "*"
 mount = "*"
+chrono = "*"
 
 [dependencies.staticfile]
 path = "../staticfile"

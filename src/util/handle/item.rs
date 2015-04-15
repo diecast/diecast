@@ -5,6 +5,7 @@ use std::ops::Range;
 use regex::Regex;
 use toml;
 use hoedown;
+use chrono;
 use hoedown::renderer::html;
 
 use handle::{self, Handle, Result};
@@ -201,5 +202,30 @@ pub struct Page {
     pub page_count: usize,
     pub post_count: usize,
     pub posts_per_page: usize,
+}
+
+// TODO
+// * make time type generic
+// * customizable format
+pub fn date(item: &mut Item) -> handle::Result {
+    let date = {
+        if let Some(meta) = item.extensions.get::<Metadata>() {
+            let date = meta.data.lookup("published").and_then(toml::Value::as_str).unwrap();
+
+            println!("date field of {:?} is {:?}", item, date);
+
+            Some(chrono::NaiveDate::parse_from_str(date, "%B %e, %Y").unwrap())
+        } else {
+            None
+        }
+    };
+
+    if let Some(date) = date {
+        println!("date for {:?} is {:?}", item, date);
+
+        item.extensions.insert::<chrono::NaiveDate>(date);
+    }
+
+    Ok(())
 }
 

@@ -16,6 +16,7 @@ extern crate anymap;
 extern crate regex;
 extern crate toml;
 extern crate threadpool;
+extern crate chrono;
 
 #[macro_use]
 extern crate log;
