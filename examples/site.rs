@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use rustc_serialize::json::{Json, ToJson};
 
 use regex::Regex;
-use hoedown::buffer::Buffer;
+use hoedown::Buffer;
 use time::PreciseTime;
 use glob::Pattern as Glob;
 
@@ -125,20 +125,6 @@ fn main() {
     // let pages = _;
     // let notes = _;
 
-    let extensions = {
-        use hoedown::*;
-
-        AUTOLINK |
-        FENCED_CODE |
-        FOOTNOTES |
-        MATH |
-        MATH_EXPLICIT |
-        SPACE_HEADERS |
-        STRIKETHROUGH |
-        SUPERSCRIPT |
-        TABLES
-    };
-
     let posts =
         Rule::new("posts")
         .depends_on(&templates)
@@ -151,8 +137,7 @@ fn main() {
             .link(binding::retain(item::publishable))
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
-                .link(item::abbreviate)
-                .link(item::markdown(extensions, true))
+                .link(item::markdown())
                 .link(route::pretty)
                 .link(hbs::render_template(&templates, "post", post_template))
                 .link(hbs::render_template(&templates, "layout", layout_template))

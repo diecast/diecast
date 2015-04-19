@@ -466,6 +466,7 @@ where T: ::std::any::Any + Ord + Clone + Sync + Send + 'static,
       F: Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
         bind.items.sort_by(|a, b| -> ::std::cmp::Ordering {
+            println!("sorting {:?} vs {:?}", a, b);
             (self.compare)(a.extensions.get::<T>().unwrap(), b.extensions.get::<T>().unwrap())
         });
 

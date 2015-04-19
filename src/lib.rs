@@ -17,10 +17,12 @@ extern crate regex;
 extern crate toml;
 extern crate threadpool;
 extern crate chrono;
+extern crate zmq;
 
 #[macro_use]
 extern crate log;
 
+#[macro_use]
 extern crate hoedown;
 extern crate rustc_serialize;
 extern crate handlebars;

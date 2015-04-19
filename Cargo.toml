@@ -19,7 +19,7 @@ regex = "*"
 regex_macros = "*"
 log = "*"
 env_logger = "*"
-hoedown = "*"
+# hoedown = "*"
 rustc-serialize = "*"
 handlebars = "*"
 docopt = "*"
@@ -34,6 +34,7 @@ iron = "*"
 # static = "*"
 mount = "*"
 chrono = "*"
+zmq = "*"
 
 [dependencies.staticfile]
 path = "../staticfile"
@@ -41,8 +42,8 @@ path = "../staticfile"
 # [dependencies.rustc-serialize]
 # path = "../rustc-serialize"
 
-# [dependencies.hoedown]
-# path = "../hoedown"
+[dependencies.hoedown]
+path = "../hoedown"
 
 # [dependencies.handlebars]
 # path = "../handlebars-rust"

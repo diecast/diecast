@@ -141,40 +141,6 @@ pub fn parse_metadata(item: &mut Item) -> handle::Result {
     Ok(())
 }
 
-pub fn markdown(extensions: hoedown::Extension, use_smartypants: bool) -> Markdown {
-    Markdown {
-        extensions: extensions,
-        use_smartypants: use_smartypants,
-    }
-}
-
-pub struct Markdown {
-    extensions: hoedown::Extension,
-    use_smartypants: bool,
-}
-
-impl Handle<Item> for Markdown {
-    fn handle(&self, item: &mut Item) -> handle::Result {
-        let document =
-            hoedown::Markdown::new(item.body.as_bytes())
-            .with_extensions(self.extensions.clone());
-
-        let renderer = html::Html::new(html::Flags::empty(), 0);
-        let mut buffer = document.render_to_buffer(renderer);
-
-        if self.use_smartypants {
-            let mut smartypants = hoedown::buffer::Buffer::new(64);
-            html::smartypants(&mut smartypants, &mut buffer);
-
-            item.body = smartypants.as_str().unwrap().to_string();
-        } else {
-            item.body = buffer.as_str().unwrap().to_string();
-        }
-
-        Ok(())
-    }
-}
-
 pub fn is_draft(item: &Item) -> bool {
     item.extensions.get::<Metadata>()
         .map(|meta| {
@@ -229,50 +195,346 @@ pub fn date(item: &mut Item) -> handle::Result {
     Ok(())
 }
 
-// TODO: might want to make this context-aware, idk
-pub fn abbreviate(item: &mut Item) -> handle::Result {
+pub fn markdown() -> Markdown {
+    Markdown {
+        extensions: {
+            use hoedown::*;
+
+            AUTOLINK |
+            FENCED_CODE |
+            FOOTNOTES |
+            MATH |
+            MATH_EXPLICIT |
+            SPACE_HEADERS |
+            STRIKETHROUGH |
+            SUPERSCRIPT |
+            TABLES
+        },
+        use_smartypants: true,
+    }
+}
+
+pub struct Markdown {
+    extensions: hoedown::Extension,
+    use_smartypants: bool,
+}
+
+impl Handle<Item> for Markdown {
+    fn handle(&self, item: &mut Item) -> handle::Result {
+        use std::collections::HashMap;
+        use regex::Captures;
+
+        let pattern = Regex::new(r"(?m)^\*\[(?P<abbr>.+)\]: (?P<full>.+)$").unwrap();
+        let mut abbrs = HashMap::new();
+
+        let clean = pattern.replace_all(&item.body, |caps: &Captures| -> String {
+            let abbr = caps.name("abbr").unwrap().to_string();
+            let full = caps.name("full").unwrap().to_string();
+
+            assert!(
+                !abbr.chars().any(|c| c == '|'),
+                "abbreviations shouldn't contain the '|' character!");
+
+            abbrs.insert(abbr, full);
+            String::new()
+        });
+
+        let document =
+            hoedown::Markdown::new(&clean)
+            .extensions(self.extensions.clone());
+
+        let meta = item.extensions.get::<Metadata>();
+
+        if let Some(meta) = meta {
+            if !meta.data.lookup("toc.show").and_then(toml::Value::as_bool).unwrap_or(false) {
+                return Ok(());
+            }
+        }
+
+        let doc =
+            hoedown::Markdown::new(&item.body)
+            .extensions({
+                use hoedown::*;
+
+                FENCED_CODE |
+                FOOTNOTES |
+                MATH |
+                MATH_EXPLICIT |
+                SPACE_HEADERS |
+                STRIKETHROUGH |
+                SUPERSCRIPT |
+                TABLES
+            });
+
+        let align =
+            meta.map(|m|
+                match m.data.lookup("toc.align").and_then(toml::Value::as_str).unwrap_or("left") {
+                    "left" => renderer::Align::Left,
+                    "right" => renderer::Align::Right,
+                    _ => panic!("what"),
+                })
+            .unwrap_or(renderer::Align::Left);
+
+        let mut renderer = self::renderer::Renderer::new(abbrs, align);
+        let mut buffer = document.render_to_buffer(&mut renderer);
+
+        if self.use_smartypants {
+            let mut smartypants = hoedown::Buffer::new(64);
+            html::smartypants(&mut smartypants, &mut buffer);
+
+            item.body = smartypants.to_str().unwrap().to_string();
+        } else {
+            item.body = buffer.to_str().unwrap().to_string();
+        }
+
+        let pattern = Regex::new(r"<p>::toc::</p>").unwrap();
+        item.body = pattern.replace(&item.body, &renderer.toc[..]);
+
+        Ok(())
+    }
+}
+
+mod renderer {
+    use hoedown::{self, Buffer, Render, Wrapper, Markdown};
+    use hoedown::renderer;
     use std::collections::HashMap;
-    use regex::Captures;
+    use regex::Regex;
 
-    trace!("abbreviating {:?}", item);
-
-    let pattern = Regex::new(r"(?m)^\*\[(?P<abbr>.+)\]: (?P<full>.+)$").unwrap();
-    let mut abbrs = HashMap::new();
-
-    // collect abbreviations
-    for capture in pattern.captures_iter(&item.body) {
-        let abbr = capture.name("abbr").unwrap().to_string();
-        let full = capture.name("full").unwrap().to_string();
-
-        assert!(!abbr.contains("|"), "abbreviations shouldn't contain the '|' character!");
-
-        abbrs.insert(abbr, full);
+    pub enum Align {
+        Left,
+        Right,
     }
 
-    if abbrs.is_empty() {
-        return Ok(());
+    pub struct Pass;
+    impl Render for Pass {
+        fn link(&mut self, output: &mut Buffer, content: &Buffer, link: &Buffer, title: &Buffer) -> bool {
+            output.pipe(content);
+            true
+        }
     }
 
-    trace!("abbrs: {:?}", abbrs);
+    fn sanitize(content: &str) -> String {
+        let doc =
+            Markdown::new(content)
+            .extensions({
+                use hoedown::*;
 
-    // remove abbreviation definitions
-    let clean = pattern.replace_all(&item.body, "");
+                AUTOLINK |
+                FENCED_CODE |
+                FOOTNOTES |
+                MATH |
+                MATH_EXPLICIT |
+                SPACE_HEADERS |
+                STRIKETHROUGH |
+                SUPERSCRIPT |
+                TABLES
+            });
 
-    // TODO: shouldn't have | in abbr
-    let joined: String = abbrs.keys().cloned().collect::<Vec<String>>().connect("|");
-    let matcher = Regex::new(&joined).unwrap();
+        let output = doc.render_inline_to_buffer(Pass).to_str().unwrap().to_string();
 
-    // replace abbreviations with their full form
-    let replaced = matcher.replace_all(&clean, |caps: &Captures| -> String {
-        let abbr = caps.at(0).unwrap();
-        let full = abbrs.get(abbr).unwrap().clone();
-        trace!("replacing {:?} with {:?}", abbr, full);
+        output.chars()
+        .filter(|&c|
+            c.is_alphabetic() || c.is_digit(10) ||
+            c == '_' || c == '-' || c == '.' || c == ' '
+        )
+        .map(|c| {
+            let c = c.to_lowercase().next().unwrap();
 
-        format!(r#"<abbr title="{}">{}</abbr>"#, full, abbr)
-    });
+            if c.is_whitespace() { '-' }
+            else { c }
+        })
+        .skip_while(|c| !c.is_alphabetic())
+        .collect()
+    }
 
-    item.body = replaced;
+    pub struct Renderer {
+        pub html: renderer::html::Html,
+        abbreviations: HashMap<String, String>,
+        matcher: Regex,
 
-    Ok(())
+        pub toc: String,
+
+        /// the current header level
+        toc_level: i32,
+
+        /// the offset of the first header sighted from 0
+        toc_offset: i32,
+
+        toc_align: Align,
+    }
+
+    impl Renderer {
+        pub fn new(abbrs: HashMap<String, String>, align: Align) -> Renderer {
+            let joined: String =
+                abbrs.keys().cloned().collect::<Vec<String>>().connect("|");
+
+            println!("CREATED NEW");
+
+            // TODO: shouldn't have | in abbr
+            let matcher = Regex::new(&joined).unwrap();
+
+            Renderer {
+                html: renderer::html::Html::new(renderer::html::Flags::empty(), 0),
+                abbreviations: abbrs,
+                matcher: matcher,
+
+                toc: String::new(),
+                toc_level: 0,
+                toc_offset: 0,
+                toc_align: align,
+            }
+        }
+    }
+
+    impl Wrapper for Renderer {
+        type Base = renderer::html::Html;
+
+        fn base(&mut self) -> &mut renderer::html::Html {
+            &mut self.html
+        }
+
+        fn code_block(&mut self, output: &mut Buffer, code: &Buffer, lang: &Buffer) {
+            use zmq;
+            use std::io::Write;
+
+            let lang = if lang.is_empty() {
+                "text"
+            } else {
+                lang.to_str().unwrap()
+            };
+
+            let mut ctx = zmq::Context::new();
+            let mut socket = ctx.socket(zmq::REQ).unwrap();
+            socket.connect("tcp://127.0.0.1:5555").unwrap();
+
+            write!(output,
+r#"<figure class="codeblock">
+<pre>
+<code class="highlight language-{}">"#, lang).unwrap();
+
+            if lang == "text" {
+                output.pipe(code);
+            } else {
+                let lang = zmq::Message::from_slice(lang.as_bytes()).unwrap();
+                socket.send_msg(lang, zmq::SNDMORE).unwrap();
+
+                let code = zmq::Message::from_slice(&code).unwrap();
+                socket.send_msg(code, 0).unwrap();
+
+                let highlighted = socket.recv_msg(0).unwrap();
+
+                output.write(&highlighted).unwrap();
+            }
+
+            output.write(b"</code></pre></figure>").unwrap();
+        }
+
+        fn normal_text(&mut self, output: &mut Buffer, text: &Buffer) {
+            use regex::Captures;
+            use std::io::Write;
+
+            if self.abbreviations.is_empty() {
+                output.pipe(text);
+                return;
+            }
+
+            // replace abbreviations with their full form
+            let replaced = self.matcher.replace_all(text.to_str().unwrap(), |caps: &Captures| -> String {
+                let abbr = caps.at(0).unwrap();
+                let full = self.abbreviations.get(abbr).unwrap().clone();
+                trace!("replacing {:?} with {:?}", abbr, full);
+
+                format!(r#"<abbr title="{}">{}</abbr>"#, full, abbr)
+            });
+
+            output.write(replaced.as_bytes()).unwrap();
+        }
+
+        fn after_render(&mut self, output: &mut Buffer, inline_render: bool) {
+            if inline_render {
+                return;
+            }
+
+            while self.toc_level > 0 {
+                self.toc.push_str("</li>\n</ol>\n");
+                self.toc_level -= 1;
+            }
+
+            self.toc.push_str("</nav>");
+        }
+
+        fn header(&mut self, output: &mut Buffer, content: &Buffer, level: i32) {
+            use std::io::Write;
+
+            // first header sighted
+            if self.toc_level == 0 {
+                self.toc_offset = level - 1;
+
+                self.toc.push_str(r#"<nav id="toc""#);
+
+                if let Align::Right = self.toc_align {
+                    self.toc.push_str(r#"class="right-toc""#)
+                }
+
+                self.toc.push_str(">\n<h3>Contents</h3>");
+            }
+
+            let level = level - self.toc_offset;
+
+            if level > self.toc_level {
+                while level > self.toc_level {
+                    self.toc.push_str("<ol>\n<li>\n");
+                    self.toc_level += 1;
+                }
+            } else if level < self.toc_level {
+                self.toc.push_str("</li>\n");
+
+                while level < self.toc_level {
+                    self.toc.push_str("</ol>\n</li>\n");
+                    self.toc_level -= 1;
+                }
+
+                self.toc.push_str("<li>\n");
+            } else {
+                self.toc.push_str("</li>\n<li>\n");
+            }
+
+            let sanitized = sanitize(content.to_str().unwrap());
+            self.toc.push_str(r##"<a href="#"##);
+            self.toc.push_str(&sanitized);
+            self.toc.push_str(r#"">"#);
+
+            let bytes: &[u8] = content.as_ref();
+
+            let doc =
+                Markdown::from(bytes)
+                .extensions({
+                    use hoedown::*;
+
+                    AUTOLINK |
+                    FENCED_CODE |
+                    FOOTNOTES |
+                    MATH |
+                    MATH_EXPLICIT |
+                    SPACE_HEADERS |
+                    STRIKETHROUGH |
+                    SUPERSCRIPT |
+                    TABLES
+                });
+
+            let rendered = doc.render_inline_to_buffer(&mut self.html);
+
+            self.toc.push_str(rendered.to_str().unwrap());
+            self.toc.push_str("</a>\n");
+
+            write!(output,
+r##"<h2 id="{}">
+<span class="hash">#</span>
+<a href="#{}" class="header-link">{}</a>
+</h2>"##, sanitized, sanitized, content.to_str().unwrap()).unwrap();
+        }
+    }
+
+    wrap!(Renderer);
 }
 
