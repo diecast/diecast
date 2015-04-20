@@ -96,8 +96,23 @@ fn layout_template(item: &Item) -> Json {
     Json::Object(bt)
 }
 
+fn pig() {
+    use std::process::Command;
+
+    println!("initializing pig server...");
+
+    Command::new("python")
+        .arg("scripts/pig.py")
+        .spawn()
+        .unwrap();
+
+    println!("pig server initialized");
+}
+
 fn main() {
     env_logger::init().unwrap();
+
+    pig();
 
     let templates =
         Rule::new("templates")
@@ -137,7 +152,7 @@ fn main() {
             .link(binding::retain(item::publishable))
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
-                .link(item::markdown())
+                .link(item::markdown)
                 .link(route::pretty)
                 .link(hbs::render_template(&templates, "post", post_template))
                 .link(hbs::render_template(&templates, "layout", layout_template))

@@ -4,8 +4,8 @@ use std::ops::Range;
 
 use regex::Regex;
 use toml;
-use hoedown;
 use chrono;
+use hoedown::{self, Render};
 use hoedown::renderer::html;
 
 use handle::{self, Handle, Result};
@@ -96,7 +96,6 @@ pub fn write(item: &mut Item) -> handle::Result {
     Ok(())
 }
 
-
 /// Handle<Item> that prints the `Item`'s body.
 pub fn print(item: &mut Item) -> handle::Result {
     println!("{}", item.body);
@@ -178,8 +177,6 @@ pub fn date(item: &mut Item) -> handle::Result {
         if let Some(meta) = item.extensions.get::<Metadata>() {
             let date = meta.data.lookup("published").and_then(toml::Value::as_str).unwrap();
 
-            println!("date field of {:?} is {:?}", item, date);
-
             Some(chrono::NaiveDate::parse_from_str(date, "%B %e, %Y").unwrap())
         } else {
             None
@@ -187,17 +184,61 @@ pub fn date(item: &mut Item) -> handle::Result {
     };
 
     if let Some(date) = date {
-        println!("date for {:?} is {:?}", item, date);
-
         item.extensions.insert::<chrono::NaiveDate>(date);
     }
 
     Ok(())
 }
 
-pub fn markdown() -> Markdown {
-    Markdown {
-        extensions: {
+pub fn markdown(item: &mut Item) -> handle::Result {
+    use std::collections::HashMap;
+    use regex::Captures;
+
+    let pattern = Regex::new(r"(?m)^\*\[(?P<abbr>.+)\]: (?P<full>.+)$").unwrap();
+    let mut abbrs = HashMap::new();
+
+    let clean = pattern.replace_all(&item.body, |caps: &Captures| -> String {
+        let abbr = caps.name("abbr").unwrap().to_string();
+        let full = caps.name("full").unwrap().to_string();
+
+        assert!(
+            !abbr.chars().any(|c| c == '|'),
+            "abbreviations shouldn't contain the '|' character!");
+
+        abbrs.insert(abbr, full);
+        String::new()
+    });
+
+    trace!("collected abbreviations");
+
+    let meta = item.extensions.get::<Metadata>();
+
+    if let Some(meta) = meta {
+        if !meta.data.lookup("toc.show").and_then(toml::Value::as_bool).unwrap_or(false) {
+            // TODO: tell render not to generate toc
+        }
+    }
+
+    // if there is metadata, parse the field
+    // otherwise assume left align
+    let align =
+        meta.and_then(|m|
+            m.data.lookup("toc.align")
+            .and_then(toml::Value::as_str)
+            .map(|align| {
+                match align {
+                    "left" => renderer::Align::Left,
+                    "right" => renderer::Align::Right,
+                    _ => panic!("invalid value for toc.align. either `left` or `right`"),
+                }
+            }))
+        .unwrap_or(renderer::Align::Left);
+
+    trace!("got toc alignment");
+
+    let document =
+        hoedown::Markdown::new(&clean)
+        .extensions({
             use hoedown::*;
 
             AUTOLINK |
@@ -209,93 +250,32 @@ pub fn markdown() -> Markdown {
             STRIKETHROUGH |
             SUPERSCRIPT |
             TABLES
-        },
-        use_smartypants: true,
-    }
-}
-
-pub struct Markdown {
-    extensions: hoedown::Extension,
-    use_smartypants: bool,
-}
-
-impl Handle<Item> for Markdown {
-    fn handle(&self, item: &mut Item) -> handle::Result {
-        use std::collections::HashMap;
-        use regex::Captures;
-
-        let pattern = Regex::new(r"(?m)^\*\[(?P<abbr>.+)\]: (?P<full>.+)$").unwrap();
-        let mut abbrs = HashMap::new();
-
-        let clean = pattern.replace_all(&item.body, |caps: &Captures| -> String {
-            let abbr = caps.name("abbr").unwrap().to_string();
-            let full = caps.name("full").unwrap().to_string();
-
-            assert!(
-                !abbr.chars().any(|c| c == '|'),
-                "abbreviations shouldn't contain the '|' character!");
-
-            abbrs.insert(abbr, full);
-            String::new()
         });
 
-        let document =
-            hoedown::Markdown::new(&clean)
-            .extensions(self.extensions.clone());
+    let mut renderer = self::renderer::Renderer::new(abbrs, align);
 
-        let meta = item.extensions.get::<Metadata>();
+    trace!("constructed renderer");
 
-        if let Some(meta) = meta {
-            if !meta.data.lookup("toc.show").and_then(toml::Value::as_bool).unwrap_or(false) {
-                return Ok(());
-            }
-        }
+    let buffer = renderer.render(&document);
 
-        let doc =
-            hoedown::Markdown::new(&item.body)
-            .extensions({
-                use hoedown::*;
+    trace!("rendered markdown");
 
-                FENCED_CODE |
-                FOOTNOTES |
-                MATH |
-                MATH_EXPLICIT |
-                SPACE_HEADERS |
-                STRIKETHROUGH |
-                SUPERSCRIPT |
-                TABLES
-            });
+    let pattern = Regex::new(r"<p>::toc::</p>").unwrap();
 
-        let align =
-            meta.map(|m|
-                match m.data.lookup("toc.align").and_then(toml::Value::as_str).unwrap_or("left") {
-                    "left" => renderer::Align::Left,
-                    "right" => renderer::Align::Right,
-                    _ => panic!("what"),
-                })
-            .unwrap_or(renderer::Align::Left);
+    let mut smartypants = hoedown::Buffer::new(64);
+    html::smartypants(&mut smartypants, &buffer);
 
-        let mut renderer = self::renderer::Renderer::new(abbrs, align);
-        let mut buffer = document.render_to_buffer(&mut renderer);
+    trace!("smartypants");
 
-        if self.use_smartypants {
-            let mut smartypants = hoedown::Buffer::new(64);
-            html::smartypants(&mut smartypants, &mut buffer);
+    item.body = pattern.replace(&smartypants.to_str().unwrap(), &renderer.toc[..]);
 
-            item.body = smartypants.to_str().unwrap().to_string();
-        } else {
-            item.body = buffer.to_str().unwrap().to_string();
-        }
+    trace!("inserted toc");
 
-        let pattern = Regex::new(r"<p>::toc::</p>").unwrap();
-        item.body = pattern.replace(&item.body, &renderer.toc[..]);
-
-        Ok(())
-    }
+    Ok(())
 }
 
 mod renderer {
-    use hoedown::{self, Buffer, Render, Wrapper, Markdown};
+    use hoedown::{Buffer, Render, Wrapper, Markdown};
     use hoedown::renderer;
     use std::collections::HashMap;
     use regex::Regex;
@@ -307,7 +287,7 @@ mod renderer {
 
     pub struct Pass;
     impl Render for Pass {
-        fn link(&mut self, output: &mut Buffer, content: &Buffer, link: &Buffer, title: &Buffer) -> bool {
+        fn link(&mut self, output: &mut Buffer, content: &Buffer, _link: &Buffer, _title: &Buffer) -> bool {
             output.pipe(content);
             true
         }
@@ -330,7 +310,7 @@ mod renderer {
                 TABLES
             });
 
-        let output = doc.render_inline_to_buffer(Pass).to_str().unwrap().to_string();
+        let output = Pass.render_inline(&doc).to_str().unwrap().to_string();
 
         output.chars()
         .filter(|&c|
@@ -368,8 +348,6 @@ mod renderer {
             let joined: String =
                 abbrs.keys().cloned().collect::<Vec<String>>().connect("|");
 
-            println!("CREATED NEW");
-
             // TODO: shouldn't have | in abbr
             let matcher = Regex::new(&joined).unwrap();
 
@@ -386,6 +364,7 @@ mod renderer {
         }
     }
 
+    #[allow(unused_variables)]
     impl Wrapper for Renderer {
         type Base = renderer::html::Html;
 
@@ -522,7 +501,7 @@ r#"<figure class="codeblock">
                     TABLES
                 });
 
-            let rendered = doc.render_inline_to_buffer(&mut self.html);
+            let rendered = self.html.render_inline(&doc);
 
             self.toc.push_str(rendered.to_str().unwrap());
             self.toc.push_str("</a>\n");
