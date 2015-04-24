@@ -102,7 +102,7 @@ where E: Evaluator {
             mem::replace(&mut self.waiting, VecDeque::new())
             .into_iter()
             .map(|job| {
-                let name = job.bind.data().name.to_string();
+                let name = job.bind.data().name.clone();
                 (name, job)
             })
             .collect::<HashMap<String, Job>>();
@@ -179,7 +179,7 @@ where E: Evaluator {
         trace!("finished {}", current.bind.data().name);
         trace!("before waiting: {:?}", self.waiting);
 
-        let binding = current.bind.data().name.to_string();
+        let binding = current.bind.data().name.clone();
 
         // binding is complete
         trace!("binding {} finished", binding);

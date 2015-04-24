@@ -389,7 +389,7 @@ pub fn tags(bind: &mut Bind) -> handle::Result {
 
         if let Some(tags) = toml {
             for tag in tags {
-                tag_map.entry(tag.as_str().unwrap().to_string())
+                tag_map.entry(String::from(tag.as_str().unwrap()))
                     .or_insert(vec![])
                     .push(arc.clone());
             }

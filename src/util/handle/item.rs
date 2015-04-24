@@ -130,7 +130,7 @@ pub fn parse_metadata(item: &mut Item) -> handle::Result {
             }
         }
 
-        captures.name("body").map(|b| b.to_string())
+        captures.name("body").map(String::from)
     } else { None };
 
     if let Some(body) = body {
@@ -198,8 +198,8 @@ pub fn markdown(item: &mut Item) -> handle::Result {
     let mut abbrs = HashMap::new();
 
     let clean = pattern.replace_all(&item.body, |caps: &Captures| -> String {
-        let abbr = caps.name("abbr").unwrap().to_string();
-        let full = caps.name("full").unwrap().to_string();
+        let abbr = String::from(caps.name("abbr").unwrap());
+        let full = String::from(caps.name("full").unwrap());
 
         assert!(
             !abbr.chars().any(|c| c == '|'),
@@ -310,7 +310,7 @@ mod renderer {
                 TABLES
             });
 
-        let output = Pass.render_inline(&doc).to_str().unwrap().to_string();
+        let output = String::from(Pass.render_inline(&doc).to_str().unwrap());
 
         output.chars()
         .filter(|&c|

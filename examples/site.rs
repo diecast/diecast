@@ -43,14 +43,14 @@ fn post_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
 
     if let Some(meta) = item.extensions.get::<item::Metadata>() {
-        bt.insert("body".to_string(), item.body.to_json());
+        bt.insert(String::from("body"), item.body.to_json());
 
         if let Some(title) = meta.data.lookup("title") {
-            bt.insert("title".to_string(), title.as_str().unwrap().to_json());
+            bt.insert(String::from("title"), title.as_str().unwrap().to_json());
         }
 
         if let Some(path) = item.route.writing() {
-            bt.insert("url".to_string(), path.parent().unwrap().to_str().unwrap().to_json());
+            bt.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
         }
     }
 
@@ -67,25 +67,25 @@ fn index_template(item: &Item) -> Json {
 
         if let Some(meta) = post.extensions.get::<item::Metadata>() {
             if let Some(title) = meta.data.lookup("title") {
-                itm.insert("title".to_string(), title.as_str().unwrap().to_json());
+                itm.insert(String::from("title"), title.as_str().unwrap().to_json());
             }
 
             if let Some(path) = post.route.writing() {
-                itm.insert("url".to_string(), path.parent().unwrap().to_str().unwrap().to_json());
+                itm.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
             }
         }
 
         items.push(itm);
     }
 
-    bt.insert("items".to_string(), items.to_json());
+    bt.insert(String::from("items"), items.to_json());
 
     if let Some((_, ref path)) = page.prev {
-        bt.insert("prev".to_string(), path.parent().unwrap().to_str().unwrap().to_json());
+        bt.insert(String::from("prev"), path.parent().unwrap().to_str().unwrap().to_json());
     }
 
     if let Some((_, ref path)) = page.next {
-        bt.insert("next".to_string(), path.parent().unwrap().to_str().unwrap().to_json());
+        bt.insert(String::from("next"), path.parent().unwrap().to_str().unwrap().to_json());
     }
 
     Json::Object(bt)
@@ -94,7 +94,7 @@ fn index_template(item: &Item) -> Json {
 fn layout_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
 
-    bt.insert("body".to_string(), item.body.to_json());
+    bt.insert(String::from("body"), item.body.to_json());
 
     Json::Object(bt)
 }

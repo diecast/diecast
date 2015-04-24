@@ -48,7 +48,7 @@ impl Site {
 
         for rule in &self.rules {
             // FIXME: this just seems weird re: strings
-            self.manager.add(&rule, Bind::new(rule.name().to_string(), self.configuration.clone()));
+            self.manager.add(&rule, Bind::new(String::from(rule.name()), self.configuration.clone()));
         }
 
         trace!("creating output directory at {:?}", &self.configuration.output);
@@ -73,7 +73,7 @@ impl Site {
 
     pub fn register(&mut self, rule: Rule) {
         if !rule.dependencies().is_empty() {
-            let names = self.rules.iter().map(|r| r.name().to_string()).collect();
+            let names = self.rules.iter().map(|r| String::from(r.name())).collect();
             let diff: HashSet<_> = rule.dependencies().difference(&names).cloned().collect();
 
             if !diff.is_empty() {

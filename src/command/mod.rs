@@ -71,7 +71,7 @@ impl Decodable for Kind {
             "live" => Live,
             "clean" => Clean,
             "help"  => Help,
-            s => Other(s.to_string()),
+            s => Other(String::from(s)),
         };
 
         Ok(command)
@@ -80,7 +80,7 @@ impl Decodable for Kind {
 
 pub fn version() -> String {
     format!("diecast {}", match option_env!("CFG_VERSION") {
-        Some(s) => s.to_string(),
+        Some(s) => String::from(s),
         Option::None => format!("{}.{}.{}{}",
                         env!("CARGO_PKG_VERSION_MAJOR"),
                         env!("CARGO_PKG_VERSION_MINOR"),
@@ -104,7 +104,7 @@ pub fn from_args(mut configuration: Configuration) -> Box<Command> {
     if options.arg_command.is_none() {
         docopt::Error::WithProgramUsage(
             Box::new(docopt::Error::Help),
-            USAGE.to_string())
+            String::from(USAGE))
             .exit();
     }
 
@@ -117,7 +117,7 @@ pub fn from_args(mut configuration: Configuration) -> Box<Command> {
         Help => {
             docopt::Error::WithProgramUsage(
                 Box::new(docopt::Error::Help),
-                USAGE.to_string())
+                String::from(USAGE))
                 .exit();
         },
         Other(ref cmd) => {
@@ -133,7 +133,7 @@ pub fn from_args(mut configuration: Configuration) -> Box<Command> {
             println!("unknown command `{}`", cmd);
             docopt::Error::WithProgramUsage(
                 Box::new(docopt::Error::Help),
-                USAGE.to_string())
+                String::from(USAGE))
                 .exit();
         },
         None => {
