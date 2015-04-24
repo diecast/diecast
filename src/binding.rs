@@ -13,7 +13,7 @@ use configuration::Configuration;
 // or perhaps Arcs are fine anyways?
 // TODO
 // I think this should be its own type
-pub type Dependencies = Arc<BTreeMap<String, Arc<Bind>>>;
+pub type Dependencies = BTreeMap<String, Arc<Bind>>;
 
 // FIXME
 // problem is that an item handler can easily change
@@ -39,7 +39,7 @@ impl Bind {
         let data =
             Data {
                 name: name,
-                dependencies: Arc::new(BTreeMap::new()),
+                dependencies: BTreeMap::new(),
                 configuration: configuration,
                 extensions: Arc::new(RwLock::new(AnyMap::new())),
             };

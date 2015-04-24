@@ -356,7 +356,6 @@ pub struct Create {
 
 impl Handle<Bind> for Create {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        println!("creating {:?}", self.path);
         bind.push(Route::Write(self.path.clone()));
 
         Ok(())
@@ -409,8 +408,6 @@ pub fn sort_by_date(bind: &mut Bind) -> handle::Result {
         b.cmp(a)
     });
 
-    println!("sorted: {:?}", bind.items);
-
     Ok(())
 }
 
@@ -435,8 +432,6 @@ where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
         bind.items.sort_by(|a, b| -> ::std::cmp::Ordering {
             (self.compare)(a, b)
         });
-
-        println!("sorted: {:?}", bind.items);
 
         Ok(())
     }
@@ -466,11 +461,8 @@ where T: ::std::any::Any + Ord + Clone + Sync + Send + 'static,
       F: Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
         bind.items.sort_by(|a, b| -> ::std::cmp::Ordering {
-            println!("sorting {:?} vs {:?}", a, b);
             (self.compare)(a.extensions.get::<T>().unwrap(), b.extensions.get::<T>().unwrap())
         });
-
-        println!("sorted: {:?}", bind.items);
 
         Ok(())
     }

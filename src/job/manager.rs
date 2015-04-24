@@ -198,28 +198,19 @@ where E: Evaluator {
     // we can satisfy multiple bindings at once and then perform
     // a bulk enqueue_ready
     fn enqueue_ready(&mut self) {
-        // prepare dependencies for now-ready dependents
-        let mut deps_cache = BTreeMap::new();
-
         for mut job in self.ready() {
             let name = job.bind.data().name.clone();
             trace!("{} is ready", name);
 
-            deps_cache.entry(name.clone()).or_insert_with(|| {
-                let mut deps = BTreeMap::new();
+            let mut deps = BTreeMap::new();
 
-                // use Borrow?
-                if let Some(ds) = self.graph.dependencies_of(&name) {
-                    for dep in ds {
-                        trace!("adding dependency: {:?}", dep);
-                        deps.insert(dep.clone(), self.finished[dep].clone());
-                    }
+            // use Borrow?
+            if let Some(ds) = self.graph.dependencies_of(&name) {
+                for dep in ds {
+                    trace!("adding dependency: {:?}", dep);
+                    deps.insert(dep.clone(), self.finished[dep].clone());
                 }
-
-                Arc::new(deps)
-            });
-
-            let deps = deps_cache[&name].clone();
+            }
 
             job.bind = Bind::with_dependencies(job.bind, deps);
 

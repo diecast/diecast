@@ -35,6 +35,7 @@ iron = "*"
 mount = "*"
 chrono = "*"
 zmq = "*"
+websocket = "*"
 
 [dependencies.staticfile]
 path = "../staticfile"

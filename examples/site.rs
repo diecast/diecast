@@ -11,13 +11,15 @@ extern crate toml;
 extern crate rustc_serialize;
 extern crate time;
 extern crate chrono;
+extern crate websocket;
+extern crate zmq;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use rustc_serialize::json::{Json, ToJson};
+use std::process::{Command, Child};
 
 use regex::Regex;
-use hoedown::Buffer;
 use time::PreciseTime;
 use glob::Pattern as Glob;
 
@@ -35,6 +37,7 @@ use diecast::util::handle::{Chain, binding, item};
 
 mod hbs;
 mod scss;
+mod ws;
 
 fn post_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
@@ -96,23 +99,23 @@ fn layout_template(item: &Item) -> Json {
     Json::Object(bt)
 }
 
-fn pig() {
-    use std::process::Command;
-
+fn pig() -> Child {
     println!("initializing pig server...");
 
     Command::new("python")
         .arg("scripts/pig.py")
         .spawn()
-        .unwrap();
-
-    println!("pig server initialized");
+        .unwrap()
 }
 
 fn main() {
     env_logger::init().unwrap();
 
-    pig();
+    let mut pig_handle = pig();
+
+    let ws_tx = ws::init();
+
+    println!("pig server initialized");
 
     let templates =
         Rule::new("templates")
@@ -153,14 +156,20 @@ fn main() {
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
                 .link(item::markdown)
-                .link(route::pretty)
+                .link(route::pretty)))
+            .link(ws::pipe(ws_tx))
+            .link(binding::parallel_each(Chain::new()
                 .link(hbs::render_template(&templates, "post", post_template))
                 .link(hbs::render_template(&templates, "layout", layout_template))
                 .link(item::write)))
             .link(binding::next_prev)
-            // .link(binding::sort_by(|a, b| a.body.cmp(&b.body))));
+            .link(binding::sort_by(|a, b| {
+                let a = a.extensions.get::<chrono::NaiveDate>().unwrap();
+                let b = b.extensions.get::<chrono::NaiveDate>().unwrap();
+                b.cmp(a)
+            })));
             // TODO: audit
-            .link(binding::sort_by_extension::<chrono::NaiveDate, _>(|a, b| b.cmp(a))));
+            // .link(binding::sort_by_extension::<chrono::NaiveDate, _>(|a, b| b.cmp(a))));
 
     let index =
         Rule::new("post index")
@@ -207,5 +216,7 @@ fn main() {
 
     // FIXME: main thread doesn't wait for children?
     println!("EXITING");
+
+    pig_handle.kill().unwrap();
 }
 

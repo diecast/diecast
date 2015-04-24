@@ -18,6 +18,7 @@ extern crate toml;
 extern crate threadpool;
 extern crate chrono;
 extern crate zmq;
+extern crate websocket;
 
 #[macro_use]
 extern crate log;

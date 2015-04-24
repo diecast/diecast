@@ -263,7 +263,7 @@ pub fn markdown(item: &mut Item) -> handle::Result {
     let pattern = Regex::new(r"<p>::toc::</p>").unwrap();
 
     let mut smartypants = hoedown::Buffer::new(64);
-    html::smartypants(&mut smartypants, &buffer);
+    html::smartypants(&buffer, &mut smartypants);
 
     trace!("smartypants");
 

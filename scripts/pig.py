@@ -132,7 +132,6 @@ class ServerWorker(threading.Thread):
             lang, code = socket.recv_multipart()
 
             lang = lang.decode(encoding="UTF-8")
-            print("responding for {}".format(lang))
             code = code.decode(encoding="UTF-8")
 
             rv = ""
