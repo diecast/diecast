@@ -1,3 +1,5 @@
+#![feature(collections)]
+
 #[macro_use]
 extern crate diecast;
 extern crate regex;
@@ -144,7 +146,8 @@ fn main() {
     // let pages = _;
     // let notes = _;
 
-    fn git(item: &mut Item) -> diecast::Result {
+    fn git(bind: &mut Bind) -> diecast::Result {
+        use std::collections::HashMap;
         use git2::{
             Repository,
             Pathspec,
@@ -152,6 +155,7 @@ fn main() {
             DiffOptions,
             Error,
             Diff,
+            Oid,
         };
 
         fn match_with_parent(repo: &Repository, commit: &Commit, parent: &Commit,
@@ -162,64 +166,86 @@ fn main() {
             Ok(diff.deltas().len() > 0)
         }
 
-        let repo = Repository::open(".").unwrap();
+        let repo = Repository::discover(".").unwrap();
         let mut revwalk = repo.revwalk().unwrap();
-
-        // let revspec = repo.revparse("HEAD").unwrap();
-        // assert!(revspec.mode().contains(git2::REVPARSE_SINGLE));
-        // revwalk.push(revspec.from().unwrap().id()).unwrap();
 
         revwalk.push_head().unwrap();
 
-        let name = item.source().unwrap();
-        let name = name.to_str().unwrap();
+        let mut input:HashMap<PathBuf, (DiffOptions, Pathspec)> =
+            bind.items.iter()
+            .map(|item| {
+                let path = item.source().unwrap();
 
-        println!("name: {}", name);
+                let mut diffopts = DiffOptions::new();
 
-        let specs = &[name];
+                // TODO: audit
+                diffopts.include_ignored(false);
+                diffopts.recurse_ignored_dirs(false);
+                diffopts.include_untracked(false);
+                diffopts.recurse_untracked_dirs(false);
+                diffopts.disable_pathspec_match(true);
+                diffopts.enable_fast_untracked_dirs(true);
 
-        let mut diffopts = DiffOptions::new();
+                diffopts.pathspec(path.to_str().unwrap());
 
-        for spec in specs.iter() {
-            diffopts.pathspec(spec);
-        }
-
-        let pathspec = Pathspec::new(specs.iter()).unwrap();
+                let pathspec = Pathspec::new(Some(path.to_str().unwrap()).into_iter()).unwrap();
+                (path, (diffopts, pathspec))
+            })
+            .collect::<HashMap<PathBuf, (DiffOptions, Pathspec)>>();
 
         macro_rules! filter_try {
-            ($e:expr) => (match $e { Ok(t) => t, Err(e) => return Some(Err(e)) })
+            ($e:expr) => (match $e { Ok(t) => t, Err(e) => continue })
         }
 
-        let revwalk = revwalk.filter_map(|id| {
-            let commit = filter_try!(repo.find_commit(id));
+        let mut output: HashMap<PathBuf, Oid> = HashMap::new();
+        let mut prune = vec![];
+
+        for id in revwalk {
+            let commit = filter_try!(repo.find_commit(id.clone()));
             let parents = commit.parents().len();
 
             // TODO: no merge commits?
-            if parents > 1 { return None }
+            // if parents > 1 { return None }
 
-            match commit.parents().len() {
-                0 => {
-                    let tree = filter_try!(commit.tree());
-                    let flags = git2::PATHSPEC_NO_MATCH_ERROR;
-                    if pathspec.match_tree(&tree, flags).is_err() { println!("a"); return None }
-                },
-                _ => {
-                    let m = commit.parents().all(|parent| {
-                        match_with_parent(&repo, &commit, &parent, &mut diffopts)
-                            .unwrap_or(false)
-                    });
+            for (path, &mut (ref mut diffopts, ref mut pathspec)) in &mut input {
+                match commit.parents().len() {
+                    0 => {
+                        let tree = filter_try!(commit.tree());
+                        let flags = git2::PATHSPEC_NO_MATCH_ERROR;
+                        if pathspec.match_tree(&tree, flags).is_err() { continue }
+                        else {
+                            output.insert(path.clone(), id);
+                            prune.push(path.clone());
+                        }
+                    },
+                    _ => {
+                        let m = commit.parents().all(|parent| {
+                            match_with_parent(&repo, &commit, &parent, diffopts)
+                                .unwrap_or(false)
+                        });
 
-                    if !m { println!("b"); return None }
-                },
+                        if !m { continue }
+                        else {
+                            output.insert(path.clone(), id);
+                            prune.push(path.clone());
+                        }
+                    }
+                }
             }
 
-            Some(Ok(commit))
-        }).take(1);
+            for path in prune.drain() {
+                input.remove(&path).unwrap();
+            }
 
-        for commit in revwalk {
-            let commit = commit.unwrap();
+            // insert
+            // Some(Ok(commit))
+        }
 
-            // print commit
+        for item in &mut bind.items {
+            let path = item.source().unwrap();
+
+            let oid = output.remove(&path).unwrap();
+            let commit = repo.find_commit(oid).unwrap();
 
             println!("commit: {}", commit.id());
             println!("short commit: {}", commit.id().to_string().chars().take(7).collect::<String>());
@@ -245,10 +271,10 @@ fn main() {
                 .link(item::date)))
             .link(binding::retain(item::publishable))
             .link(binding::tags)
+            .link(git)
             .link(binding::parallel_each(Chain::new()
                 .link(item::markdown)
-                .link(route::pretty)
-                .link(git)))
+                .link(route::pretty)))
             .link(ws::pipe(ws_tx))
             .link(binding::parallel_each(Chain::new()
                 .link(hbs::render_template(&templates, "post", post_template))
