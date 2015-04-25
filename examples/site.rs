@@ -213,6 +213,7 @@ fn main() {
             item.extensions.insert::<Oid>(commit.id());
 
             let message = String::from_utf8_lossy(commit.message_bytes()).into_owned();
+            let message = String::from(message.lines().take(1).next().unwrap());
             item.extensions.insert::<Message>(Message { body: message });
         }
 

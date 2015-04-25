@@ -18,7 +18,7 @@ impl Handle<Bind> for Scss {
         let destination = bind.data().configuration.output.join(&self.output);
 
         if let Some(parent) = destination.parent() {
-            let _ = fs::create_dir_all(parent);
+            diecast::mkdir_p(parent).unwrap();
         }
 
         let mut command = Command::new("scss");

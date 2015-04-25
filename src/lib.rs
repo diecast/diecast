@@ -63,3 +63,25 @@ pub mod configuration;
 pub mod util;
 pub mod deploy;
 
+use std::fs::{self, PathExt};
+use std::path::Path;
+use std::io;
+
+pub fn mkdir_p<P: AsRef<Path>>(path: P) -> io::Result<()> {
+    let path = path.as_ref();
+    if path == Path::new("") || path.is_dir() { return Ok(()) }
+    if let Some(p) = path.parent() { try!(mkdir_p(p)) }
+    match fs::create_dir(path) {
+        Ok(()) => {
+            Ok(())
+        },
+        Err(e) => {
+            if let ::std::io::ErrorKind::AlreadyExists = e.kind() {
+                Ok(())
+            } else {
+                return Err(e)
+            }
+        },
+    }
+}
+

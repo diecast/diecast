@@ -62,7 +62,7 @@ impl Site {
                 fs::create_dir(&self.configuration.output);
             }
         } else {
-            fs::create_dir_all(&self.configuration.output).unwrap();
+            ::mkdir_p(&self.configuration.output).unwrap();
         }
 
         // TODO: use resolve_from for partial builds?

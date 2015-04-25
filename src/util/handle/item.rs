@@ -41,7 +41,7 @@ pub fn copy(item: &mut Item) -> handle::Result {
 
             if let Some(parent) = to.parent() {
                 // TODO: this errors out if the path already exists? dumb
-                let _ = fs::create_dir_all(parent);
+                ::mkdir_p(parent).unwrap();
             }
 
             try!(fs::copy(from, to));
@@ -74,15 +74,15 @@ pub fn read(item: &mut Item) -> handle::Result {
 /// Handle<Item> that writes the `Item`'s body.
 pub fn write(item: &mut Item) -> handle::Result {
     use std::fs::{self, File};
-    use std::io::Write;
+    use std::io::{self, Write};
+    use std::path::Path;
 
     if let Some(to) = item.target() {
         // TODO: once path normalization is in, make sure
         // writing to output folder
-
         if let Some(parent) = to.parent() {
             // TODO: this errors out if the path already exists? dumb
-            let _ = fs::create_dir_all(parent);
+            ::mkdir_p(parent).unwrap();
         }
 
         trace!("writing file {:?}", to);
