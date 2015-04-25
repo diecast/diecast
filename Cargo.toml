@@ -7,9 +7,8 @@ authors = ["Jorge Israel Peña <jorge.israel.p@gmail.com>"]
 
 [profile.dev]
 rpath = true
-# opt-level = 3
+opt-level = 3
 # debug = false
-# rpath = false
 # lto = false
 # debug-assertions = false
 
