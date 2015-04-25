@@ -87,6 +87,7 @@ pub fn write(item: &mut Item) -> handle::Result {
 
         trace!("writing file {:?}", to);
 
+        // TODO: this sometimes crashes
         File::create(&to)
             .unwrap()
             .write_all(item.body.as_bytes())

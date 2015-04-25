@@ -13,6 +13,7 @@ extern crate time;
 extern crate chrono;
 extern crate websocket;
 extern crate zmq;
+extern crate git2;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -143,6 +144,96 @@ fn main() {
     // let pages = _;
     // let notes = _;
 
+    fn git(item: &mut Item) -> diecast::Result {
+        use git2::{
+            Repository,
+            Pathspec,
+            Commit,
+            DiffOptions,
+            Error,
+            Diff,
+        };
+
+        fn match_with_parent(repo: &Repository, commit: &Commit, parent: &Commit,
+                             opts: &mut DiffOptions) -> Result<bool, Error> {
+            let a = try!(parent.tree());
+            let b = try!(commit.tree());
+            let diff = try!(Diff::tree_to_tree(repo, Some(&a), Some(&b), Some(opts)));
+            Ok(diff.deltas().len() > 0)
+        }
+
+        let repo = Repository::open(".").unwrap();
+        let mut revwalk = repo.revwalk().unwrap();
+
+        // let revspec = repo.revparse("HEAD").unwrap();
+        // assert!(revspec.mode().contains(git2::REVPARSE_SINGLE));
+        // revwalk.push(revspec.from().unwrap().id()).unwrap();
+
+        revwalk.push_head().unwrap();
+
+        let name = item.source().unwrap();
+        let name = name.to_str().unwrap();
+
+        println!("name: {}", name);
+
+        let specs = &[name];
+
+        let mut diffopts = DiffOptions::new();
+
+        for spec in specs.iter() {
+            diffopts.pathspec(spec);
+        }
+
+        let pathspec = Pathspec::new(specs.iter()).unwrap();
+
+        macro_rules! filter_try {
+            ($e:expr) => (match $e { Ok(t) => t, Err(e) => return Some(Err(e)) })
+        }
+
+        let revwalk = revwalk.filter_map(|id| {
+            let commit = filter_try!(repo.find_commit(id));
+            let parents = commit.parents().len();
+
+            // TODO: no merge commits?
+            if parents > 1 { return None }
+
+            match commit.parents().len() {
+                0 => {
+                    let tree = filter_try!(commit.tree());
+                    let flags = git2::PATHSPEC_NO_MATCH_ERROR;
+                    if pathspec.match_tree(&tree, flags).is_err() { println!("a"); return None }
+                },
+                _ => {
+                    let m = commit.parents().all(|parent| {
+                        match_with_parent(&repo, &commit, &parent, &mut diffopts)
+                            .unwrap_or(false)
+                    });
+
+                    if !m { println!("b"); return None }
+                },
+            }
+
+            Some(Ok(commit))
+        }).take(1);
+
+        for commit in revwalk {
+            let commit = commit.unwrap();
+
+            // print commit
+
+            println!("commit: {}", commit.id());
+            println!("short commit: {}", commit.id().to_string().chars().take(7).collect::<String>());
+
+            let message = String::from_utf8_lossy(commit.message_bytes());
+            let line = message.lines().take(1).next().unwrap();
+
+            println!("line: {}", line);
+            println!("message:\n{}", message);
+        }
+
+        Ok(())
+    }
+
     let posts =
         Rule::new("posts")
         .depends_on(&templates)
@@ -156,7 +247,8 @@ fn main() {
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
                 .link(item::markdown)
-                .link(route::pretty)))
+                .link(route::pretty)
+                .link(git)))
             .link(ws::pipe(ws_tx))
             .link(binding::parallel_each(Chain::new()
                 .link(hbs::render_template(&templates, "post", post_template))

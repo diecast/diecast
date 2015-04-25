@@ -19,6 +19,7 @@ extern crate threadpool;
 extern crate chrono;
 extern crate zmq;
 extern crate websocket;
+extern crate git2;
 
 #[macro_use]
 extern crate log;
