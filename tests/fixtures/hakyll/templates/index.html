@@ -1,0 +1,14 @@
+<!-- <h2 class="archive-year">{{year}}</h2> -->
+<ul class="archive">
+{{#each items}}
+  <li class="archive-item">
+    <a class="item-link" href="/{{url}}" title="{{excerpt}}">
+      {{title}}
+    </a>
+  </li>
+{{/each}}
+</ul>
+
+<a href="/{{prev}}">previous</a>
+-------------------
+<a href="/{{next}}">next</a>
