@@ -22,11 +22,10 @@ impl fmt::Debug for Job {
 }
 
 impl Job {
-    pub fn new<H>(bind: Bind, handler: H) -> Job
-    where H: Handle<Bind> + Sync + Send + 'static {
+    pub fn new(bind: Bind, handler: Arc<Box<Handle<Bind> + Sync + Send>>) -> Job {
         Job {
             bind: bind,
-            handler: Arc::new(Box::new(handler)),
+            handler: handler,
         }
     }
 
@@ -35,7 +34,6 @@ impl Job {
     }
 
     pub fn process(&mut self) -> handle::Result {
-        // <handler as binding::Handle>::handle(&self.handler, &mut self.bind)
         self.handler.handle(&mut self.bind)
     }
 }
