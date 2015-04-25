@@ -1,6 +1,7 @@
 //! Compilation unit for the `Generator`.
 
-use anymap::AnyMap;
+use anymap::Map;
+use anymap::any::CloneAny;
 use std::io::Write;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
@@ -103,7 +104,7 @@ pub struct Item {
     pub body: String,
 
     /// Any additional data
-    pub extensions: AnyMap,
+    pub extensions: Map<CloneAny + Sync + Send>,
 }
 
 impl Item {
@@ -118,7 +119,7 @@ impl Item {
         Item {
             route: route,
             body: String::new(),
-            extensions: AnyMap::new(),
+            extensions: Map::new(),
             bind: bind,
         }
     }

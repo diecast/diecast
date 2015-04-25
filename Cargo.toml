@@ -7,7 +7,7 @@ authors = ["Jorge Israel Peña <jorge.israel.p@gmail.com>"]
 
 [profile.dev]
 rpath = true
-opt-level = 3
+# opt-level = 3
 # debug = false
 # lto = false
 # debug-assertions = false
@@ -20,7 +20,6 @@ log = "*"
 env_logger = "*"
 hoedown = "*"
 rustc-serialize = "*"
-handlebars = "*"
 docopt = "*"
 toml = "*"
 notify = "*"
@@ -30,33 +29,19 @@ threadpool = "*"
 tempdir = "*"
 num_cpus = "*"
 iron = "*"
-# static = "*"
+staticfile = "*"
 mount = "*"
 chrono = "*"
 zmq = "*"
 websocket = "*"
 git2 = "*"
+# anymap = "*"
+# handlebars = "*"
 
-[dependencies.staticfile]
-path = "../staticfile"
-
-# [dependencies.rustc-serialize]
-# path = "../rustc-serialize"
-
-# [dependencies.hoedown]
-# path = "../hoedown"
-
-# [dependencies.handlebars]
-# path = "../handlebars-rust"
+[dependencies.handlebars]
+path = "../handlebars-rust"
 
 [dependencies.anymap]
 path = "../anymap"
 # git = "https://github.com/chris-morgan/anymap.git"
 # branch = "clone"
-
-# [dependencies.iron]
-# git = "https://github.com/iron/iron.git"
-
-# [dependencies.toml]
-# git = "https://github.com/alexcrichton/toml-rs"
-

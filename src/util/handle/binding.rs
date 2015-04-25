@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
+use std::any::Any;
 use std::fs;
 
 use chrono;
@@ -57,7 +58,7 @@ impl Handle<Bind> for Chain<Bind> {
 }
 
 impl<T> Handle<Bind> for Extender<T>
-where T: Sync + Send + Clone + 'static {
+where T: Any + Sync + Send + Clone + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
         bind.data().extensions.write().unwrap().insert(self.payload.clone());
         Ok(())

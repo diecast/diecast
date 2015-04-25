@@ -9,7 +9,6 @@ pub struct Scss {
 
 impl Handle<Bind> for Scss {
     fn handle(&self, bind: &mut Bind) -> diecast::Result {
-        use std::fs;
         use std::process::Command;
 
         trace!("compiling scss");

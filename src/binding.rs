@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
-use anymap::AnyMap;
+use anymap::Map;
+use anymap::any::CloneAny;
 
 use item::{Item, Route};
 use configuration::Configuration;
@@ -24,7 +25,7 @@ pub struct Data {
     pub name: String,
     pub dependencies: Dependencies,
     pub configuration: Arc<Configuration>,
-    pub extensions: Arc<RwLock<AnyMap>>,
+    pub extensions: Arc<RwLock<Map<CloneAny + Sync + Send>>>,
 }
 
 pub struct Bind {
@@ -41,7 +42,7 @@ impl Bind {
                 name: name,
                 dependencies: BTreeMap::new(),
                 configuration: configuration,
-                extensions: Arc::new(RwLock::new(AnyMap::new())),
+                extensions: Arc::new(RwLock::new(Map::new())),
             };
 
         Bind {

@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 use std::collections::HashSet;
-use std::fs;
 
 use job::{self, Job};
 use binding::Bind;
@@ -59,7 +58,7 @@ impl Site {
         // FIXME: do and_then
         if let Some(path) = self.configuration.output.parent() {
             if let Some("") = path.to_str() {
-                fs::create_dir(&self.configuration.output);
+                ::mkdir_p(&self.configuration.output).unwrap();
             }
         } else {
             ::mkdir_p(&self.configuration.output).unwrap();

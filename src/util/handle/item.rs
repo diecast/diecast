@@ -7,6 +7,7 @@ use toml;
 use chrono;
 use hoedown::{self, Render};
 use hoedown::renderer::html;
+use std::any::Any;
 
 use handle::{self, Handle, Result};
 use item::Item;
@@ -24,7 +25,7 @@ impl Handle<Item> for Chain<Item> {
 }
 
 impl<T> Handle<Item> for Extender<T>
-where T: Sync + Send + Clone + 'static {
+where T: Any + Clone + Sync + Send + 'static {
     fn handle(&self, item: &mut Item) -> handle::Result {
         item.extensions.insert(self.payload.clone());
         Ok(())
@@ -73,9 +74,8 @@ pub fn read(item: &mut Item) -> handle::Result {
 
 /// Handle<Item> that writes the `Item`'s body.
 pub fn write(item: &mut Item) -> handle::Result {
-    use std::fs::{self, File};
-    use std::io::{self, Write};
-    use std::path::Path;
+    use std::fs::File;
+    use std::io::Write;
 
     if let Some(to) = item.target() {
         // TODO: once path normalization is in, make sure
