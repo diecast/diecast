@@ -1,7 +1,7 @@
 ---
 title = "Dots"
 published = "February 16, 2014"
-excerpt = "How I manage my dotfiles"
+excerpt = "Simple dotfiles system"
 tags = [ "Linux" ]
 draft = false
 
