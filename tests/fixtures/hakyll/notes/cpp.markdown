@@ -192,9 +192,10 @@ A::A(const A& toCopy) :
 
 _Copy initialization_ occurs when:
 
-* assigning variables with the `=` assignment operator
-* pass object as argument to parameter of non-reference type. **note** that this is why the parameter to the copy constructor has to be a reference type, or infinite recursion would occur
-* brace initialize elements in array or aggregate class
+* assigning with the `=` assignment operator to a new object
+* passing the object as an argument to parameter of non-reference type. **note** that this is why the parameter to the copy constructor has to be a reference type, or infinite recursion would occur
+* returning by value
+* placing in a brace initializer
 
 The compiler can perform [copy elision](http://en.wikipedia.org/wiki/Copy_elision) to avoid unnecessary copies, short of using actual move semantics.
 
@@ -214,6 +215,8 @@ A& A::operator=(const A& rhs) {
 ```
 
 Copy-assignment operators are _synthesized_ if none are define. Synthesized copy-assignment operators perform member-wise assignment before returning a reference to the left-hand object.
+
+_Copy-assignment_ occurs when an existing object is assigned a new value from another existing object.
 
 ## Conversion Constructors
 
