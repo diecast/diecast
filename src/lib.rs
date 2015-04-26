@@ -46,10 +46,12 @@ pub use configuration::Configuration;
 pub use item::Item;
 pub use binding::Bind;
 pub use handle::{Handle, Result};
+pub use source::Source;
 
 mod handle;
 mod job;
 mod dependency;
+mod source;
 
 #[macro_use]
 pub mod macros;

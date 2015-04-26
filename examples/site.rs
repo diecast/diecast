@@ -36,6 +36,7 @@ use diecast::{
 
 use diecast::command;
 use diecast::util::route;
+use diecast::util::source;
 use diecast::util::handle::{Chain, binding, item};
 
 mod hbs;
@@ -66,7 +67,7 @@ fn index_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
     let mut items = vec![];
 
-    for post in &item.bind().dependencies["posts"].items[page.range.clone()] {
+    for post in &item.bind().dependencies["posts"][page.range.clone()] {
         let mut itm = BTreeMap::new();
 
         if let Some(meta) = post.extensions.get::<item::Metadata>() {
@@ -103,6 +104,8 @@ fn layout_template(item: &Item) -> Json {
     Json::Object(bt)
 }
 
+// TODO: implement some sort of heartbeat so that the pig
+// server dies when this process dies
 fn pig() -> Child {
     println!("initializing pig server...");
 
@@ -123,26 +126,28 @@ fn main() {
 
     let templates =
         Rule::new("templates")
+        .source(source::select("templates/*.html".parse::<Glob>().unwrap()))
         .handler(Chain::new()
-            .link(binding::select("templates/*.html".parse::<Glob>().unwrap()))
             .link(binding::each(item::read))
             .link(hbs::register_templates));
 
     let statics =
         Rule::new("statics")
-        .handler(binding::static_file(or!(
+        .source(source::select(or!(
             "images/**/*".parse::<Glob>().unwrap(),
             "static/**/*".parse::<Glob>().unwrap(),
             "js/**/*".parse::<Glob>().unwrap(),
             "favicon.png",
             "CNAME"
-        )));
+        )))
+        .handler(binding::each(Chain::new()
+            .link(route::identity)
+            .link(item::copy)));
 
     let scss =
         Rule::new("scss")
-        .handler(Chain::new()
-            .link(binding::select("scss/**/*.scss".parse::<Glob>().unwrap()))
-            .link(scss::scss("scss/screen.scss", "css/screen.css")));
+        .source(source::select("scss/**/*.scss".parse::<Glob>().unwrap()))
+        .handler(scss::scss("scss/screen.scss", "css/screen.css"));
 
     // let pages = _;
     // let notes = _;
@@ -150,13 +155,14 @@ fn main() {
     let posts =
         Rule::new("posts")
         .depends_on(&templates)
+        .source(source::select("posts/*.markdown".parse::<Glob>().unwrap()))
         .handler(Chain::new()
-            .link(binding::select("posts/*.markdown".parse::<Glob>().unwrap()))
             .link(binding::parallel_each(Chain::new()
                 .link(item::read)
                 .link(item::parse_metadata)
                 .link(item::date)))
-            .link(binding::retain(item::publishable))
+            // TODO: replace with some sort of filter/only_if
+            // .link(binding::retain(item::publishable))
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
                 .link(item::markdown)
@@ -178,18 +184,17 @@ fn main() {
         Rule::new("post index")
         .depends_on(&posts)
         .depends_on(&templates)
-        .handler(Chain::new()
-            .link(binding::paginate(&posts, 5, |page: usize| -> PathBuf {
-                if page == 0 {
-                    PathBuf::from("index.html")
-                } else {
-                    PathBuf::from(&format!("{}/index.html", page))
-                }
-            }))
-            .link(binding::parallel_each(Chain::new()
-                .link(hbs::render_template(&templates, "index", index_template))
-                .link(hbs::render_template(&templates, "layout", layout_template))
-                .link(item::write))));
+        .source(source::paginate(&posts, 5, |page: usize| -> PathBuf {
+            if page == 0 {
+                PathBuf::from("index.html")
+            } else {
+                PathBuf::from(&format!("{}/index.html", page))
+            }
+        }))
+        .handler(binding::parallel_each(Chain::new()
+            .link(hbs::render_template(&templates, "index", index_template))
+            .link(hbs::render_template(&templates, "layout", layout_template))
+            .link(item::write)));
 
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")

@@ -3,6 +3,8 @@ use std::collections::HashSet;
 use std::convert::Into;
 
 use binding::Bind;
+use item::Item;
+use source::Source;
 use util;
 use handle::Handle;
 
@@ -12,6 +14,7 @@ use handle::Handle;
 /// it may have.
 pub struct Rule {
     name: String,
+    source: Arc<Box<Source + Sync + Send>>,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
 }
@@ -24,9 +27,16 @@ impl Rule {
     where S: Into<String> {
         Rule {
             name: name.into(),
+            source: Arc::new(Box::new(util::source::none)),
             handler: Arc::new(Box::new(util::handle::binding::stub)),
             dependencies: HashSet::new(),
         }
+    }
+
+    pub fn source<S>(mut self, source: S) -> Rule
+    where S: Source + Sync + Send + 'static {
+        self.source = Arc::new(Box::new(source));
+        self
     }
 
     /// Associate a handler with this rule.
@@ -34,6 +44,11 @@ impl Rule {
     where H: Handle<Bind> + Sync + Send + 'static {
         self.handler = Arc::new(Box::new(handler));
         self
+    }
+
+    // TODO: don't return &Arc, just return Arc.clone()
+    pub fn get_source(&self) -> &Arc<Box<Source + Sync + Send + 'static>> {
+        &self.source
     }
 
     /// Access the handler.

@@ -10,7 +10,7 @@ struct Git {
     message: String,
 }
 
-fn git(bind: &mut Bind) -> diecast::Result {
+pub fn git(bind: &mut Bind) -> diecast::Result {
     use std::sync::Arc;
     use std::collections::HashMap;
     use git2::{
@@ -36,7 +36,7 @@ fn git(bind: &mut Bind) -> diecast::Result {
     let mut cache: HashMap<Oid, Arc<Git>> = HashMap::new();
     let mut input: HashMap<PathBuf, (&mut Item, DiffOptions, Pathspec)> = HashMap::new();
 
-    for item in &mut bind.items {
+    for item in bind {
         let path = item.source().unwrap();
 
         let mut diffopts = DiffOptions::new();
@@ -77,14 +77,11 @@ fn git(bind: &mut Bind) -> diecast::Result {
         if parents > 1 { continue }
 
         for (path, &mut (ref mut item, ref mut diffopts, ref mut pathspec)) in &mut input {
-            let mut is_match = false;
-
             match commit.parents().len() {
                 0 => {
                     let tree = filter_try!(commit.tree());
                     let flags = git2::PATHSPEC_NO_MATCH_ERROR;
                     if pathspec.match_tree(&tree, flags).is_err() { continue }
-                    else { is_match = true; }
                 },
                 _ => {
                     let m = commit.parents().all(|parent| {
@@ -93,22 +90,19 @@ fn git(bind: &mut Bind) -> diecast::Result {
                     });
 
                     if !m { continue }
-                    else { is_match = true; }
                 },
             }
 
-            if is_match {
-                let git =
-                    cache.entry(commit.id())
-                    .or_insert_with(|| {
-                        let message = String::from_utf8_lossy(commit.message_bytes()).into_owned();
-                        Arc::new(Git { sha: commit.id(), message: message })
-                    })
-                    .clone();
+            let git =
+                cache.entry(commit.id())
+                .or_insert_with(|| {
+                    let message = String::from_utf8_lossy(commit.message_bytes()).into_owned();
+                    Arc::new(Git { sha: commit.id(), message: message })
+                })
+                .clone();
 
-                item.extensions.insert::<Arc<Git>>(git);
-                prune.push(path.clone());
-            }
+            item.extensions.insert::<Arc<Git>>(git);
+            prune.push(path.clone());
         }
 
         for path in prune.drain() {

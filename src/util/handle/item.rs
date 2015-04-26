@@ -518,3 +518,32 @@ r##"<h2 id="{}">
     wrap!(Renderer);
 }
 
+pub struct HandleIf<C, H>
+where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
+      H: Handle<Item> + Sync + Send + 'static {
+    condition: C,
+    handler: H,
+}
+
+impl<C, H> Handle<Item> for HandleIf<C, H>
+where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
+      H: Handle<Item> + Sync + Send + 'static {
+    fn handle(&self, item: &mut Item) -> handle::Result {
+        if (self.condition)(item) {
+            (self.handler.handle(item))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[inline]
+pub fn handle_if<C, H>(condition: C, handler: H) -> HandleIf<C, H>
+where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static,
+      H: Handle<Item> + Sync + Send + 'static {
+    HandleIf {
+        condition: condition,
+        handler: handler,
+    }
+}
+

@@ -31,7 +31,7 @@ impl Handle<Bind> for WebsocketPipe {
             sender.clone()
         };
 
-        for item in &bind.items {
+        for item in bind {
             let uri = format!("/{}", item.route.reading().unwrap().display());
 
             ws_tx.send(Update {

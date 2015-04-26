@@ -2,14 +2,17 @@ use std::sync::Arc;
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
 
+use configuration::Configuration;
 use dependency::Graph;
 use rule::Rule;
-use binding::Bind;
+use binding::{self, Bind};
 use super::evaluator::Evaluator;
 use super::Job;
 
 pub struct Manager<E>
 where E: Evaluator {
+    configuration: Arc<Configuration>,
+
     graph: Graph<String>,
 
     /// the dependency count of each binding
@@ -37,8 +40,9 @@ where E: Evaluator {
 
 impl<E> Manager<E>
 where E: Evaluator {
-    pub fn new(evaluator: E) -> Manager<E> {
+    pub fn new(evaluator: E, configuration: Arc<Configuration>) -> Manager<E> {
         Manager {
+            configuration: configuration,
             graph: Graph::new(),
             dependencies: BTreeMap::new(),
             waiting: VecDeque::new(),
@@ -49,8 +53,9 @@ where E: Evaluator {
         }
     }
 
-    pub fn add(&mut self, rule: &Rule, bind: Bind) {
-        let binding = bind.data().name.clone();
+    pub fn add(&mut self, rule: &Rule) {
+        let bind = binding::Data::new(String::from(rule.name()), self.configuration.clone());
+        let binding = bind.name.clone();
 
         // TODO: this still necessary?
         // it's only used to determine if anything will actually be done
@@ -59,7 +64,7 @@ where E: Evaluator {
 
         // if there's no handler then no need to dispatch a job
         // or anything like that
-        self.waiting.push_front(Job::new(bind, rule.get_handler().clone()));
+        self.waiting.push_front(Job::new(bind, rule.get_source().clone(), rule.get_handler().clone()));
 
         self.graph.add_node(binding.clone());
 
@@ -87,7 +92,7 @@ where E: Evaluator {
 
         let (ready, waiting): (VecDeque<Job>, VecDeque<Job>) =
             waiting.into_iter()
-               .partition(|job| self.dependencies[&job.bind.data().name] == 0);
+               .partition(|job| self.dependencies[&job.bind.name] == 0);
 
         self.waiting = waiting;
 
@@ -102,7 +107,7 @@ where E: Evaluator {
             mem::replace(&mut self.waiting, VecDeque::new())
             .into_iter()
             .map(|job| {
-                let name = job.bind.data().name.clone();
+                let name = job.bind.name.clone();
                 (name, job)
             })
             .collect::<HashMap<String, Job>>();
@@ -114,7 +119,7 @@ where E: Evaluator {
                 let job = job_map.remove(&name).unwrap();
 
                 // set dep counts
-                let name = job.bind.data().name.clone();
+                let name = job.bind.name.clone();
 
                 let count = self.graph.dependency_count(&name);
                 trace!("{} has {} dependencies", name, count);
@@ -176,10 +181,10 @@ where E: Evaluator {
     }
 
     fn handle_done(&mut self, current: Job) {
-        trace!("finished {}", current.bind.data().name);
+        trace!("finished {}", current.bind.name);
         trace!("before waiting: {:?}", self.waiting);
 
-        let binding = current.bind.data().name.clone();
+        let binding = current.bind.name.clone();
 
         // binding is complete
         trace!("binding {} finished", binding);
@@ -199,20 +204,16 @@ where E: Evaluator {
     // a bulk enqueue_ready
     fn enqueue_ready(&mut self) {
         for mut job in self.ready() {
-            let name = job.bind.data().name.clone();
+            let name = job.bind.name.clone();
             trace!("{} is ready", name);
-
-            let mut deps = BTreeMap::new();
 
             // use Borrow?
             if let Some(ds) = self.graph.dependencies_of(&name) {
                 for dep in ds {
                     trace!("adding dependency: {:?}", dep);
-                    deps.insert(dep.clone(), self.finished[dep].clone());
+                    job.bind.dependencies.insert(dep.clone(), self.finished[dep].clone());
                 }
             }
-
-            job.bind = Bind::with_dependencies(job.bind, deps);
 
             trace!("job now ready: {:?}", job);
 

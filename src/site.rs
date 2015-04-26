@@ -26,8 +26,8 @@ impl Site {
         // let queue: VecDeque<job::Job> = VecDeque::new();
         let queue = job::evaluator::Pool::new(4);
 
-        let manager = job::Manager::new(queue);
         let configuration = Arc::new(configuration);
+        let manager = job::Manager::new(queue, configuration.clone());
 
         Site {
             configuration: configuration,
@@ -47,7 +47,7 @@ impl Site {
 
         for rule in &self.rules {
             // FIXME: this just seems weird re: strings
-            self.manager.add(&rule, Bind::new(String::from(rule.name()), self.configuration.clone()));
+            self.manager.add(&rule);
         }
 
         trace!("creating output directory at {:?}", &self.configuration.output);

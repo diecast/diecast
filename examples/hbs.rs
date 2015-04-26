@@ -59,7 +59,7 @@ pub fn register_templates(bind: &mut Bind) -> diecast::Result {
 
     let mut registry = Handlebars::new();
 
-    for item in &bind.items {
+    for item in bind.iter() {
         load_template(&item.source().unwrap(), &mut registry);
     }
 
