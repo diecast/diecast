@@ -3,7 +3,9 @@ title = "React"
 published = "July 25, 2014"
 excerpt = "A novel library for building interfaces"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 [React] is a library for building user interface out of individual, composable components.

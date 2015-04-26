@@ -3,7 +3,9 @@ title = "Algorithms"
 published = "July 15, 2013"
 excerpt = "Classical and crucial algorithms"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 What follows are some notes on algorithms I've been reviewing from [Algorithms](http://amzn.com/032157351X) by Robert Sedgewick and Kevin Wayne, [The Algorithm Design Manual](http://amzn.com/1849967202) by Steven S. Skiena, and other sources around the Internet [^mit] [^umd] [^umgd]. I wanted to write some notes on the material so that I could easily look back on it, but mainly so that I could be sure that I understand the material.

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::path::Path;
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
 
@@ -171,6 +172,43 @@ where E: Evaluator {
 
         self.reset();
     }
+
+    // pub fn execute_from(&mut self, path: &Path) {
+    //     if self.count == 0 {
+    //         println!("there is nothing to do");
+    //         return;
+    //     }
+
+    //     match self.graph.resolve_from(bind_for_path) {
+    //         Ok(order) => {
+    //             self.sort_jobs(order);
+
+    //             trace!("enqueueing ready jobs");
+    //             self.enqueue_ready();
+
+    //             // TODO: should have some sort of timeout here
+    //             trace!("looping");
+    //             for _ in (0 .. self.count) {
+    //                 match self.evaluator.dequeue() {
+    //                     Some(job) => {
+    //                         trace!("received job from pool");
+    //                         self.handle_done(job);
+    //                     },
+    //                     None => {
+    //                         println!("a job panicked. stopping everything");
+    //                         ::std::process::exit(1);
+    //                     }
+    //                 }
+    //             }
+    //         },
+    //         Err(cycle) => {
+    //             println!("a dependency cycle was detected: {:?}", cycle);
+    //             ::std::process::exit(1);
+    //         },
+    //     }
+
+    //     self.reset();
+    // }
 
     // TODO: audit
     fn reset(&mut self) {

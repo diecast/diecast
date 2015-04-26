@@ -3,7 +3,9 @@ title = "C++"
 published = "September 10, 2013"
 excerpt = "Keeping track of C++"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 A lot of people really dislike C++ because it's a very complex language that often catches one by surprise. Despite this, C++ is undisputed when it comes to striking a balance between abstraction and speed. Those that need to use it for these reasons generally take one of two approaches, while the rest completely dismiss it as an option to begin with.
@@ -18,7 +20,7 @@ To that end, these are non-exhaustive notes about C++---particularly the trickie
 
 For C++11 in particular, some compilers are faster than others at adopting the new feature set. [Visual Studio](http://msdn.microsoft.com/en-us/library/vstudio/hh567368%28v=vs.120%29.aspx) is particularly behind the rest, while [Clang](http://clang.llvm.org/cxx_status.html) and [GCC](http://gcc.gnu.org/projects/cxx0x.html) seem to be very quick on adopting the new features.
 
-* toc
+::toc::
 
 # Type Conversions
 

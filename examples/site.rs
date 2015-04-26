@@ -18,7 +18,8 @@ extern crate zmq;
 extern crate git2;
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use rustc_serialize::json::{Json, ToJson};
 use std::process::{Command, Child};
 
@@ -44,9 +45,15 @@ mod scss;
 mod ws;
 mod git;
 
+#[derive(Clone)]
+pub struct Tag {
+    pub items: Arc<Vec<Arc<Item>>>,
+}
+
 fn post_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
 
+    // TODO: don't predicate these things on metadata existing
     if let Some(meta) = item.extensions.get::<item::Metadata>() {
         bt.insert(String::from("body"), item.body.to_json());
 
@@ -57,17 +64,126 @@ fn post_template(item: &Item) -> Json {
         if let Some(path) = item.route.writing() {
             bt.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
         }
+
+        if let Some(date) = item.extensions.get::<chrono::NaiveDate>() {
+            bt.insert(String::from("date"), date.format("%B %e, %Y").to_string().to_json());
+        }
+
+        if let Some(git) = item.extensions.get::<Arc<git::Git>>() {
+            let sha = git.sha.to_string().chars().take(7).collect::<String>();
+            let path = item.source().unwrap();
+
+            // TODO: change the url and branch when ready
+            let res =
+                format!(
+"<a href=\"https://github.com/blaenk/diecast/commits/master/{}\">History</a>\
+<span class=\"hash\">, \
+<a href=\"https://github.com/blaenk/diecast/commit/{}\" title=\"{}\">{}</a>\
+</span>",
+                path.to_str().unwrap(), sha, git.message, sha);
+
+            bt.insert(String::from("git"), res.to_json());
+        }
+
+        if let Some(tags) = meta.data.lookup("tags").and_then(toml::Value::as_slice) {
+            let tags = tags.iter().map(|t| {
+                let tag = t.as_str().unwrap();
+                let url = tag.chars()
+                    .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+                    .map(|c| {
+                        let c = c.to_lowercase().next().unwrap();
+                        if c.is_whitespace() { '-' }
+                        else { c }
+                    })
+                    .collect::<String>();
+                // TODO: sanitize the tag url
+                format!("<a href=\"/tags/{}\">{}</a>", url, tag)
+            })
+            .collect::<Vec<String>>();
+            bt.insert(String::from("tags"), tags.connect(", ").to_json());
+        }
     }
 
     Json::Object(bt)
 }
 
-fn index_template(item: &Item) -> Json {
+fn posts_index_template(item: &Item) -> Json {
     let page = item.extensions.get::<item::Page>().unwrap();
     let mut bt = BTreeMap::new();
     let mut items = vec![];
 
     for post in &item.bind().dependencies["posts"][page.range.clone()] {
+        let mut itm = BTreeMap::new();
+
+        if let Some(meta) = post.extensions.get::<item::Metadata>() {
+            if let Some(title) = meta.data.lookup("title") {
+                itm.insert(String::from("title"), title.as_str().unwrap().to_json());
+            }
+
+            if let Some(path) = post.route.writing() {
+                itm.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
+            }
+        }
+
+        items.push(itm);
+    }
+
+    bt.insert(String::from("items"), items.to_json());
+
+    if let Some((_, ref path)) = page.prev {
+        bt.insert(String::from("prev"), path.parent().unwrap().to_str().unwrap().to_json());
+    }
+
+    if let Some((_, ref path)) = page.next {
+        bt.insert(String::from("next"), path.parent().unwrap().to_str().unwrap().to_json());
+    }
+
+    Json::Object(bt)
+}
+
+fn tags_index_template(item: &Item) -> Json {
+    // TODO: how to paginate as well??
+    // let page = item.extensions.get::<item::Page>().unwrap();
+    let mut bt = BTreeMap::new();
+    let mut items = vec![];
+
+    if let Some(tag) = item.extensions.get::<Tag>() {
+        for post in tag.items.iter() {
+            let mut itm = BTreeMap::new();
+
+            if let Some(meta) = post.extensions.get::<item::Metadata>() {
+                if let Some(title) = meta.data.lookup("title") {
+                    itm.insert(String::from("title"), title.as_str().unwrap().to_json());
+                }
+
+                if let Some(path) = post.route.writing() {
+                    itm.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
+                }
+            }
+
+            items.push(itm);
+        }
+    }
+
+    bt.insert(String::from("items"), items.to_json());
+
+    // if let Some((_, ref path)) = page.prev {
+    //     bt.insert(String::from("prev"), path.parent().unwrap().to_str().unwrap().to_json());
+    // }
+
+    // if let Some((_, ref path)) = page.next {
+    //     bt.insert(String::from("next"), path.parent().unwrap().to_str().unwrap().to_json());
+    // }
+
+    Json::Object(bt)
+}
+
+fn notes_index_template(item: &Item) -> Json {
+    let page = item.extensions.get::<item::Page>().unwrap();
+    let mut bt = BTreeMap::new();
+    let mut items = vec![];
+
+    for post in &item.bind().dependencies["notes"][page.range.clone()] {
         let mut itm = BTreeMap::new();
 
         if let Some(meta) = post.extensions.get::<item::Metadata>() {
@@ -149,8 +265,80 @@ fn main() {
         .source(source::select("scss/**/*.scss".parse::<Glob>().unwrap()))
         .handler(scss::scss("scss/screen.scss", "css/screen.css"));
 
-    // let pages = _;
-    // let notes = _;
+    let pages =
+        Rule::new("pages")
+        .depends_on(&templates)
+        .source(source::select("pages/*.markdown".parse::<Glob>().unwrap()))
+        .handler(Chain::new()
+            .link(binding::parallel_each(Chain::new()
+                .link(item::read)
+                .link(item::parse_metadata)
+                .link(item::date)))
+            // TODO: replace with some sort of filter/only_if
+            // .link(binding::retain(item::publishable))
+            .link(binding::parallel_each(Chain::new()
+                .link(item::markdown)
+                .link(|item: &mut Item| -> diecast::Result {
+                    item.route.route_with(|path: &Path| -> PathBuf {
+                        let mut result = path.with_extension("");
+                        let name = result.file_name().unwrap();
+                        let mut res = PathBuf::from(name);
+                        res.push("index.html");
+                        res
+                    });
+
+                    Ok(())
+                })))
+            .link(ws::pipe(ws_tx.clone()))
+            .link(git::git)
+            .link(binding::parallel_each(Chain::new()
+                .link(hbs::render_template(&templates, "page", post_template))
+                .link(hbs::render_template(&templates, "layout", layout_template))
+                .link(item::write))));
+
+    let notes =
+        Rule::new("notes")
+        .depends_on(&templates)
+        .source(source::select("notes/*.markdown".parse::<Glob>().unwrap()))
+        .handler(Chain::new()
+            .link(binding::parallel_each(Chain::new()
+                .link(item::read)
+                .link(item::parse_metadata)
+                .link(item::date)))
+            // TODO: replace with some sort of filter/only_if
+            // .link(binding::retain(item::publishable))
+            .link(binding::tags)
+            .link(binding::parallel_each(Chain::new()
+                .link(item::markdown)
+                .link(route::pretty)))
+            .link(ws::pipe(ws_tx.clone()))
+            .link(git::git)
+            .link(binding::parallel_each(Chain::new()
+                .link(hbs::render_template(&templates, "note", post_template))
+                .link(hbs::render_template(&templates, "layout", layout_template))
+                .link(item::write)))
+            .link(binding::next_prev)
+            .link(binding::sort_by(|a, b| {
+                let a = a.extensions.get::<chrono::NaiveDate>().unwrap();
+                let b = b.extensions.get::<chrono::NaiveDate>().unwrap();
+                b.cmp(a)
+            })));
+
+    let notes_index =
+        Rule::new("note index")
+        .depends_on(&notes)
+        .depends_on(&templates)
+        .source(source::paginate(&notes, 5, |page: usize| -> PathBuf {
+            if page == 0 {
+                PathBuf::from("notes/index.html")
+            } else {
+                PathBuf::from(&format!("notes/{}/index.html", page))
+            }
+        }))
+        .handler(binding::parallel_each(Chain::new()
+            .link(hbs::render_template(&templates, "index", notes_index_template))
+            .link(hbs::render_template(&templates, "layout", layout_template))
+            .link(item::write)));
 
     let posts =
         Rule::new("posts")
@@ -180,7 +368,40 @@ fn main() {
                 b.cmp(a)
             })));
 
-    let index =
+    let tags =
+        Rule::new("tag index")
+        .depends_on(&templates)
+        .depends_on(&posts)
+        .source(|bind: Arc<::diecast::binding::Data>| -> Vec<Item> {
+            let mut items = vec![];
+
+            if let Some(tags) = bind.dependencies["posts"].data().extensions.read().unwrap().get::<binding::Tags>() {
+                for (tag, itms) in &tags.map {
+                    let url = tag.chars()
+                        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+                        .map(|c| {
+                            let c = c.to_lowercase().next().unwrap();
+                            if c.is_whitespace() { '-' }
+                            else { c }
+                        })
+                        .collect::<String>();
+                    let mut item =
+                        Item::new(
+                            ::diecast::item::Route::Write(PathBuf::from(&format!("tags/{}/index.html", url))),
+                            bind.clone());
+                    item.extensions.insert::<Tag>(Tag { items: itms.clone() });
+                    items.push(item);
+                }
+            }
+
+            items
+        })
+        .handler(binding::parallel_each(Chain::new()
+            .link(hbs::render_template(&templates, "index", tags_index_template))
+            .link(hbs::render_template(&templates, "layout", layout_template))
+            .link(item::write)));
+
+    let posts_index =
         Rule::new("post index")
         .depends_on(&posts)
         .depends_on(&templates)
@@ -192,7 +413,7 @@ fn main() {
             }
         }))
         .handler(binding::parallel_each(Chain::new()
-            .link(hbs::render_template(&templates, "index", index_template))
+            .link(hbs::render_template(&templates, "index", posts_index_template))
             .link(hbs::render_template(&templates, "layout", layout_template))
             .link(item::write)));
 
@@ -211,8 +432,12 @@ fn main() {
     command.site().register(templates);
     command.site().register(statics);
     command.site().register(scss);
+    command.site().register(pages);
     command.site().register(posts);
-    command.site().register(index);
+    command.site().register(posts_index);
+    command.site().register(tags);
+    command.site().register(notes);
+    command.site().register(notes_index);
 
     let start = PreciseTime::now();
 

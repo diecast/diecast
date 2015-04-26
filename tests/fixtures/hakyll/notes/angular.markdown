@@ -3,7 +3,9 @@ title = "Angular.js"
 published = "January 1, 2014"
 excerpt = "A framework for developing webapps"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 I've been meaning to learn Google's [Angular.js] framework for a while now. I of course have experience with straight up jQuery, but that inevitably becomes a mishmash of code. I do have some experience with [Backbone.js], which has been [battle tested] on many of websites such as Pandora, but something about angular seems a bit cleaner.

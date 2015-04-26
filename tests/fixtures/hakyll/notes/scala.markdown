@@ -3,7 +3,9 @@ title = "Scala"
 published = "October 12, 2013"
 excerpt = "Promising mixture of OO and FP"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 I've been meaning to learn Scala for some time. Haskell has really left me wanting to program in a very functional style, and it seems like Scala is used more in the industry than Haskell. Scala seems to provide a decent compromise in a language that mixes object-oriented programming with functional programming characteristics. Furthermore, the JVM is battle-tested and probably the most robust virtual machine of any language out there at the moment.

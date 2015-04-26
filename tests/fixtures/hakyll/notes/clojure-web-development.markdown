@@ -3,7 +3,9 @@ title = "Clojure Web Development"
 published = "July 2, 2014"
 excerpt = "Exploring the rich Clojure web development environment"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 I've noticed a lot of very interesting ideas coming out of the Clojure web development environment lately, so I decided to explore this space after [learning about Clojure](/notes/clojure/).

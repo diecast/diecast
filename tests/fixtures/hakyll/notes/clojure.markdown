@@ -3,7 +3,9 @@ title = "Clojure"
 published = "April 6, 2014"
 excerpt = "A lisp-inspired, dynamic JVM language"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 Recently I've been thinking about my opinions on the various languages I know, particularly with regards to which I should focus on, and I decided that knowing a JVM language would be very beneficial because of how robust and time-proven the JVM is, especially compared to other language VMs. For this reason I considered Scala and Clojure, and Scala seemed more like Haskell to me so I decided to [go with that one first].

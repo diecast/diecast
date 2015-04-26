@@ -3,7 +3,9 @@ title = "Rust"
 published = "December 29, 2013"
 excerpt = "An exciting multiparadigm language from Mozilla"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 I took a shot at [learning Go] recently and I found its simplicity to be refreshing. Rust is a similar language from Mozilla which I've been interested in for a while now.

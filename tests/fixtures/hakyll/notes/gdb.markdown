@@ -3,7 +3,9 @@ title = "GDB"
 published = "February 18, 2014"
 excerpt = "Because printf-debugging is tedious"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 It seems that using a debugger like the [GNU Debugger] (GDB) has become something of a lost art for the generation of developers whom are more involved with higher-level languages. Instead, it seems many people resort to so-called `printf`-debugging, where one places print statements all over the place to sort of trace the state of the program's execution at any given moment. Of course, this is very tedious, and can be done more naturally and efficiently with a dedicated debugger.

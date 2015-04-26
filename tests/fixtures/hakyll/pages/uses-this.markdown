@@ -1,6 +1,6 @@
 ---
 title = "Uses This"
-published = "2013-04-21"
+published = "March 21, 2013"
 comments = false
 ---
 

@@ -5,9 +5,9 @@ use git2;
 use diecast::{self, Handle, Item, Bind};
 
 #[derive(Clone)]
-struct Git {
-    sha: git2::Oid,
-    message: String,
+pub struct Git {
+    pub sha: git2::Oid,
+    pub message: String,
 }
 
 pub fn git(bind: &mut Bind) -> diecast::Result {

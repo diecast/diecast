@@ -9,7 +9,10 @@ use anymap::any::CloneAny;
 use item::{Item, Route};
 use configuration::Configuration;
 
-pub enum Build { Full, Update(PathBuf), }
+pub enum Build {
+    Full,
+    Update(PathBuf),
+}
 
 // FIXME
 // problem is that an item handler can easily change

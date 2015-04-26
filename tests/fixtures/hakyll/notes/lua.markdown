@@ -3,7 +3,6 @@ title = "Lua"
 published = "September 1, 2013"
 excerpt = "Embedding Lua JIT into a C++ project"
 comments = false
-toc = "off"
 ---
 
 LuaJIT has an FFI which allows code to be JIT compiled, whereas regular C API calls aren't [^jit]:

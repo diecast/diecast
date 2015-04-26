@@ -3,7 +3,9 @@ title = "Swift"
 published = "July 5, 2014"
 excerpt = "A surprising new language from Apple"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 People have been wishing for a new language to work with in the Apple environment. There were rumors that Ruby would be chosen, but that didn't seem to pan-out. Instead, a variety of different companies have created products that allow different languages to compile to iOS, such as [Xamarin], [RubyMotion], and many others, particularly game engines like [Unity] and the [Unreal Engine].

@@ -3,7 +3,9 @@ title = "Haskell"
 published = "March 5, 2014"
 excerpt = "An exceedingly elegant functional programming language"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 I originally chose [Erlang] as the first functional programming language to attempt learning. However, the combination of different programming paradigm, obscure Prolog-like syntax, and unfamiliar concurrency paradigm made it particularly difficult for me to see the big picture of functional programming.

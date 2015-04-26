@@ -38,7 +38,7 @@ impl Site {
 }
 
 impl Site {
-    pub fn build(&mut self) {
+    fn prepare(&mut self) {
         // TODO: clean out the output directory here to avoid cruft and conflicts
         trace!("cleaning out directory");
         self.clean();
@@ -47,28 +47,27 @@ impl Site {
 
         for rule in &self.rules {
             // FIXME: this just seems weird re: strings
-            self.manager.add(&rule);
+           self.manager.add(&rule);
         }
 
         trace!("creating output directory at {:?}", &self.configuration.output);
 
-        // TODO: need a way to determine if there are no jobs
         // create the output directory
-        // don't unwrap to ignore "already exists" error
-        // FIXME: do and_then
-        if let Some(path) = self.configuration.output.parent() {
-            if let Some("") = path.to_str() {
-                ::mkdir_p(&self.configuration.output).unwrap();
-            }
-        } else {
-            ::mkdir_p(&self.configuration.output).unwrap();
-        }
+        ::mkdir_p(&self.configuration.output).unwrap();
 
         // TODO: use resolve_from for partial builds?
         trace!("resolving graph");
+    }
 
+    pub fn build(&mut self) {
+        self.prepare();
         self.manager.execute();
     }
+
+    // pub fn update(&mut self, path: &Path) {
+    //     self.prepare();
+    //     self.manager.execute_from(path);
+    // }
 
     pub fn register(&mut self, rule: Rule) {
         if !rule.dependencies().is_empty() {

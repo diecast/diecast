@@ -3,7 +3,10 @@ title = "Game Development"
 published = "September 6, 2013"
 excerpt = "My experiences from creating a game"
 comments = false
-toc = "right"
+
+[toc]
+show = true
+align = "right"
 ---
 
 * toc

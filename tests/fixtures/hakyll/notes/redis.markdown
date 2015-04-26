@@ -3,7 +3,9 @@ title = "Redis"
 published = "April 19, 2014"
 excerpt = "An in-memory data-structure server"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 [Redis] is a data structure server. It can be used to speed up operations that might be too simple for a heavy handed traditional database. It supports strings, lists, ordered and unordered sets, and hashes. This is meant to provide an overview of the data structures and commands available to Redis. The full list of commands is available in the [documentation].

@@ -8,7 +8,10 @@ use websocket::{Server, Message, Sender};
 use websocket::server::request::RequestUri;
 use websocket::result::WebSocketError;
 
+use toml;
+
 use diecast::{self, Handle, Bind};
+use diecast::util::handle::item;
 
 // TODO
 // this preferably shouldn't have to be in an arc mutex
@@ -32,6 +35,12 @@ impl Handle<Bind> for WebsocketPipe {
         };
 
         for item in bind {
+            if let Some(meta) = item.extensions.get::<item::Metadata>() {
+                if meta.data.lookup("push").and_then(toml::Value::as_bool).unwrap_or(true) {
+                    continue;
+                }
+            }
+
             let uri = format!("/{}", item.route.reading().unwrap().display());
 
             ws_tx.send(Update {

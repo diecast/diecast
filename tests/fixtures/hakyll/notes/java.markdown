@@ -3,7 +3,9 @@ title = "Java"
 published = "July 6, 2014"
 excerpt = "A recap of a traditional language"
 comments = false
-toc = "left"
+
+[toc]
+show = true
 ---
 
 Java is considered by many to be a very boring language, relegated to insurance applications---or the enterprise in general. Compared to many other languages, it's dry and monotone. It has a reputation of being over-engineered, being home to the classic `FactoryFactory` joke [^over_engineered]. In the past, programs written in Java were generally regarded as being slow and bloated resource hogs.

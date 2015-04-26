@@ -189,7 +189,7 @@ pub fn next_prev(bind: &mut Bind) -> handle::Result {
 
 #[derive(Clone)]
 pub struct Tags {
-    map: HashMap<String, Vec<Arc<Item>>>,
+    pub map: HashMap<String, Arc<Vec<Arc<Item>>>>,
 }
 
 pub fn tags(bind: &mut Bind) -> handle::Result {
@@ -214,7 +214,13 @@ pub fn tags(bind: &mut Bind) -> handle::Result {
         }
     }
 
-    bind.data().extensions.write().unwrap().insert::<Tags>(Tags { map: tag_map });
+    let mut arc_map = HashMap::new();
+
+    for (k, v) in tag_map {
+        arc_map.insert(k, Arc::new(v));
+    }
+
+    bind.data().extensions.write().unwrap().insert::<Tags>(Tags { map: arc_map });
 
     Ok(())
 }

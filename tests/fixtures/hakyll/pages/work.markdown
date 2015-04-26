@@ -1,6 +1,6 @@
 ---
 title = "Work"
-published = "2012-12-29"
+published = "December 29, 2012"
 comments = false
 toc = false
 ---
