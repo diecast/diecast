@@ -77,91 +77,96 @@ impl Command for Live {
     }
 
     fn run(&mut self) {
-        let (tx, rx) = channel();
-        let w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
+        let (e_tx, e_rx) = channel();
 
         let mut mount = Mount::new();
         mount.mount("/", Static::new(&self.site.configuration().output));
 
         let _guard = Iron::new(mount).http("0.0.0.0:3000").unwrap();
 
+        let target = self.site.configuration().input.clone();
+
+        thread::spawn(move || {
+            let (tx, rx) = channel();
+            let w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
+
+            match w {
+                Ok(mut watcher) => {
+                    match watcher.watch(&target) {
+                        Ok(_) => {},
+                        Err(_) => {
+                            println!("some error with the live command");
+                            ::std::process::exit(1);
+                        },
+                    }
+
+                    for event in rx.iter() {
+                        println!("got event for {:?}", event.path);
+
+                        match event.op {
+                            Ok(op) => {
+                                match op {
+                                    ::notify::op::CHMOD => trace!("Operation: chmod"),
+                                    ::notify::op::CREATE => trace!("Operation: create"),
+                                    ::notify::op::REMOVE => trace!("Operation: remove"),
+                                    ::notify::op::RENAME => trace!("Operation: rename"),
+                                    ::notify::op::WRITE => trace!("Operation: write"),
+                                    _ => trace!("Operation: unknown"),
+                                }
+                            },
+                            Err(e) => {
+                                match e {
+                                    ::notify::Error::Generic(e) => trace!("Error: {}", e),
+                                    ::notify::Error::Io(e) => trace!("Error: {:?}", e),
+                                    ::notify::Error::NotImplemented =>
+                                        trace!("Error: Not Implemented"),
+                                    ::notify::Error::PathNotFound =>
+                                        trace!("Error: Path Not Found"),
+                                    ::notify::Error::WatchNotFound =>
+                                        trace!("Error: Watch Not Found"),
+                                }
+                                println!("notification error");
+                                ::std::process::exit(1);
+                            }
+                        }
+
+                        e_tx.send((event, SteadyTime::now()));
+                    }
+                },
+                Err(_) => println!("Error"),
+            }
+        });
+
+        self.site.build();
+
         let mut last_event = SteadyTime::now();
         let debounce = Duration::seconds(1);
 
-        match w {
-            Ok(mut watcher) => {
-                match watcher.watch(&self.site.configuration().input) {
-                    Ok(_) => {},
-                    Err(_) => {
-                        println!("some error with the live command");
-                        ::std::process::exit(1);
-                    },
+        for (event, tm) in e_rx.iter() {
+            let delta = tm - last_event;
+
+            if delta < debounce {
+                continue;
+            }
+
+            if let Some(ref pattern) = self.site.configuration().ignore {
+                if event.path.as_ref().map(|p| pattern.matches(p)).unwrap_or(false) {
+                    continue;
                 }
+            }
 
-                self.site.build();
-
-                for event in rx.iter() {
-                    let current_time = SteadyTime::now();
-                    let delta = current_time - last_event;
-
-                    trace!("got event for {:?}", event.path);
-                    trace!("delta is {}", delta);
-
-                    if let Some(ref pattern) = self.site.configuration().ignore {
-                        if event.path.as_ref().map(|p| pattern.matches(p)).unwrap_or(false) {
-                            trace!("is ignored file; skipping");
-                            continue;
-                        }
-                    }
-
-                    match event.op {
-                        Ok(op) => {
-                            match op {
-                                ::notify::op::CHMOD => trace!("Operation: chmod"),
-                                ::notify::op::CREATE => trace!("Operation: create"),
-                                ::notify::op::REMOVE => trace!("Operation: remove"),
-                                ::notify::op::RENAME => trace!("Operation: rename"),
-                                ::notify::op::WRITE => trace!("Operation: write"),
-                                _ => trace!("Operation: unknown"),
-                            }
-                        },
-                        Err(e) => {
-                            match e {
-                                ::notify::Error::Generic(e) => trace!("Error: {}", e),
-                                ::notify::Error::Io(e) => trace!("Error: {:?}", e),
-                                ::notify::Error::NotImplemented =>
-                                    trace!("Error: Not Implemented"),
-                                ::notify::Error::PathNotFound =>
-                                    trace!("Error: Path Not Found"),
-                                ::notify::Error::WatchNotFound =>
-                                    trace!("Error: Watch Not Found"),
-                            }
-                            println!("notification error");
-                            ::std::process::exit(1);
-                        }
-                    }
-
-                    if delta < debounce {
-                        trace!("within debounce span; skipping");
-                        continue;
-                    }
-
-                    trace!("new event; setting new time ({} → {})", last_event, current_time);
-                    last_event = current_time;
-
-                    if let Some(ref path) = event.path {
-                        while !path.exists() {
-                            // TODO: this should probably be thread::yield_now
-                            thread::park_timeout_ms(10);
-                        }
-                    }
-
-                    // TODO
-                    // this would probably become something like self.site.update();
-                    self.site.build();
+            if let Some(ref path) = event.path {
+                while !path.exists() {
+                    // TODO: this should probably be thread::yield_now
+                    thread::park_timeout_ms(10);
                 }
-            },
-            Err(_) => println!("Error"),
+            }
+
+            // TODO
+            // this would probably become something like self.site.update();
+            self.site.build();
+
+            last_event = SteadyTime::now();
         }
     }
 }
