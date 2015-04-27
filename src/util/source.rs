@@ -92,74 +92,79 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 impl<R> Source for Paginate<R>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     fn source(&self, bind: Arc<binding::Data>) -> Vec<Item> {
-        let mut items = vec![];
-        let post_count = bind.dependencies[&self.target].iter().len();
-
-        let page_count = {
-            let (div, rem) = (post_count / self.factor, post_count % self.factor);
-
-            if rem == 0 {
-                div
-            } else {
-                div + 1
-            }
-        };
-
-        let last_num = page_count - 1;
-
-        let mut cache: HashMap<usize, Arc<PathBuf>> = HashMap::new();
-
-        let mut router = |num: usize| -> Arc<PathBuf> {
-            cache.entry(num)
-                .or_insert_with(|| Arc::new((self.router)(num)))
-                .clone()
-        };
-
-        let first = (1, router(1));
-        let last = (last_num, router(last_num));
-
-        // grow the number of pages as needed
-        for current in 0 .. page_count {
-            let prev =
-                if current == 0 { None }
-                else { let num = current - 1; Some((num, router(num))) };
-            let next =
-                if current == last_num { None }
-                else { let num = current + 1; Some((num, router(num))) };
-
-            let start = current * self.factor;
-            let end = ::std::cmp::min(post_count, (current + 1) * self.factor);
-
-            let target = router(current);
-
-            let first = first.clone();
-            let last = last.clone();
-            let curr = (current, target.clone());
-
-            let page_struct =
-                util::handle::item::Page {
-                    first: first,
-
-                    prev: prev,
-                    curr: curr,
-                    next: next,
-
-                    last: last,
-
-                    page_count: page_count,
-                    post_count: post_count,
-                    posts_per_page: self.factor,
-
-                    range: start .. end,
-                };
-
-            let mut page = Item::new(Route::Write((*target).clone()), bind.clone());
-            page.extensions.insert::<util::handle::item::Page>(page_struct);
-            items.push(page);
-        }
-
-        items
+        pages(bind.dependencies[&self.target].len(), self.factor, &self.router, bind)
     }
+}
+
+pub fn pages<R>(input: usize, factor: usize, router: &R, bind: Arc<binding::Data>) -> Vec<Item>
+where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
+    let mut items = vec![];
+    let post_count = input;
+
+    let page_count = {
+        let (div, rem) = (post_count / factor, post_count % factor);
+
+        if rem == 0 {
+            div
+        } else {
+            div + 1
+        }
+    };
+
+    let last_num = page_count - 1;
+
+    let mut cache: HashMap<usize, Arc<PathBuf>> = HashMap::new();
+
+    let mut router = |num: usize| -> Arc<PathBuf> {
+        cache.entry(num)
+            .or_insert_with(|| Arc::new(router(num)))
+            .clone()
+    };
+
+    let first = (1, router(1));
+    let last = (last_num, router(last_num));
+
+    // grow the number of pages as needed
+    for current in 0 .. page_count {
+        let prev =
+            if current == 0 { None }
+            else { let num = current - 1; Some((num, router(num))) };
+        let next =
+            if current == last_num { None }
+            else { let num = current + 1; Some((num, router(num))) };
+
+        let start = current * factor;
+        let end = ::std::cmp::min(post_count, (current + 1) * factor);
+
+        let target = router(current);
+
+        let first = first.clone();
+        let last = last.clone();
+        let curr = (current, target.clone());
+
+        let page_struct =
+            util::handle::item::Page {
+                first: first,
+
+                prev: prev,
+                curr: curr,
+                next: next,
+
+                last: last,
+
+                page_count: page_count,
+                post_count: post_count,
+                posts_per_page: factor,
+
+                range: start .. end,
+            };
+
+        let mut page = Item::new(Route::Write((*target).clone()), bind.clone());
+        page.extensions.insert::<util::handle::item::Page>(page_struct);
+        items.push(page);
+    }
+
+    items
 }
 
 // TODO: this should actually use a Dependency -> name trait

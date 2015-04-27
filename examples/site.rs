@@ -89,11 +89,14 @@ fn post_template(item: &Item) -> Json {
             let tags = tags.iter().map(|t| {
                 let tag = t.as_str().unwrap();
                 let url = tag.chars()
-                    .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-                    .map(|c| {
-                        let c = c.to_lowercase().next().unwrap();
-                        if c.is_whitespace() { '-' }
-                        else { c }
+                    .filter_map(|c| {
+                        if c.is_alphanumeric() || c.is_whitespace() {
+                            let c = c.to_lowercase().next().unwrap();
+                            if c.is_whitespace() { Some('-') }
+                            else { Some(c) }
+                        } else {
+                            None
+                        }
                     })
                     .collect::<String>();
                 // TODO: sanitize the tag url
@@ -143,12 +146,12 @@ fn posts_index_template(item: &Item) -> Json {
 
 fn tags_index_template(item: &Item) -> Json {
     // TODO: how to paginate as well??
-    // let page = item.extensions.get::<item::Page>().unwrap();
+    let page = item.extensions.get::<item::Page>().unwrap();
     let mut bt = BTreeMap::new();
     let mut items = vec![];
 
     if let Some(tag) = item.extensions.get::<Tag>() {
-        for post in tag.items.iter() {
+        for post in &tag.items[page.range.clone()] {
             let mut itm = BTreeMap::new();
 
             if let Some(meta) = post.extensions.get::<item::Metadata>() {
@@ -167,13 +170,13 @@ fn tags_index_template(item: &Item) -> Json {
 
     bt.insert(String::from("items"), items.to_json());
 
-    // if let Some((_, ref path)) = page.prev {
-    //     bt.insert(String::from("prev"), path.parent().unwrap().to_str().unwrap().to_json());
-    // }
+    if let Some((_, ref path)) = page.prev {
+        bt.insert(String::from("prev"), path.parent().unwrap().to_str().unwrap().to_json());
+    }
 
-    // if let Some((_, ref path)) = page.next {
-    //     bt.insert(String::from("next"), path.parent().unwrap().to_str().unwrap().to_json());
-    // }
+    if let Some((_, ref path)) = page.next {
+        bt.insert(String::from("next"), path.parent().unwrap().to_str().unwrap().to_json());
+    }
 
     Json::Object(bt)
 }
@@ -368,39 +371,6 @@ fn main() {
                 b.cmp(a)
             })));
 
-    let tags =
-        Rule::new("tag index")
-        .depends_on(&templates)
-        .depends_on(&posts)
-        .source(|bind: Arc<::diecast::binding::Data>| -> Vec<Item> {
-            let mut items = vec![];
-
-            if let Some(tags) = bind.dependencies["posts"].data().extensions.read().unwrap().get::<binding::Tags>() {
-                for (tag, itms) in &tags.map {
-                    let url = tag.chars()
-                        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-                        .map(|c| {
-                            let c = c.to_lowercase().next().unwrap();
-                            if c.is_whitespace() { '-' }
-                            else { c }
-                        })
-                        .collect::<String>();
-                    let mut item =
-                        Item::new(
-                            ::diecast::item::Route::Write(PathBuf::from(&format!("tags/{}/index.html", url))),
-                            bind.clone());
-                    item.extensions.insert::<Tag>(Tag { items: itms.clone() });
-                    items.push(item);
-                }
-            }
-
-            items
-        })
-        .handler(binding::parallel_each(Chain::new()
-            .link(hbs::render_template(&templates, "index", tags_index_template))
-            .link(hbs::render_template(&templates, "layout", layout_template))
-            .link(item::write)));
-
     let posts_index =
         Rule::new("post index")
         .depends_on(&posts)
@@ -414,6 +384,52 @@ fn main() {
         }))
         .handler(binding::parallel_each(Chain::new()
             .link(hbs::render_template(&templates, "index", posts_index_template))
+            .link(hbs::render_template(&templates, "layout", layout_template))
+            .link(item::write)));
+
+    fn tag_index(bind: Arc<::diecast::binding::Data>) -> Vec<Item> {
+        let mut items = vec![];
+
+        if let Some(tags) = bind.dependencies["posts"].data().extensions.read().unwrap().get::<binding::Tags>() {
+            for (tag, itms) in &tags.map {
+                let url = tag.chars()
+                    .filter_map(|c| {
+                        if c.is_alphanumeric() || c.is_whitespace() {
+                            let c = c.to_lowercase().next().unwrap();
+                            if c.is_whitespace() { Some('-') }
+                            else { Some(c) }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<String>();
+                let mut pgs = source::pages(itms.len(), 5, &move |page: usize| -> PathBuf {
+                    if page == 0 {
+                        PathBuf::from(&format!("tags/{}/index.html", url))
+                    } else {
+                        PathBuf::from(&format!("tags/{}/{}/index.html", url, page))
+                    }
+                }, bind.clone());
+
+                for item in &mut pgs {
+                    item.extensions.insert::<Tag>(Tag { items: itms.clone() });
+                }
+
+                items.extend(pgs.into_iter());
+            }
+        }
+
+        items
+    }
+
+    // TODO: this should be expressed in such a way that it is possible to paginate
+    let tags =
+        Rule::new("tag index")
+        .depends_on(&templates)
+        .depends_on(&posts)
+        .source(tag_index)
+        .handler(binding::parallel_each(Chain::new()
+            .link(hbs::render_template(&templates, "index", tags_index_template))
             .link(hbs::render_template(&templates, "layout", layout_template))
             .link(item::write)));
 

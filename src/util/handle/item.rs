@@ -155,6 +155,7 @@ pub fn publishable(item: &Item) -> bool {
     !(is_draft(item) && !item.bind().configuration.is_preview)
 }
 
+// TODO: should this just contain the items itself instead of the range?
 #[derive(Clone)]
 pub struct Page {
     pub first: (usize, Arc<PathBuf>),
