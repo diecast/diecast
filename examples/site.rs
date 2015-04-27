@@ -220,6 +220,13 @@ fn layout_template(item: &Item) -> Json {
 
     bt.insert(String::from("body"), item.body.to_json());
 
+    // this should probably go in post template handler
+    // move partial load to post template
+    if let Some(path) = item.route.reading() {
+        println!("inserting path for {:?}", item);
+        bt.insert(String::from("path"), path.to_str().unwrap().to_json());
+    }
+
     Json::Object(bt)
 }
 

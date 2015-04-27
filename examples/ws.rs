@@ -36,7 +36,7 @@ impl Handle<Bind> for WebsocketPipe {
 
         for item in bind {
             if let Some(meta) = item.extensions.get::<item::Metadata>() {
-                if meta.data.lookup("push").and_then(toml::Value::as_bool).unwrap_or(true) {
+                if !meta.data.lookup("push").and_then(toml::Value::as_bool).unwrap_or(true) {
                     continue;
                 }
             }
@@ -74,7 +74,7 @@ pub fn init() -> mpsc::Sender<Update> {
             if let Some(channels) = reader.get_mut(&update.url) {
                 for (addr, sender) in channels.iter_mut() {
                     match sender.send_message(Message::Text(update.body.clone())) {
-                        Ok(()) => (),
+                        Ok(()) => println!("sent new"),
                         // handle the case where the user disconnected
                         Err(WebSocketError::IoError(e)) => {
                             if let ::std::io::ErrorKind::BrokenPipe = e.kind() {
