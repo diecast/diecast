@@ -47,6 +47,7 @@ mod git;
 
 #[derive(Clone)]
 pub struct Tag {
+    pub tag: String,
     pub items: Arc<Vec<Arc<Item>>>,
 }
 
@@ -149,10 +150,13 @@ fn tags_index_template(item: &Item) -> Json {
     let page = item.extensions.get::<item::Page>().unwrap();
     let mut bt = BTreeMap::new();
     let mut items = vec![];
+    let mut tg = String::new();
 
     if let Some(tag) = item.extensions.get::<Tag>() {
         for post in &tag.items[page.range.clone()] {
             let mut itm = BTreeMap::new();
+
+            tg = tag.tag.clone();
 
             if let Some(meta) = post.extensions.get::<item::Metadata>() {
                 if let Some(title) = meta.data.lookup("title") {
@@ -168,6 +172,7 @@ fn tags_index_template(item: &Item) -> Json {
         }
     }
 
+    bt.insert(String::from("tag"), tg.to_json());
     bt.insert(String::from("items"), items.to_json());
 
     if let Some((_, ref path)) = page.prev {
@@ -197,6 +202,26 @@ fn notes_index_template(item: &Item) -> Json {
             if let Some(path) = post.route.writing() {
                 itm.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
             }
+
+            if let Some(date) = item.extensions.get::<chrono::NaiveDate>() {
+                bt.insert(String::from("date"), date.format("%B %e, %Y").to_string().to_json());
+            }
+
+            if let Some(git) = item.extensions.get::<Arc<git::Git>>() {
+                let sha = git.sha.to_string().chars().take(7).collect::<String>();
+                let path = item.source().unwrap();
+
+                // TODO: change the url and branch when ready
+                let res =
+                    format!(
+    "<a href=\"https://github.com/blaenk/diecast/commits/master/{}\">History</a>\
+    <span class=\"hash\">, \
+    <a href=\"https://github.com/blaenk/diecast/commit/{}\" title=\"{}\">{}</a>\
+    </span>",
+                    path.to_str().unwrap(), sha, git.message, sha);
+
+                bt.insert(String::from("git"), res.to_json());
+            }
         }
 
         items.push(itm);
@@ -223,8 +248,11 @@ fn layout_template(item: &Item) -> Json {
     // this should probably go in post template handler
     // move partial load to post template
     if let Some(path) = item.route.reading() {
-        println!("inserting path for {:?}", item);
         bt.insert(String::from("path"), path.to_str().unwrap().to_json());
+    }
+
+    if let Some(path) = item.route.writing() {
+        bt.insert(String::from("url"), format!("{}/", path.parent().unwrap().to_str().unwrap()).to_json());
     }
 
     Json::Object(bt)
@@ -419,7 +447,7 @@ fn main() {
                 }, bind.clone());
 
                 for item in &mut pgs {
-                    item.extensions.insert::<Tag>(Tag { items: itms.clone() });
+                    item.extensions.insert::<Tag>(Tag { tag: tag.clone(), items: itms.clone() });
                 }
 
                 items.extend(pgs.into_iter());
@@ -436,7 +464,7 @@ fn main() {
         .depends_on(&posts)
         .source(tag_index)
         .handler(binding::parallel_each(Chain::new()
-            .link(hbs::render_template(&templates, "index", tags_index_template))
+            .link(hbs::render_template(&templates, "tags", tags_index_template))
             .link(hbs::render_template(&templates, "layout", layout_template))
             .link(item::write)));
 
