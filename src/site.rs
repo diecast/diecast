@@ -40,10 +40,6 @@ impl Site {
 
 impl Site {
     fn prepare(&mut self) {
-        // TODO: clean out the output directory here to avoid cruft and conflicts
-        // trace!("cleaning out directory");
-        // self.clean();
-
         trace!("finding jobs");
 
         for rule in &self.rules {
@@ -61,8 +57,12 @@ impl Site {
     }
 
     pub fn build(&mut self) {
+        // TODO: clean out the output directory here to avoid cruft and conflicts
+        // trace!("cleaning out directory");
+        self.clean();
+
         self.prepare();
-        self.manager.execute();
+        self.manager.build();
     }
 
     pub fn update(&mut self, path: &Path) {
@@ -96,6 +96,8 @@ impl Site {
             remove_dir_all,
             remove_file,
         };
+
+        trace!("cleaning");
 
         if !self.configuration.output.exists() {
             return;

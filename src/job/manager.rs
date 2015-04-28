@@ -144,7 +144,7 @@ where E: Evaluator {
         assert!(job_map.is_empty(), "not all jobs were sorted!");
     }
 
-    pub fn execute(&mut self) {
+    pub fn build(&mut self) {
         if self.count == 0 {
             println!("there is nothing to do");
             return;
@@ -311,7 +311,11 @@ where E: Evaluator {
 
                     // if there's no handler then no need to dispatch a job
                     // or anything like that
-                    self.waiting.push_front(Job::new(bind.data().clone(), rule.get_source().clone(), rule.get_handler().clone()));
+                    self.waiting.push_front(
+                        Job::new(
+                            bind.data().clone(),
+                            rule.get_source().clone(),
+                            rule.get_handler().clone()));
                 }
 
                 println!("waiting: {:?}", self.waiting);
