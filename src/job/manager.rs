@@ -209,9 +209,8 @@ where E: Evaluator {
                     return false;
                 }
 
-                let items = rule.get_source().source(bind.get_data());
-
-                items.iter().find(|&item| {
+                rule.get_source().source(bind.get_data()).iter()
+                .find(|&item| {
                     let p: &Path = &item.source().unwrap();
                     println!(" checking path {:?}", p);
                     p == path
