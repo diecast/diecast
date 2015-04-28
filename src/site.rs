@@ -1,6 +1,7 @@
 //! Site generation.
 
 use std::sync::Arc;
+use std::path::Path;
 use std::collections::HashSet;
 
 use job::{self, Job};
@@ -14,7 +15,7 @@ use rule::Rule;
 /// the compiler chain.
 pub struct Site {
     configuration: Arc<Configuration>,
-    rules: Vec<Rule>,
+    rules: Vec<Arc<Rule>>,
     // manager: job::Manager<VecDeque<job::Job>>,
     manager: job::Manager<job::evaluator::Pool<Job>>,
 }
@@ -40,14 +41,14 @@ impl Site {
 impl Site {
     fn prepare(&mut self) {
         // TODO: clean out the output directory here to avoid cruft and conflicts
-        trace!("cleaning out directory");
-        self.clean();
+        // trace!("cleaning out directory");
+        // self.clean();
 
         trace!("finding jobs");
 
         for rule in &self.rules {
-            // FIXME: this just seems weird re: strings
-           self.manager.add(&rule);
+           // FIXME: this just seems weird re: strings
+           self.manager.add(rule.clone());
         }
 
         trace!("creating output directory at {:?}", &self.configuration.output);
@@ -64,10 +65,11 @@ impl Site {
         self.manager.execute();
     }
 
-    // pub fn update(&mut self, path: &Path) {
-    //     self.prepare();
-    //     self.manager.execute_from(path);
-    // }
+    pub fn update(&mut self, path: &Path) {
+        println!("UPDATING: {:?}", path);
+        self.prepare();
+        self.manager.update(path);
+    }
 
     pub fn register(&mut self, rule: Rule) {
         if !rule.dependencies().is_empty() {
@@ -80,7 +82,7 @@ impl Site {
             }
         }
 
-        self.rules.push(rule);
+        self.rules.push(Arc::new(rule));
     }
 
     pub fn configuration(&self) -> Arc<Configuration> {

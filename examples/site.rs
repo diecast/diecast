@@ -279,14 +279,14 @@ fn main() {
     println!("pig server initialized");
 
     let templates =
-        Rule::new("templates")
+        Rule::read("templates")
         .source(source::select("templates/*.html".parse::<Glob>().unwrap()))
         .handler(Chain::new()
             .link(binding::each(item::read))
             .link(hbs::register_templates));
 
     let statics =
-        Rule::new("statics")
+        Rule::read("statics")
         .source(source::select(or!(
             "images/**/*".parse::<Glob>().unwrap(),
             "static/**/*".parse::<Glob>().unwrap(),
@@ -299,12 +299,12 @@ fn main() {
             .link(item::copy)));
 
     let scss =
-        Rule::new("scss")
+        Rule::read("scss")
         .source(source::select("scss/**/*.scss".parse::<Glob>().unwrap()))
         .handler(scss::scss("scss/screen.scss", "css/screen.css"));
 
     let pages =
-        Rule::new("pages")
+        Rule::read("pages")
         .depends_on(&templates)
         .source(source::select("pages/*.markdown".parse::<Glob>().unwrap()))
         .handler(Chain::new()
@@ -335,7 +335,7 @@ fn main() {
                 .link(item::write))));
 
     let notes =
-        Rule::new("notes")
+        Rule::read("notes")
         .depends_on(&templates)
         .source(source::select("notes/*.markdown".parse::<Glob>().unwrap()))
         .handler(Chain::new()
@@ -363,7 +363,7 @@ fn main() {
             })));
 
     let notes_index =
-        Rule::new("note index")
+        Rule::create("note index")
         .depends_on(&notes)
         .depends_on(&templates)
         .source(source::paginate(&notes, 5, |page: usize| -> PathBuf {
@@ -379,7 +379,7 @@ fn main() {
             .link(item::write)));
 
     let posts =
-        Rule::new("posts")
+        Rule::read("posts")
         .depends_on(&templates)
         .source(source::select("posts/*.markdown".parse::<Glob>().unwrap()))
         .handler(Chain::new()
@@ -407,7 +407,7 @@ fn main() {
             })));
 
     let posts_index =
-        Rule::new("post index")
+        Rule::create("post index")
         .depends_on(&posts)
         .depends_on(&templates)
         .source(source::paginate(&posts, 5, |page: usize| -> PathBuf {
@@ -459,7 +459,7 @@ fn main() {
 
     // TODO: this should be expressed in such a way that it is possible to paginate
     let tags =
-        Rule::new("tag index")
+        Rule::create("tag index")
         .depends_on(&templates)
         .depends_on(&posts)
         .source(tag_index)

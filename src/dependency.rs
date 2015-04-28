@@ -100,6 +100,10 @@ where T: Ord + Clone + Hash {
         Topological::new(self).from(node)
     }
 
+    pub fn resolve_all(&self, nodes: Vec<T>) -> Result<VecDeque<T>, VecDeque<T>> {
+        Topological::new(self).from_several(nodes)
+    }
+
     /// Topological ordering of the entire graph.
     pub fn resolve(&self) -> Result<VecDeque<T>, VecDeque<T>> {
         Topological::new(self).all()
@@ -196,6 +200,18 @@ where T: Ord + Clone + Hash {
         let mut order = VecDeque::new();
 
         try!(self.dfs(node, &mut order));
+
+        Ok(order)
+    }
+
+    pub fn from_several(mut self, nodes: Vec<T>) -> Result<Order<T>, Cycle<T>> {
+        let mut order = VecDeque::new();
+
+        for node in nodes {
+            if !self.visited.contains(&node) {
+                try!(self.dfs(node, &mut order));
+            }
+        }
 
         Ok(order)
     }

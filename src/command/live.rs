@@ -101,8 +101,6 @@ impl Command for Live {
                     }
 
                     for event in rx.iter() {
-                        println!("got event for {:?}", event.path);
-
                         match event.op {
                             Ok(op) => {
                                 match op {
@@ -130,6 +128,7 @@ impl Command for Live {
                             }
                         }
 
+                        trace!("sending event");
                         e_tx.send((event, SteadyTime::now()));
                     }
                 },
@@ -138,19 +137,24 @@ impl Command for Live {
         });
 
         self.site.build();
+        println!("finished building");
 
         let mut last_event = SteadyTime::now();
         let debounce = Duration::seconds(1);
 
         for (event, tm) in e_rx.iter() {
+            trace!("received event");
+
             let delta = tm - last_event;
 
             if delta < debounce {
+                trace!("debounced");
                 continue;
             }
 
             if let Some(ref pattern) = self.site.configuration().ignore {
                 if event.path.as_ref().map(|p| pattern.matches(p)).unwrap_or(false) {
+                    trace!("ignored");
                     continue;
                 }
             }
@@ -162,11 +166,17 @@ impl Command for Live {
                 }
             }
 
+            trace!("updating");
+
             // TODO
             // this would probably become something like self.site.update();
-            self.site.build();
+            self.site.update(&event.path.unwrap());
+
+            trace!("finished updating");
 
             last_event = SteadyTime::now();
         }
+
+        panic!("exited live loop");
     }
 }

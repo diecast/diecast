@@ -39,14 +39,18 @@ impl Job {
     }
 
     pub fn process(&mut self) -> handle::Result {
-        let data = Arc::new(self.bind.clone());
-        let mut binding = Bind::new(self.source.source(data.clone()), data.clone());
+        if let Some(ref mut binding) = self.binding {
+            self.handler.handle(binding)
+        } else {
+            let data = Arc::new(self.bind.clone());
+            let mut binding = Bind::new(self.source.source(data.clone()), data.clone());
 
-        let res = self.handler.handle(&mut binding);
+            let res = self.handler.handle(&mut binding);
 
-        self.binding = Some(binding);
+            self.binding = Some(binding);
 
-        res
+            res
+        }
     }
 }
 

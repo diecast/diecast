@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use std::path::PathBuf;
 use std::slice;
+use std::fmt;
 
 use anymap::Map;
 use anymap::any::CloneAny;
@@ -60,6 +61,10 @@ impl Bind {
         &self.data
     }
 
+    pub fn get_data(&self) -> Arc<Data> {
+        self.data.clone()
+    }
+
     pub fn spawn(&self, route: Route) -> Item {
         Item::new(route, self.data.clone())
     }
@@ -94,6 +99,12 @@ impl<'a> IntoIterator for &'a mut Bind {
 
     fn into_iter(self) -> slice::IterMut<'a, Item> {
         self.items.iter_mut()
+    }
+}
+
+impl fmt::Debug for Bind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {:?}", self.data().name, self.items)
     }
 }
 

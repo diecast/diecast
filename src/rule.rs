@@ -8,6 +8,11 @@ use source::Source;
 use util;
 use handle::Handle;
 
+pub enum Kind {
+    Read,
+    Create,
+}
+
 /// Represents a rule that the static site generator must follow.
 ///
 /// A rule consists of a name and handler, as well as any dependencies
@@ -17,19 +22,32 @@ pub struct Rule {
     source: Arc<Box<Source + Sync + Send>>,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
+    kind: Kind,
 }
 
 impl Rule {
     /// Requires the name of the rule.
     ///
     /// The parameter type can be an `&str` or `String`.
-    pub fn new<S>(name: S) -> Rule
+    pub fn read<S>(name: S) -> Rule
     where S: Into<String> {
         Rule {
             name: name.into(),
             source: Arc::new(Box::new(util::source::none)),
             handler: Arc::new(Box::new(util::handle::binding::stub)),
             dependencies: HashSet::new(),
+            kind: Kind::Read,
+        }
+    }
+
+    pub fn create<S>(name: S) -> Rule
+    where S: Into<String> {
+        Rule {
+            name: name.into(),
+            source: Arc::new(Box::new(util::source::none)),
+            handler: Arc::new(Box::new(util::handle::binding::stub)),
+            dependencies: HashSet::new(),
+            kind: Kind::Create,
         }
     }
 
@@ -65,6 +83,10 @@ impl Rule {
     }
 
     // accessors
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
