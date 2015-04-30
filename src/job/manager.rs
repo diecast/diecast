@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::path::{Path, PathBuf};
-use std::collections::{BTreeMap, VecDeque, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque, HashMap, HashSet};
 use std::mem;
 
 use configuration::Configuration;
@@ -132,7 +132,7 @@ where E: Evaluator {
                 let count = self.graph.dependency_count(&name);
                 trace!("{} has {} dependencies", name, count);
 
-                *self.dependencies.entry(name.clone()).or_insert(0) += count;
+                *self.dependencies.entry(name).or_insert(0) += count;
 
                 return job;
             })
@@ -149,7 +149,7 @@ where E: Evaluator {
             return;
         }
 
-        match self.graph.resolve() {
+        match self.graph.resolve_all() {
             Ok(order) => {
                 self.sort_jobs(order);
 
@@ -180,6 +180,7 @@ where E: Evaluator {
         self.reset();
     }
 
+    // TODO paths ref
     pub fn update(&mut self, paths: HashSet<PathBuf>) {
         if self.count == 0 {
             println!("there is nothing to do");
@@ -195,27 +196,6 @@ where E: Evaluator {
         // FIXME
         // build() should clean
         // update() should not clean
-
-        let (matched, didnt): (Vec<Bind>, Vec<Bind>) =
-            self.finished.values().cloned()
-            .map(|a| (*a).clone())
-            .partition(|bind| {
-                let rule = &self.rules[&bind.data().name];
-
-                if let &rule::Kind::Create = rule.kind() {
-                    return false;
-                }
-
-                rule.get_source().source(bind.get_data()).iter()
-                .find(|&item| {
-                    // https://github.com/rust-lang/rust/issues/24969
-                    paths.contains(&item.source().unwrap())
-                }).is_some()
-            });
-
-        // TODO
-        // get topological order sourced from each binding in `matched`
-        // and combine them somehow
 
         // TODO
         // * CANDIDATES: subset of binds that are Kind::Read
@@ -263,41 +243,49 @@ where E: Evaluator {
         // * in particular the above is true because we can't get the
         //   binding.data arc; expose new method for this?
 
+        let mut matched = vec![];
+        let mut didnt = BTreeSet::new();
+
+        for bind in self.finished.values() {
+            let name = bind.data().name.clone();
+            let rule = &self.rules[&name];
+
+            if let &rule::Kind::Create = rule.kind() {
+                continue;
+            }
+
+            // TODO FIXME optimization
+            // save the results of the sourcing and prepare
+            // the binding to include it?
+            let is_match =
+                rule.get_source().source(bind.get_data()).iter()
+                .find(|&item| {
+                    // https://github.com/rust-lang/rust/issues/24969
+                    paths.contains(&item.source().unwrap())
+                }).is_some();
+
+            if is_match {
+                matched.push(name);
+            } else {
+                didnt.insert(name);
+            }
+        }
+
+        if matched.is_empty() {
+            trace!("no binds matched the path");
+            return;
+        }
+
         self.waiting.clear();
 
-        let names =
-            matched.iter()
-            .map(|b| b.data().name.clone())
-            .collect::<Vec<String>>();
-
-        let mut hm = HashMap::new();
-
-        for bind in matched {
-            hm.insert(bind.data().name.clone(), bind);
-        }
-
-        let mut didnt_names = vec![];
-
-        for bind in didnt {
-            let name = bind.data().name.clone();
-
-            didnt_names.push(name.clone());
-
-            hm.insert(name, bind);
-        }
-
-        match self.graph.resolve_all(names) {
+        // the name of each binding
+        match self.graph.resolve(matched) {
             Ok(order) => {
                 for name in &order {
-                    let bind = &hm[name];
+                    let bind = &self.finished[name];
                     let rule = &self.rules[&bind.data().name];
 
-                    // TODO: this still necessary?
-                    // it's only used to determine if anything will actually be done
-                    // operate on a binding-level
-
-                    // if there's no handler then no need to dispatch a job
-                    // or anything like that
+                    // TODO: redesign to accomodate this
                     self.waiting.push_front(
                         Job::new(
                             bind.data().clone(),
@@ -305,23 +293,19 @@ where E: Evaluator {
                             rule.get_handler().clone()));
                 }
 
+                let order_names = order.clone();
                 let job_count = order.len();
-
-                let names = order.clone();
 
                 self.sort_jobs(order);
 
-                for name in didnt_names {
-                    if names.iter().find(|&n| *n == name).is_none() {
-                        let count = self.graph.dependency_count(&name);
-                        trace!("{} has {} dependencies", name, count);
-
-                        *self.dependencies.entry(name.clone()).or_insert(0) += count;
-                        self.satisfy(&name);
+                // binds that aren't in the returned order should be assumed
+                // to have already been satisfied
+                for name in &order_names {
+                    if let Some(deps) = self.graph.dependencies_of(name) {
+                        let affected = deps.intersection(&didnt).count();
+                        *self.dependencies.get_mut(name).unwrap() -= affected;
                     }
                 }
-
-                // TODO: adjust dependency counts
 
                 trace!("enqueueing ready jobs");
                 self.enqueue_ready();

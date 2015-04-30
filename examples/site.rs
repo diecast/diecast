@@ -318,11 +318,10 @@ fn main() {
                 .link(item::markdown)
                 .link(|item: &mut Item| -> diecast::Result {
                     item.route.route_with(|path: &Path| -> PathBuf {
-                        let mut result = path.with_extension("");
-                        let name = result.file_name().unwrap();
-                        let mut res = PathBuf::from(name);
-                        res.push("index.html");
-                        res
+                        let without = path.with_extension("");
+                        let mut result = PathBuf::from(without.file_name().unwrap());
+                        result.push("index.html");
+                        result
                     });
 
                     Ok(())

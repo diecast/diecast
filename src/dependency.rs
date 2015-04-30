@@ -97,15 +97,15 @@ where T: Ord + Clone + Hash {
     /// This essentially means: the given node plus all nodes
     /// that depend on it.
     pub fn resolve_only(&self, node: T) -> Result<VecDeque<T>, VecDeque<T>> {
-        Topological::new(self).from(node)
+        Topological::new(self).only(node)
     }
 
-    pub fn resolve_all(&self, nodes: Vec<T>) -> Result<VecDeque<T>, VecDeque<T>> {
-        Topological::new(self).from_several(nodes)
+    pub fn resolve(&self, nodes: Vec<T>) -> Result<VecDeque<T>, VecDeque<T>> {
+        Topological::new(self).from(nodes)
     }
 
     /// Topological ordering of the entire graph.
-    pub fn resolve(&self) -> Result<VecDeque<T>, VecDeque<T>> {
+    pub fn resolve_all(&self) -> Result<VecDeque<T>, VecDeque<T>> {
         Topological::new(self).all()
     }
 }
@@ -196,7 +196,7 @@ where T: Ord + Clone + Hash {
     }
 
     /// recompile the dependencies of `node` and then `node` itself
-    pub fn from(mut self, node: T) -> Result<Order<T>, Cycle<T>> {
+    pub fn only(mut self, node: T) -> Result<Order<T>, Cycle<T>> {
         let mut order = VecDeque::new();
 
         try!(self.dfs(node, &mut order));
@@ -204,7 +204,7 @@ where T: Ord + Clone + Hash {
         Ok(order)
     }
 
-    pub fn from_several(mut self, nodes: Vec<T>) -> Result<Order<T>, Cycle<T>> {
+    pub fn from(mut self, nodes: Vec<T>) -> Result<Order<T>, Cycle<T>> {
         let mut order = VecDeque::new();
 
         for node in nodes {
