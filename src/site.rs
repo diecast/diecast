@@ -1,7 +1,7 @@
 //! Site generation.
 
 use std::sync::Arc;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::collections::HashSet;
 
 use job::{self, Job};
@@ -65,10 +65,10 @@ impl Site {
         self.manager.build();
     }
 
-    pub fn update(&mut self, path: &Path) {
-        println!("UPDATING: {:?}", path);
+    pub fn update(&mut self, paths: HashSet<PathBuf>) {
+        println!("UPDATING: {:?}", paths);
         self.prepare();
-        self.manager.update(path);
+        self.manager.update(paths);
     }
 
     pub fn register(&mut self, rule: Rule) {

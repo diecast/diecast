@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use std::path::Path;
-use std::collections::{BTreeMap, VecDeque, HashMap};
+use std::path::{Path, PathBuf};
+use std::collections::{BTreeMap, VecDeque, HashMap, HashSet};
 use std::mem;
 
 use configuration::Configuration;
@@ -181,7 +181,7 @@ where E: Evaluator {
         self.reset();
     }
 
-    pub fn update(&mut self, path: &Path) {
+    pub fn update(&mut self, paths: HashSet<PathBuf>) {
         if self.count == 0 {
             println!("there is nothing to do");
             return;
@@ -211,9 +211,8 @@ where E: Evaluator {
 
                 rule.get_source().source(bind.get_data()).iter()
                 .find(|&item| {
-                    let p: &Path = &item.source().unwrap();
-                    println!(" checking path {:?}", p);
-                    p == path
+                    // https://github.com/rust-lang/rust/issues/24969
+                    paths.contains(&item.source().unwrap())
                 }).is_some()
             });
 

@@ -1,5 +1,7 @@
 use std::fs::PathExt;
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, TryRecvError};
+use std::path::PathBuf;
+use std::collections::HashSet;
 use std::thread;
 
 use docopt::Docopt;
@@ -100,36 +102,105 @@ impl Command for Live {
                         },
                     }
 
-                    for event in rx.iter() {
-                        match event.op {
-                            Ok(op) => {
-                                match op {
-                                    ::notify::op::CHMOD => trace!("Operation: chmod"),
-                                    ::notify::op::CREATE => trace!("Operation: create"),
-                                    ::notify::op::REMOVE => trace!("Operation: remove"),
-                                    ::notify::op::RENAME => trace!("Operation: rename"),
-                                    ::notify::op::WRITE => trace!("Operation: write"),
-                                    _ => trace!("Operation: unknown"),
+                    // TODO
+                    // what if the user saves the buffer,
+                    // notices a typo within 1-2 seconds, fixes it,
+                    // then saves again?
+                    //
+                    // the second save will unlikely occur within the rebounce
+                    // period, and will probably end up being debounced since
+                    // it occurred while the site was building due to the first
+                    // save
+                    //
+                    // I think this behavior is understandable. the user could
+                    // tune the rebounce period to be higher, e.g. 5 seconds,
+                    // to be able to catch these kinds of quick fixes, at the expense
+                    // of lack of immediacy
+                    let rebounce = Duration::milliseconds(300);
+                    let mut last_bounce = SteadyTime::now();
+                    let mut set: HashSet<PathBuf> = HashSet::new();
+
+                    loop {
+                        match rx.try_recv() {
+                            Ok(event) => {
+                                trace!(">>> received");
+
+                                let now = SteadyTime::now();
+
+                                // TODO: check time despite event presence
+                                if (now - last_bounce) > rebounce {
+                                    trace!(">>> past rebounce period");
+                                    last_bounce = now;
+
+                                    if !set.is_empty() {
+                                        trace!(">>> sending events");
+                                        e_tx.send((set, now));
+                                        set = HashSet::new();
+                                    }
+                                }
+
+                                trace!(">>> within rebounce period");
+
+                                match event.op {
+                                    Ok(op) => {
+                                        match op {
+                                            ::notify::op::CHMOD => trace!("Operation: chmod"),
+                                            ::notify::op::CREATE => trace!("Operation: create"),
+                                            ::notify::op::REMOVE => trace!("Operation: remove"),
+                                            ::notify::op::RENAME => trace!("Operation: rename"),
+                                            ::notify::op::WRITE => trace!("Operation: write"),
+                                            _ => trace!("Operation: unknown"),
+                                        }
+                                    },
+                                    Err(e) => {
+                                        match e {
+                                            ::notify::Error::Generic(e) => trace!("Error: {}", e),
+                                            ::notify::Error::Io(e) => trace!("Error: {:?}", e),
+                                            ::notify::Error::NotImplemented =>
+                                                trace!("Error: Not Implemented"),
+                                            ::notify::Error::PathNotFound =>
+                                                trace!("Error: Path Not Found"),
+                                            ::notify::Error::WatchNotFound =>
+                                                trace!("Error: Watch Not Found"),
+                                        }
+                                        println!("notification error");
+                                        ::std::process::exit(1);
+                                    }
+                                }
+
+                                if let Some(path) = event.path {
+                                    if !set.contains(&path) {
+                                        trace!(">>> inserting path");
+                                        set.insert(path);
+                                        last_bounce = now;
+                                    } else {
+                                        trace!(">>> already contained path");
+                                    }
                                 }
                             },
-                            Err(e) => {
-                                match e {
-                                    ::notify::Error::Generic(e) => trace!("Error: {}", e),
-                                    ::notify::Error::Io(e) => trace!("Error: {:?}", e),
-                                    ::notify::Error::NotImplemented =>
-                                        trace!("Error: Not Implemented"),
-                                    ::notify::Error::PathNotFound =>
-                                        trace!("Error: Path Not Found"),
-                                    ::notify::Error::WatchNotFound =>
-                                        trace!("Error: Watch Not Found"),
-                                }
-                                println!("notification error");
-                                ::std::process::exit(1);
-                            }
-                        }
+                            Err(TryRecvError::Empty) => {
+                                let now = SteadyTime::now();
 
-                        trace!("sending event");
-                        e_tx.send((event, SteadyTime::now()));
+                                if (now - last_bounce) > rebounce {
+                                    last_bounce = now;
+
+                                    if !set.is_empty() {
+                                        trace!(">>> sending events");
+                                        e_tx.send((set, now));
+                                        set = HashSet::new();
+                                    }
+
+                                    continue;
+                                } else {
+                                    // TODO audit
+                                    // consume rebounce time in 100ms chunks
+                                    thread::sleep_ms(100);
+                                }
+                            },
+                            Err(TryRecvError::Disconnected) => {
+                                panic!("notification manager disconnected");
+                            },
+                        }
                     }
                 },
                 Err(_) => println!("Error"),
@@ -142,8 +213,8 @@ impl Command for Live {
         let mut last_event = SteadyTime::now();
         let debounce = Duration::seconds(1);
 
-        for (event, tm) in e_rx.iter() {
-            trace!("received event");
+        for (mut paths, tm) in e_rx.iter() {
+            trace!("received paths:\n{:?}", paths);
 
             let delta = tm - last_event;
 
@@ -153,24 +224,40 @@ impl Command for Live {
             }
 
             if let Some(ref pattern) = self.site.configuration().ignore {
-                if event.path.as_ref().map(|p| pattern.matches(p)).unwrap_or(false) {
-                    trace!("ignored");
-                    continue;
-                }
+                trace!("filtering");
+
+                paths = paths.into_iter()
+                    .filter(|p| !pattern.matches(p))
+                    .collect::<HashSet<PathBuf>>();
             }
 
-            if let Some(ref path) = event.path {
-                while !path.exists() {
-                    // TODO: this should probably be thread::yield_now
-                    thread::park_timeout_ms(10);
-                }
+            trace!("paths:\n{:?}", paths);
+
+            let (mut ready, mut waiting): (HashSet<PathBuf>, HashSet<PathBuf>) =
+                paths.into_iter().partition(|p| p.exists());
+
+            // TODO optimize
+            // so only non-existing paths are still polled?
+            // perhaps using a partition
+            while !waiting.is_empty() {
+                trace!("waiting for all paths to exist");
+                // TODO: this should probably be thread::yield_now
+                thread::park_timeout_ms(10);
+
+                let (r, w): (HashSet<PathBuf>, HashSet<PathBuf>) =
+                    waiting.into_iter().partition(|p| p.exists());
+
+                ready.extend(r.into_iter());
+                waiting = w;
             }
+
+            paths = ready;
 
             trace!("updating");
 
             // TODO
             // this would probably become something like self.site.update();
-            self.site.update(&event.path.unwrap());
+            self.site.update(paths);
 
             trace!("finished updating");
 
