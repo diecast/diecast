@@ -87,7 +87,6 @@ where E: Evaluator {
 
             for name in names {
                 if dependents.contains(&name) {
-                    println!("{} satisfied; decrementing {}", binding, name);
                     *self.dependencies.entry(name).or_insert(0) -= 1;
                 }
             }
@@ -201,8 +200,6 @@ where E: Evaluator {
             self.finished.values().cloned()
             .map(|a| (*a).clone())
             .partition(|bind| {
-                println!("checking bind {}", bind.data().name);
-
                 let rule = &self.rules[&bind.data().name];
 
                 if let &rule::Kind::Create = rule.kind() {
@@ -267,16 +264,11 @@ where E: Evaluator {
         //   binding.data arc; expose new method for this?
 
         self.waiting.clear();
-        println!("waiting: {:?}", self.waiting);
 
         let names =
             matched.iter()
             .map(|b| b.data().name.clone())
             .collect::<Vec<String>>();
-
-        println!("names: {:?}", names);
-
-        println!("waiting: {:?}", self.waiting);
 
         let mut hm = HashMap::new();
 
@@ -296,10 +288,7 @@ where E: Evaluator {
 
         match self.graph.resolve_all(names) {
             Ok(order) => {
-                println!("order: {:?}", order);
-
                 for name in &order {
-                    println!("inserting {}", name);
                     let bind = &hm[name];
                     let rule = &self.rules[&bind.data().name];
 
@@ -315,8 +304,6 @@ where E: Evaluator {
                             rule.get_source().clone(),
                             rule.get_handler().clone()));
                 }
-
-                println!("waiting: {:?}", self.waiting);
 
                 let job_count = order.len();
 
@@ -336,12 +323,8 @@ where E: Evaluator {
 
                 // TODO: adjust dependency counts
 
-                println!("dependencies: {:?}", self.dependencies);
-
                 trace!("enqueueing ready jobs");
                 self.enqueue_ready();
-
-                println!("dependencies: {:?}", self.dependencies);
 
                 // TODO: should have some sort of timeout here
                 // FIXME
@@ -349,9 +332,6 @@ where E: Evaluator {
                 // be momentarily empty before the rest get added
                 trace!("looping");
                 for i in (0 .. job_count) {
-                    println!("iter {}", i);
-                    println!("dependencies: {:?}", self.dependencies);
-
                     match self.evaluator.dequeue() {
                         Some(job) => {
                             trace!("received job from pool");
