@@ -428,9 +428,10 @@ fn main() {
             for (tag, itms) in &tags.map {
                 let url = tag.chars()
                     .filter_map(|c| {
-                        if c.is_alphanumeric() || c.is_whitespace() {
+                        let is_ws = c.is_whitespace();
+                        if c.is_alphanumeric() || ws {
                             let c = c.to_lowercase().next().unwrap();
-                            if c.is_whitespace() { Some('-') }
+                            if ws { Some('-') }
                             else { Some(c) }
                         } else {
                             None
@@ -449,7 +450,7 @@ fn main() {
                     item.extensions.insert::<Tag>(Tag { tag: tag.clone(), items: itms.clone() });
                 }
 
-                items.extend(pgs.into_iter());
+                items.extend(pgs);
             }
         }
 
