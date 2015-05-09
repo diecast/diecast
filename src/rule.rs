@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use std::convert::Into;
 
 use binding::Bind;
-use item::Item;
 use source::Source;
 use util;
 use handle::Handle;

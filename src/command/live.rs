@@ -136,7 +136,7 @@ impl Command for Live {
 
                                     if !set.is_empty() {
                                         trace!(">>> sending events");
-                                        e_tx.send((set, now));
+                                        e_tx.send((set, now)).unwrap();
                                         set = HashSet::new();
                                     }
                                 }
@@ -177,7 +177,6 @@ impl Command for Live {
 
                                         trace!(">>> inserting path");
                                         set.insert(path);
-                                        last_bounce = now;
                                     } else {
                                         trace!(">>> already contained path");
                                     }
@@ -191,7 +190,7 @@ impl Command for Live {
 
                                     if !set.is_empty() {
                                         trace!(">>> sending events");
-                                        e_tx.send((set, now));
+                                        e_tx.send((set, now)).unwrap();
                                         set = HashSet::new();
                                     }
 

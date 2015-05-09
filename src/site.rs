@@ -1,11 +1,10 @@
 //! Site generation.
 
 use std::sync::Arc;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::collections::HashSet;
 
 use job::{self, Job};
-use binding::Bind;
 use configuration::Configuration;
 use rule::Rule;
 

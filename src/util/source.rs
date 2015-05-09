@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 
-use binding::{self, Bind};
+use binding;
 use item::{Item, Route};
 use source::Source;
 use pattern::Pattern;
@@ -179,6 +179,6 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     }
 }
 
-pub fn none(bind: Arc<binding::Data>) -> Vec<Item> {
+pub fn none(_bind: Arc<binding::Data>) -> Vec<Item> {
     vec![]
 }

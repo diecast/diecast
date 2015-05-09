@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use binding::{self, Bind};
+use binding;
 use item::Item;
 
 pub trait Source {

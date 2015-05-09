@@ -1,20 +1,15 @@
 use std::sync::Arc;
-use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use std::any::Any;
-use std::fs;
 
-use chrono;
 use typemap;
 
 use job::evaluator::Pool;
-use item::{Item, Route};
+use item::Item;
 use binding::Bind;
 use handle::{self, Handle, Result};
-use pattern::Pattern;
 
 use super::{Chain, Extender};
-use super::item;
 
 pub fn each<H>(handler: H) -> Each<H>
 where H: Handle<Item> {

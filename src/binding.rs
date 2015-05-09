@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
-use std::path::PathBuf;
 use std::slice;
 use std::fmt;
 
-use typemap::{TypeMap, Key};
+use typemap::TypeMap;
 
-use item::{Item, Route};
+use item::Item;
 use configuration::Configuration;
 
 #[derive(Clone)]

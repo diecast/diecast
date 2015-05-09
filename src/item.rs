@@ -5,7 +5,7 @@ use std::fmt::{self, Debug};
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
 
-use typemap::{TypeMap, Key};
+use typemap::TypeMap;
 
 use binding;
 

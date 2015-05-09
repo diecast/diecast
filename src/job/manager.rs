@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::collections::{BTreeMap, BTreeSet, VecDeque, HashMap, HashSet};
 use std::mem;
 
@@ -281,7 +281,7 @@ where E: Evaluator {
                 // can't do while waiting.is_empty() becuase it could
                 // be momentarily empty before the rest get added
                 trace!("looping");
-                for i in (0 .. job_count) {
+                for _ in (0 .. job_count) {
                     match self.evaluator.dequeue() {
                         Some(job) => {
                             trace!("received job from pool");
