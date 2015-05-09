@@ -123,14 +123,16 @@ impl Command for Live {
                     loop {
                         match rx.try_recv() {
                             Ok(event) => {
-                                trace!(">>> received");
+                                trace!(">>> received {:?}", event.path);
 
                                 let now = SteadyTime::now();
+                                let is_contained = event.path.as_ref().map(|p| set.contains(p)).unwrap_or(false);
 
                                 // TODO: check time despite event presence
+
+                                // past rebounce period
                                 if (now - last_bounce) > rebounce {
                                     trace!(">>> past rebounce period");
-                                    last_bounce = now;
 
                                     if !set.is_empty() {
                                         trace!(">>> sending events");
@@ -138,8 +140,6 @@ impl Command for Live {
                                         set = HashSet::new();
                                     }
                                 }
-
-                                trace!(">>> within rebounce period");
 
                                 match event.op {
                                     Ok(op) => {
@@ -168,8 +168,13 @@ impl Command for Live {
                                     }
                                 }
 
+                                trace!(">>> within rebounce period");
+
                                 if let Some(path) = event.path {
-                                    if !set.contains(&path) {
+                                    if !is_contained {
+                                        last_bounce = now;
+                                        trace!(">>> extending rebounce");
+
                                         trace!(">>> inserting path");
                                         set.insert(path);
                                         last_bounce = now;
@@ -257,7 +262,11 @@ impl Command for Live {
 
             // TODO
             // this would probably become something like self.site.update();
-            self.site.update(paths);
+            let p = paths.into_iter()
+            .map(|p| p.relative_from(&self.site.configuration().input).unwrap().to_path_buf())
+            .collect::<HashSet<PathBuf>>();
+            println!("mapped: {:?}", p);
+            self.site.update(p);
 
             trace!("finished updating");
 

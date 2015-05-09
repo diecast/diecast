@@ -35,11 +35,8 @@ chrono = "*"
 zmq = "*"
 websocket = "*"
 git2 = "*"
+handlebars = "*"
 # anymap = "*"
-# handlebars = "*"
-
-[dependencies.handlebars]
-path = "../handlebars-rust"
 
 [dependencies.anymap]
 path = "../anymap"

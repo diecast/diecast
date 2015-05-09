@@ -10,10 +10,8 @@ use anymap::any::CloneAny;
 use item::{Item, Route};
 use configuration::Configuration;
 
-pub enum Build {
-    Full,
-    Update(PathBuf),
-}
+#[derive(Clone)]
+pub enum Build { Full, Partial(Vec<Item>), }
 
 // FIXME
 // problem is that an item handler can easily change
@@ -42,6 +40,7 @@ impl Data {
 pub struct Bind {
     items: Vec<Item>,
     data: Arc<Data>,
+    build: Build,
 }
 
 impl Bind {
@@ -50,11 +49,23 @@ impl Bind {
         Bind {
             items: items,
             data: data,
+            build: Build::Full,
         }
     }
 
-    pub unsafe fn items_mut(&mut self) -> &mut Vec<Item> {
+    pub fn update(&mut self, items: Vec<Item>) {
+        self.build = Build::Partial(items);
+    }
+
+    pub unsafe fn all_items_mut(&mut self) -> &mut Vec<Item> {
         &mut self.items
+    }
+
+    pub unsafe fn items_mut(&mut self) -> &mut Vec<Item> {
+        match self.build {
+            Build::Full => &mut self.items,
+            Build::Partial(ref mut items) => items,
+        }
     }
 
     pub fn data(&self) -> &Data {
@@ -64,23 +75,25 @@ impl Bind {
     pub fn get_data(&self) -> Arc<Data> {
         self.data.clone()
     }
-
-    pub fn spawn(&self, route: Route) -> Item {
-        Item::new(route, self.data.clone())
-    }
 }
 
 impl ::std::ops::Deref for Bind {
     type Target = [Item];
 
     fn deref(&self) -> &[Item] {
-        &self.items
+        match self.build {
+            Build::Full => &self.items,
+            Build::Partial(ref items) => items,
+        }
     }
 }
 
 impl ::std::ops::DerefMut for Bind {
     fn deref_mut(&mut self) -> &mut [Item] {
-        &mut self.items
+        match self.build {
+            Build::Full => &mut self.items,
+            Build::Partial(ref mut items) => items,
+        }
     }
 }
 
@@ -89,7 +102,10 @@ impl<'a> IntoIterator for &'a Bind {
     type IntoIter = slice::Iter<'a, Item>;
 
     fn into_iter(self) -> slice::Iter<'a, Item> {
-        self.items.iter()
+        match self.build {
+            Build::Full => self.items.iter(),
+            Build::Partial(ref items) => items.iter(),
+        }
     }
 }
 
@@ -98,13 +114,20 @@ impl<'a> IntoIterator for &'a mut Bind {
     type IntoIter = slice::IterMut<'a, Item>;
 
     fn into_iter(self) -> slice::IterMut<'a, Item> {
-        self.items.iter_mut()
+        match self.build {
+            Build::Full => self.items.iter_mut(),
+            Build::Partial(ref mut items) => items.iter_mut(),
+        }
     }
 }
 
+// TODO update for Partial(items)
 impl fmt::Debug for Bind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:?}", self.data().name, self.items)
+        write!(f, "{}: {}", self.data().name, match self.build {
+            Build::Full => format!("full build of {:?}", self.items),
+            Build::Partial(ref items) => format!("partial build of {:?}", items),
+        })
     }
 }
 

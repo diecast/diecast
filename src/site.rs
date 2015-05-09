@@ -66,7 +66,6 @@ impl Site {
     }
 
     pub fn update(&mut self, paths: HashSet<PathBuf>) {
-        println!("UPDATING: {:?}", paths);
         self.prepare();
         self.manager.update(paths);
     }

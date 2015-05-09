@@ -105,7 +105,7 @@ pub fn git(bind: &mut Bind) -> diecast::Result {
             prune.push(path.clone());
         }
 
-        for path in prune.drain() {
+        for path in prune.drain(..) {
             input.remove(&path).unwrap();
         }
     }

@@ -120,6 +120,7 @@ pub fn init() -> mpsc::Sender<Update> {
                 let ip = client.get_mut_sender().get_mut().peer_addr().unwrap();
                 println!("WS connection #{} from {}", idx + 1, ip);
 
+                // TODO should monitor receiver to detect close events
                 let (sender, _receiver) = client.split();
 
                 let mut writer = writer.lock().unwrap();

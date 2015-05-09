@@ -15,7 +15,7 @@ pub struct Job {
     pub bind: binding::Data,
     pub source: Arc<Box<Source + Sync + Send>>,
     pub handler: Arc<Box<Handle<Bind> + Sync + Send>>,
-    binding: Option<Bind>,
+    pub binding: Option<Bind>,
 }
 
 impl fmt::Debug for Job {

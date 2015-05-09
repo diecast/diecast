@@ -187,66 +187,17 @@ where E: Evaluator {
             return;
         }
 
-        // TODO
-        //
-        // we should start by first rebuilding the entire bind
-        // to do this we need to run the source of each bind to determine
-        // if the source matches
-        //
-        // FIXME
-        // build() should clean
-        // update() should not clean
-
-        // TODO
-        // * CANDIDATES: subset of binds that are Kind::Read
-        //
-        // determine which CANDIDATE contains the path
-        // if found: mark bind as Update(path)
-        //           entails getting it from self.finished, marking it
-        // else: run all CANDIDATE source() and see if path is contained
-        //       if found: rebuild entire (?) matched bind. ?: for things like Adjacent
-        //       else: ignore, since no bind would handle
-        //
-        // to get things ready for a rebuild, it's necessary to get everything
-        // from self.finished and mapping it to a Job and finally inserting it
-        // into self.waiting
-        //
-        // * deref should conditionally deref to either all items (incl. cached)
-        //   or the updated one
-        // * explicit unsafe method will give access to all items (e.g. items_mut())
-
-        // NOTE
-        // * should we make Kind::Read only operate based on Pattern,
-        //   as was previously the case?
-        //
-        //   PROS
-        //   * fast detection of which bind is responsible
-        //
-        //   CONS
-        //   * not as flexible? I can't envision a situation where dynamic
-        //     item creation would be useful
-        //
-        // * it's probably _very_ beneficial to be able to access a Rule
-        //   that corresponds to a Bind, gives access to Kind
-        //
-        //   NOTE try to avoid that, because then the bind handlers
-        //        would have access to it
-        //
-        // * cached binds are in self.finished
-
-        // FIXME
-        // * a single path may be read from multiple bindings
-        //   resolve_from only performs this from a single binding?
-        //   * potential solution: find common ancestor
-        // * a Job no longer takes a Bind, it only takes a binding::Data
-        //   so it's not possible to go from an existing Bind to a Job
-        // * in particular the above is true because we can't get the
-        //   binding.data arc; expose new method for this?
-
         let mut matched = vec![];
         let mut didnt = BTreeSet::new();
 
+        // TODO handle deletes? how? on delete, do full build no matter what
+
+        let mut bindings = HashMap::new();
+
+        // find the binds that contain the paths
         for bind in self.finished.values() {
+            use item::{Item, Route};
+
             let name = bind.data().name.clone();
             let rule = &self.rules[&name];
 
@@ -254,17 +205,28 @@ where E: Evaluator {
                 continue;
             }
 
-            // TODO FIXME optimization
-            // save the results of the sourcing and prepare
-            // the binding to include it?
-            let is_match =
-                rule.get_source().source(bind.get_data()).iter()
-                .find(|&item| {
-                    // https://github.com/rust-lang/rust/issues/24969
-                    paths.contains(&item.source().unwrap())
-                }).is_some();
+            let bind_paths =
+                rule.get_source().source(bind.get_data()).into_iter()
+                .map(|i| i.route.reading().unwrap().to_path_buf())
+                .collect::<HashSet<PathBuf>>();
+
+            let affected =
+                bind_paths.intersection(&paths).cloned()
+                .map(|p| Item::new(Route::Read(p), bind.get_data()))
+                .collect::<Vec<Item>>();
+            let is_match = affected.len() > 0;
+
+            let mut modified: Bind = (**bind).clone();
+
+            // TODO
+            // what does it mean if it's left as a Partial?
+            // in subsequent builds, as a dependent of a different affected?
+            // it seems to me like a Partial should only apply on a single iteration,
+            // and then it should flip back to Full
+            modified.update(affected);
 
             if is_match {
+                bindings.insert(name.clone(), modified);
                 matched.push(name);
             } else {
                 didnt.insert(name);
@@ -281,16 +243,20 @@ where E: Evaluator {
         // the name of each binding
         match self.graph.resolve(matched) {
             Ok(order) => {
+                // create a job for each bind in the order
                 for name in &order {
                     let bind = &self.finished[name];
                     let rule = &self.rules[&bind.data().name];
 
-                    // TODO: redesign to accomodate this
-                    self.waiting.push_front(
-                        Job::new(
-                            bind.data().clone(),
-                            rule.get_source().clone(),
-                            rule.get_handler().clone()));
+                    let mut job = Job::new(
+                        // TODO this might differ from bindings bind?
+                        bind.data().clone(),
+                        rule.get_source().clone(),
+                        rule.get_handler().clone());
+
+                    job.binding = bindings.remove(name);
+
+                    self.waiting.push_front(job);
                 }
 
                 let order_names = order.clone();
@@ -341,7 +307,6 @@ where E: Evaluator {
     fn reset(&mut self) {
         self.graph = Graph::new();
         self.waiting.clear();
-        // self.finished.clear();
         self.count = 0;
     }
 

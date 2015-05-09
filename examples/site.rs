@@ -1,4 +1,4 @@
-#![feature(collections)]
+#![feature(collections, collections_drain)]
 
 #[macro_use]
 extern crate diecast;
@@ -429,9 +429,9 @@ fn main() {
                 let url = tag.chars()
                     .filter_map(|c| {
                         let is_ws = c.is_whitespace();
-                        if c.is_alphanumeric() || ws {
+                        if c.is_alphanumeric() || is_ws {
                             let c = c.to_lowercase().next().unwrap();
-                            if ws { Some('-') }
+                            if is_ws { Some('-') }
                             else { Some(c) }
                         } else {
                             None
