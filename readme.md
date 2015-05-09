@@ -59,12 +59,12 @@ let posts =
         })));
 ```
 
-A custom compiler which would render the post index:
+A custom handler which would render the post index:
 
 ``` rust
-fn render_index(item: &mut Item) -> compiler::Result {
+fn render_index(item: &mut Item) -> diecast::Result {
   // notice "post index" depends on "posts",
-  // so it has access to the "posts" dependency within its compilers
+  // so it has access to the "posts" dependency within its handlers
 
   for post in item.bind().dependencies["posts"].iter() {
     // do something for each post
