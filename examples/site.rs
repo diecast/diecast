@@ -390,8 +390,7 @@ fn main() {
                 .link(item::read)
                 .link(item::parse_metadata)
                 .link(item::date)))
-            // TODO: replace with some sort of filter/only_if
-            // .link(binding::retain(item::publishable))
+            .link(binding::retain(item::publishable))
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
                 .link(item::markdown)

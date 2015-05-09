@@ -23,6 +23,27 @@ where H: Handle<Item> {
     handler: H,
 }
 
+pub struct Retain<C>
+where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
+    condition: C,
+}
+
+impl<C> Handle<Bind> for Retain<C>
+where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
+        unsafe { bind.all_items_mut().retain(&self.condition) };
+        Ok(())
+    }
+}
+
+#[inline]
+pub fn retain<C>(condition: C) -> Retain<C>
+where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
+    Retain {
+        condition: condition,
+    }
+}
+
 // pub fn static_file<P>(pattern: P) -> Chain<Bind>
 // where P: Pattern + Sync + Send + 'static {
 //     Chain::new()
