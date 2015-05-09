@@ -158,8 +158,8 @@ impl typemap::Key for Adjacent {
     type Value = Adjacent;
 }
 
-pub fn next_prev(bind: &mut Bind) -> handle::Result {
-    let count = bind.len();
+pub fn adjacent(bind: &mut Bind) -> handle::Result {
+    let count = unsafe { bind.all_items().len() };
 
     let last_num = if count == 0 {
         0
@@ -168,9 +168,13 @@ pub fn next_prev(bind: &mut Bind) -> handle::Result {
     };
 
     // TODO: yet another reason to have Arc<Item>?
-    let cloned = bind.iter().map(|i| Arc::new(i.clone())).collect::<Vec<Arc<Item>>>();
+    let cloned = unsafe {
+        bind.all_items().iter()
+        .map(|i| Arc::new(i.clone()))
+        .collect::<Vec<Arc<Item>>>()
+    };
 
-    for (idx, item) in bind.iter_mut().enumerate() {
+    for (idx, item) in unsafe { bind.all_items_mut().iter_mut().enumerate() } {
         let prev =
             if idx == 0 { None }
             else { let num = idx - 1; Some(cloned[num].clone()) };

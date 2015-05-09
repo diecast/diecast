@@ -359,7 +359,7 @@ fn main() {
                 .link(hbs::render_template(&templates, "note", post_template))
                 .link(hbs::render_template(&templates, "layout", layout_template))
                 .link(item::write)))
-            .link(binding::next_prev)
+            .link(binding::adjacent)
             .link(binding::sort_by(|a, b| {
                 let a = a.extensions.get::<item::Date>().unwrap();
                 let b = b.extensions.get::<item::Date>().unwrap();
@@ -403,7 +403,7 @@ fn main() {
                 .link(hbs::render_template(&templates, "post", post_template))
                 .link(hbs::render_template(&templates, "layout", layout_template))
                 .link(item::write)))
-            .link(binding::next_prev)
+            .link(binding::adjacent)
             .link(binding::sort_by(|a, b| {
                 let a = a.extensions.get::<item::Date>().unwrap();
                 let b = b.extensions.get::<item::Date>().unwrap();

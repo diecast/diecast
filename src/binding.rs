@@ -59,6 +59,10 @@ impl Bind {
         &mut self.items
     }
 
+    pub unsafe fn all_items(&self) -> &Vec<Item> {
+        &self.items
+    }
+
     pub unsafe fn items_mut(&mut self) -> &mut Vec<Item> {
         match self.build {
             Build::Full => &mut self.items,
