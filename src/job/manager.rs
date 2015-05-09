@@ -321,7 +321,9 @@ where E: Evaluator {
 
         // if they're done, move from staging to finished
         self.finished.insert(binding.clone(), Arc::new({
-            current.into_bind()
+            let mut bind = current.into_bind();
+            bind.set_full_build();
+            bind
         }));
 
         self.satisfy(&binding);

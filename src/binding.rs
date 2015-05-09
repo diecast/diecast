@@ -55,6 +55,10 @@ impl Bind {
         self.build = Build::Partial(items);
     }
 
+    pub fn set_full_build(&mut self) {
+        self.build = Build::Full;
+    }
+
     pub unsafe fn all_items_mut(&mut self) -> &mut Vec<Item> {
         &mut self.items
     }
