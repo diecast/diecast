@@ -10,28 +10,36 @@ Define a rule called `"posts"` which will match any file in the input directory 
 
 ``` rust
 let posts =
-  Rule::matching("posts", glob::Pattern::new("posts/*.md").unwrap())
-  // specify the compiler to use to process each matched item
-  // ItemChain is itself a compiler that allows chaining multiple compilers
-  .compiler(
-    ItemChain::new()
-      // read the contents of the file
-      .link(compiler::read)
-      // parse the metadata front-matter
-      .link(compiler::parse_metadata)
-      // demonstrate a custom compiler using a closure
-      .link(|item: &mut Item| -> compiler::Result {
-        println!("inside a custom compiler!");
-        Ok(())
-      })
-      // filter out the drafts if not in preview-mode
-      .link(compiler::retain(publishable))
-      // render the markdown
-      .link(compiler::render_markdown)
-      // specify the output file name, e.g. .md -> .html
-      .link(router::set_extension("html"))
-      // write the contents to the output file
-      .link(compiler::write));
+    Rule::read("posts")
+    .depends_on(&templates)
+    // collect the posts
+    .source(source::select("posts/*.markdown".parse::<Glob>().unwrap()))
+    // process each post
+    .handler(Chain::new()
+        // process this chain for each item in parallel
+        .link(binding::parallel_each(Chain::new()
+            .link(item::read)
+            .link(item::parse_metadata)
+            // parse date from metadata
+            .link(item::date)))
+        // only retain publishable posts, e.g. non-drafts
+        .link(binding::retain(item::publishable))
+        .link(binding::parallel_each(Chain::new()
+            // render markdown
+            .link(item::markdown)
+            // route to target destination
+            .link(route::pretty)
+            // render post template and layout
+            .link(hbs::render_template(&templates, "post", post_template))
+            .link(hbs::render_template(&templates, "layout", layout_template))
+            // write to the target file
+            .link(item::write)))
+        // sort posts by date for future rules, such as post index
+        .link(binding::sort_by(|a, b| {
+            let a = a.extensions.get::<item::Date>().unwrap();
+            let b = b.extensions.get::<item::Date>().unwrap();
+            b.cmp(a)
+        })));
 ```
 
 A custom compiler which would render the post index:
@@ -39,29 +47,38 @@ A custom compiler which would render the post index:
 ``` rust
 fn render_index(item: &mut Item) -> compiler::Result {
   // notice since "post index" depends on "posts",
-  // it has access to the "posts" dependency within its compilers
-  let posts = item.bind().dependencies["posts"].items;
+  // so it has access to the "posts" dependency within its compilers
 
-  // use the posts to render the index
+  for post in item.bind().dependencies["posts"].iter() {
+    // do something for each post
+  }
 }
 ```
 
-Define a rule called `"post index"` which will create an `"index.html"` file:
+Define a rule called `"post index"` which will create a paginated index of the posts:
 
 ``` rust
-let index =
-  Rule::creating("post index", "index.html")
-  .compiler(
-    ItemChain::new()
-      .link(render_index)
-      .link(compiler::write))
-  // it will depend on the "posts" rule so that it:
-  //   1. is evaluated _only_ after the "posts" rule has been evaluated
-  //   2. has access to the "posts" dependency
-  .depends_on(&posts);
+let posts_index =
+    Rule::create("post index")
+    // this ensures that the post index is only run after
+    // the posts and templates rules are finished
+    .depends_on(&posts)
+    .depends_on(&templates)
+    // paginate the posts rule with 5 posts per page
+    .source(source::paginate(&posts, 5, |page: usize| -> PathBuf {
+        if page == 0 {
+            PathBuf::from("index.html")
+        } else {
+            PathBuf::from(&format!("{}/index.html", page))
+        }
+    }))
+    .handler(binding::parallel_each(Chain::new()
+        .link(hbs::render_template(&templates, "index", render_index))
+        .link(hbs::render_template(&templates, "layout", layout_template))
+        .link(item::write)));
 ```
 
-Define a base configuration and allow it to be overridden from the command line:
+Define a base configuration, register the rules, and run the user-provided command:
 
 ``` rust
 let config =
@@ -69,13 +86,14 @@ let config =
   // ignore common editor files
   .ignore(regex!(r"^\.|^#|~$|\.swp$"));
 
+// possibly overrides above configuration based on user input
 let mut command = command::from_args(config);
 
 // register the rules with the site
-command.site().bind(posts);
-command.site().bind(index);
+command.site().register(posts);
+command.site().register(index);
 
-// run the command
+// run the command supplied by the user
 command.run();
 ```
 
