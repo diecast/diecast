@@ -81,10 +81,7 @@ let posts_index =
 Define a base configuration, register the rules, and run the user-provided command:
 
 ``` rust
-let config =
-  Configuration::new("input/", "output/")
-  // ignore common editor files
-  .ignore(regex!(r"^\.|^#|~$|\.swp$"));
+let config = Configuration::new("input/", "output/");
 
 // possibly overrides above configuration based on user input
 let mut command = command::from_args(config);
