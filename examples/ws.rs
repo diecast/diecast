@@ -36,7 +36,7 @@ impl Handle<Bind> for WebsocketPipe {
 
         for item in bind {
             if let Some(meta) = item.extensions.get::<item::Metadata>() {
-                if !meta.data.lookup("push").and_then(toml::Value::as_bool).unwrap_or(true) {
+                if !meta.lookup("push").and_then(toml::Value::as_bool).unwrap_or(true) {
                     continue;
                 }
             }

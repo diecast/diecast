@@ -1,6 +1,10 @@
 //! item::Handle behavior.
 
+use std::any::Any;
+
 use handle::Handle;
+
+use typemap;
 
 pub mod item;
 pub mod binding;
@@ -23,22 +27,15 @@ impl<T> Chain<T> {
     }
 }
 
-pub fn extend<T>(payload: T) -> Extender<T>
-where T: Sync + Send + Clone + 'static {
-    Extender::new(payload)
+pub fn extend<T>(payload: T::Value) -> Extender<T>
+where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
+    Extender {
+        payload: payload,
+    }
 }
 
 pub struct Extender<T>
-where T: Sync + Send + Clone + 'static {
-    payload: T,
-}
-
-impl<T> Extender<T>
-where T: Sync + Send + Clone + 'static {
-    pub fn new(data: T) -> Extender<T> {
-        Extender {
-            payload: data,
-        }
-    }
+where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
+    payload: T::Value,
 }
 

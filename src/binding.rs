@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use std::slice;
 use std::fmt;
 
-use anymap::Map;
-use anymap::any::CloneAny;
+use typemap::{TypeMap, Key};
 
 use item::{Item, Route};
 use configuration::Configuration;
@@ -22,7 +21,7 @@ pub struct Data {
     pub name: String,
     pub dependencies: BTreeMap<String, Arc<Bind>>,
     pub configuration: Arc<Configuration>,
-    pub extensions: Arc<RwLock<Map<CloneAny + Sync + Send>>>,
+    pub extensions: Arc<RwLock<TypeMap<::typemap::CloneAny + Sync + Send>>>,
 }
 
 impl Data {
@@ -31,7 +30,7 @@ impl Data {
             name: name,
             dependencies: BTreeMap::new(),
             configuration: configuration,
-            extensions: Arc::new(RwLock::new(Map::new())),
+            extensions: Arc::new(RwLock::new(TypeMap::custom())),
         }
     }
 }

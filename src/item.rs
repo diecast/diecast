@@ -1,11 +1,11 @@
 //! Compilation unit for the `Generator`.
 
-use anymap::Map;
-use anymap::any::CloneAny;
 use std::io::Write;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
+
+use typemap::{TypeMap, Key};
 
 use binding;
 
@@ -90,9 +90,7 @@ impl Debug for Route {
 ///
 /// It includes a body field which represents the read or to-be-written data.
 ///
-/// It also includes an [`AnyMap`] which is used to represent miscellaneous data.
-///
-/// [`AnyMap`]: http://www.rust-ci.org/chris-morgan/anymap/doc/anymap/struct.AnyMap.html
+/// It also includes a `TypeMap` which is used to represent miscellaneous data.
 
 #[derive(Clone)]
 pub struct Item {
@@ -104,7 +102,7 @@ pub struct Item {
     pub body: String,
 
     /// Any additional data
-    pub extensions: Map<CloneAny + Sync + Send>,
+    pub extensions: TypeMap<::typemap::CloneAny + Sync + Send>,
 }
 
 impl Item {
@@ -119,7 +117,7 @@ impl Item {
         Item {
             route: route,
             body: String::new(),
-            extensions: Map::new(),
+            extensions: TypeMap::custom(),
             bind: bind,
         }
     }

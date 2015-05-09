@@ -15,7 +15,6 @@ rpath = true
 [dependencies]
 glob = "*"
 regex = "*"
-regex_macros = "*"
 log = "*"
 env_logger = "*"
 hoedown = "*"
@@ -32,13 +31,23 @@ iron = "*"
 staticfile = "*"
 mount = "*"
 chrono = "*"
-zmq = "*"
-websocket = "*"
-git2 = "*"
-handlebars = "*"
-# anymap = "*"
 
-[dependencies.anymap]
-path = "../anymap"
+# for templates
+handlebars = "*"
+
+# for renderer
+zmq = "*"
+
+# for ws
+websocket = "*"
+
+# for git
+git2 = "*"
+
+# anymap = "*"
+# typemap = "*"
+
+[dependencies.typemap]
+path = "../rust-typemap"
 # git = "https://github.com/chris-morgan/anymap.git"
 # branch = "clone"

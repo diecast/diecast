@@ -1,13 +1,14 @@
 use std::sync::Arc;
 use std::path::PathBuf;
 use std::ops::Range;
+use std::any::Any;
 
 use regex::Regex;
 use toml;
 use chrono;
 use hoedown::{self, Render};
 use hoedown::renderer::html;
-use std::any::Any;
+use typemap;
 
 use handle::{self, Handle, Result};
 use item::Item;
@@ -25,9 +26,9 @@ impl Handle<Item> for Chain<Item> {
 }
 
 impl<T> Handle<Item> for Extender<T>
-where T: Any + Clone + Sync + Send + 'static {
+where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
     fn handle(&self, item: &mut Item) -> handle::Result {
-        item.extensions.insert(self.payload.clone());
+        item.extensions.insert::<T>(self.payload.clone());
         Ok(())
     }
 }
@@ -104,9 +105,10 @@ pub fn print(item: &mut Item) -> handle::Result {
     Ok(())
 }
 
-#[derive(Clone)]
-pub struct Metadata {
-    pub data: toml::Value,
+pub struct Metadata;
+
+impl typemap::Key for Metadata {
+    type Value = toml::Value;
 }
 
 pub fn parse_metadata(item: &mut Item) -> handle::Result {
@@ -127,7 +129,7 @@ pub fn parse_metadata(item: &mut Item) -> handle::Result {
     let body = if let Some(captures) = re.captures(&item.body) {
         if let Some(metadata) = captures.name("metadata") {
             if let Ok(parsed) = metadata.parse() {
-                item.extensions.insert(Metadata { data: parsed });
+                item.extensions.insert::<Metadata>(parsed);
             }
         }
 
@@ -144,7 +146,7 @@ pub fn parse_metadata(item: &mut Item) -> handle::Result {
 pub fn is_draft(item: &Item) -> bool {
     item.extensions.get::<Metadata>()
         .map(|meta| {
-            meta.data.lookup("draft")
+            meta.lookup("draft")
                 .and_then(::toml::Value::as_bool)
                 .unwrap_or(false)
         })
@@ -171,13 +173,23 @@ pub struct Page {
     pub posts_per_page: usize,
 }
 
+impl typemap::Key for Page {
+    type Value = Page;
+}
+
+pub struct Date;
+
+impl typemap::Key for Date {
+    type Value = chrono::NaiveDate;
+}
+
 // TODO
 // * make time type generic
 // * customizable format
 pub fn date(item: &mut Item) -> handle::Result {
     let date = {
         if let Some(meta) = item.extensions.get::<Metadata>() {
-            let date = meta.data.lookup("published").and_then(toml::Value::as_str).unwrap();
+            let date = meta.lookup("published").and_then(toml::Value::as_str).unwrap();
 
             Some(chrono::NaiveDate::parse_from_str(date, "%B %e, %Y").unwrap())
         } else {
@@ -186,7 +198,7 @@ pub fn date(item: &mut Item) -> handle::Result {
     };
 
     if let Some(date) = date {
-        item.extensions.insert::<chrono::NaiveDate>(date);
+        item.extensions.insert::<Date>(date);
     }
 
     Ok(())
@@ -216,7 +228,7 @@ pub fn markdown(item: &mut Item) -> handle::Result {
     let meta = item.extensions.get::<Metadata>();
 
     if let Some(meta) = meta {
-        if !meta.data.lookup("toc.show").and_then(toml::Value::as_bool).unwrap_or(false) {
+        if !meta.lookup("toc.show").and_then(toml::Value::as_bool).unwrap_or(false) {
             // TODO: tell render not to generate toc
         }
     }
@@ -225,7 +237,7 @@ pub fn markdown(item: &mut Item) -> handle::Result {
     // otherwise assume left align
     let align =
         meta.and_then(|m|
-            m.data.lookup("toc.align")
+            m.lookup("toc.align")
             .and_then(toml::Value::as_str)
             .map(|align| {
                 match align {

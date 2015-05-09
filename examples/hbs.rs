@@ -6,12 +6,19 @@ use std::io::Read;
 use diecast::{self, Handle, Item, Bind};
 use rustc_serialize::json::Json;
 use handlebars::Handlebars;
+use typemap;
 
 pub struct RenderTemplate<H>
 where H: Fn(&Item) -> Json + Sync + Send + 'static {
     binding: String,
     name: String,
     handler: H,
+}
+
+pub struct Templates;
+
+impl typemap::Key for Templates {
+    type Value = Arc<Handlebars>;
 }
 
 impl<H> Handle<Item> for RenderTemplate<H>
@@ -21,7 +28,7 @@ where H: Fn(&Item) -> Json + Sync + Send + 'static {
             let data =
                 item.bind().dependencies[&self.binding]
                 .data().extensions.read().unwrap();
-            let registry = data.get::<Arc<Handlebars>>().unwrap();
+            let registry = data.get::<Templates>().unwrap();
 
             let json = (self.handler)(item);
 
@@ -63,7 +70,7 @@ pub fn register_templates(bind: &mut Bind) -> diecast::Result {
         load_template(&item.source().unwrap(), &mut registry);
     }
 
-    bind.data().extensions.write().unwrap().insert::<Arc<Handlebars>>(Arc::new(registry));
+    bind.data().extensions.write().unwrap().insert::<Templates>(Arc::new(registry));
 
     Ok(())
 }

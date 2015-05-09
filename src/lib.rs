@@ -12,7 +12,6 @@
 #![feature(collections)]
 
 extern crate glob;
-extern crate anymap;
 extern crate regex;
 extern crate toml;
 extern crate threadpool;
@@ -20,6 +19,7 @@ extern crate chrono;
 extern crate zmq;
 extern crate websocket;
 extern crate git2;
+extern crate typemap;
 
 #[macro_use]
 extern crate log;

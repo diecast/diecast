@@ -1,6 +1,8 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use git2;
+use typemap;
 
 use diecast::{self, Handle, Item, Bind};
 
@@ -10,8 +12,11 @@ pub struct Git {
     pub message: String,
 }
 
+impl typemap::Key for Git {
+    type Value = Arc<Git>;
+}
+
 pub fn git(bind: &mut Bind) -> diecast::Result {
-    use std::sync::Arc;
     use std::collections::HashMap;
     use git2::{
         Repository,
@@ -101,7 +106,7 @@ pub fn git(bind: &mut Bind) -> diecast::Result {
                 })
                 .clone();
 
-            item.extensions.insert::<Arc<Git>>(git);
+            item.extensions.insert::<Git>(git);
             prune.push(path.clone());
         }
 

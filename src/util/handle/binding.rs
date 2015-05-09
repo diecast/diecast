@@ -5,6 +5,7 @@ use std::any::Any;
 use std::fs;
 
 use chrono;
+use typemap;
 
 use job::evaluator::Pool;
 use item::{Item, Route};
@@ -58,9 +59,9 @@ impl Handle<Bind> for Chain<Bind> {
 }
 
 impl<T> Handle<Bind> for Extender<T>
-where T: Any + Sync + Send + Clone + 'static {
+where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        bind.data().extensions.write().unwrap().insert(self.payload.clone());
+        bind.data().extensions.write().unwrap().insert::<T>(self.payload.clone());
         Ok(())
     }
 }
@@ -158,6 +159,10 @@ pub struct Adjacent {
     next: Option<Arc<Item>>,
 }
 
+impl typemap::Key for Adjacent {
+    type Value = Adjacent;
+}
+
 pub fn next_prev(bind: &mut Bind) -> handle::Result {
     let count = bind.len();
 
@@ -187,9 +192,10 @@ pub fn next_prev(bind: &mut Bind) -> handle::Result {
     Ok(())
 }
 
-#[derive(Clone)]
-pub struct Tags {
-    pub map: HashMap<String, Arc<Vec<Arc<Item>>>>,
+pub struct Tags;
+
+impl typemap::Key for Tags {
+    type Value = HashMap<String, Arc<Vec<Arc<Item>>>>;
 }
 
 pub fn tags(bind: &mut Bind) -> handle::Result {
@@ -198,9 +204,7 @@ pub fn tags(bind: &mut Bind) -> handle::Result {
     for item in bind.iter() {
         let toml =
             item.extensions.get::<super::item::Metadata>()
-            .and_then(|m| {
-                m.data.lookup("tags")
-            })
+            .and_then(|m| m.lookup("tags"))
             .and_then(::toml::Value::as_slice);
 
         let arc = Arc::new(item.clone());
@@ -220,7 +224,7 @@ pub fn tags(bind: &mut Bind) -> handle::Result {
         arc_map.insert(k, Arc::new(v));
     }
 
-    bind.data().extensions.write().unwrap().insert::<Tags>(Tags { map: arc_map });
+    bind.data().extensions.write().unwrap().insert::<Tags>(arc_map);
 
     Ok(())
 }

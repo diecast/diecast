@@ -16,6 +16,7 @@ extern crate chrono;
 extern crate websocket;
 extern crate zmq;
 extern crate git2;
+extern crate typemap;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -51,6 +52,10 @@ pub struct Tag {
     pub items: Arc<Vec<Arc<Item>>>,
 }
 
+impl typemap::Key for Tag {
+    type Value = Tag;
+}
+
 fn post_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
 
@@ -58,7 +63,7 @@ fn post_template(item: &Item) -> Json {
     if let Some(meta) = item.extensions.get::<item::Metadata>() {
         bt.insert(String::from("body"), item.body.to_json());
 
-        if let Some(title) = meta.data.lookup("title") {
+        if let Some(title) = meta.lookup("title") {
             bt.insert(String::from("title"), title.as_str().unwrap().to_json());
         }
 
@@ -66,11 +71,11 @@ fn post_template(item: &Item) -> Json {
             bt.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
         }
 
-        if let Some(date) = item.extensions.get::<chrono::NaiveDate>() {
+        if let Some(date) = item.extensions.get::<item::Date>() {
             bt.insert(String::from("date"), date.format("%B %e, %Y").to_string().to_json());
         }
 
-        if let Some(git) = item.extensions.get::<Arc<git::Git>>() {
+        if let Some(git) = item.extensions.get::<git::Git>() {
             let sha = git.sha.to_string().chars().take(7).collect::<String>();
             let path = item.source().unwrap();
 
@@ -86,7 +91,7 @@ fn post_template(item: &Item) -> Json {
             bt.insert(String::from("git"), res.to_json());
         }
 
-        if let Some(tags) = meta.data.lookup("tags").and_then(toml::Value::as_slice) {
+        if let Some(tags) = meta.lookup("tags").and_then(toml::Value::as_slice) {
             let tags = tags.iter().map(|t| {
                 let tag = t.as_str().unwrap();
                 let url = tag.chars()
@@ -120,7 +125,7 @@ fn posts_index_template(item: &Item) -> Json {
         let mut itm = BTreeMap::new();
 
         if let Some(meta) = post.extensions.get::<item::Metadata>() {
-            if let Some(title) = meta.data.lookup("title") {
+            if let Some(title) = meta.lookup("title") {
                 itm.insert(String::from("title"), title.as_str().unwrap().to_json());
             }
 
@@ -159,7 +164,7 @@ fn tags_index_template(item: &Item) -> Json {
             tg = tag.tag.clone();
 
             if let Some(meta) = post.extensions.get::<item::Metadata>() {
-                if let Some(title) = meta.data.lookup("title") {
+                if let Some(title) = meta.lookup("title") {
                     itm.insert(String::from("title"), title.as_str().unwrap().to_json());
                 }
 
@@ -195,7 +200,7 @@ fn notes_index_template(item: &Item) -> Json {
         let mut itm = BTreeMap::new();
 
         if let Some(meta) = post.extensions.get::<item::Metadata>() {
-            if let Some(title) = meta.data.lookup("title") {
+            if let Some(title) = meta.lookup("title") {
                 itm.insert(String::from("title"), title.as_str().unwrap().to_json());
             }
 
@@ -203,11 +208,11 @@ fn notes_index_template(item: &Item) -> Json {
                 itm.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
             }
 
-            if let Some(date) = item.extensions.get::<chrono::NaiveDate>() {
+            if let Some(date) = item.extensions.get::<item::Date>() {
                 bt.insert(String::from("date"), date.format("%B %e, %Y").to_string().to_json());
             }
 
-            if let Some(git) = item.extensions.get::<Arc<git::Git>>() {
+            if let Some(git) = item.extensions.get::<git::Git>() {
                 let sha = git.sha.to_string().chars().take(7).collect::<String>();
                 let path = item.source().unwrap();
 
@@ -356,8 +361,8 @@ fn main() {
                 .link(item::write)))
             .link(binding::next_prev)
             .link(binding::sort_by(|a, b| {
-                let a = a.extensions.get::<chrono::NaiveDate>().unwrap();
-                let b = b.extensions.get::<chrono::NaiveDate>().unwrap();
+                let a = a.extensions.get::<item::Date>().unwrap();
+                let b = b.extensions.get::<item::Date>().unwrap();
                 b.cmp(a)
             })));
 
@@ -400,8 +405,8 @@ fn main() {
                 .link(item::write)))
             .link(binding::next_prev)
             .link(binding::sort_by(|a, b| {
-                let a = a.extensions.get::<chrono::NaiveDate>().unwrap();
-                let b = b.extensions.get::<chrono::NaiveDate>().unwrap();
+                let a = a.extensions.get::<item::Date>().unwrap();
+                let b = b.extensions.get::<item::Date>().unwrap();
                 b.cmp(a)
             })));
 
@@ -425,7 +430,7 @@ fn main() {
         let mut items = vec![];
 
         if let Some(tags) = bind.dependencies["posts"].data().extensions.read().unwrap().get::<binding::Tags>() {
-            for (tag, itms) in &tags.map {
+            for (tag, itms) in tags {
                 let url = tag.chars()
                     .filter_map(|c| {
                         let is_ws = c.is_whitespace();
