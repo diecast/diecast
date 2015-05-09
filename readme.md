@@ -46,7 +46,7 @@ A custom compiler which would render the post index:
 
 ``` rust
 fn render_index(item: &mut Item) -> compiler::Result {
-  // notice since "post index" depends on "posts",
+  // notice "post index" depends on "posts",
   // so it has access to the "posts" dependency within its compilers
 
   for post in item.bind().dependencies["posts"].iter() {
