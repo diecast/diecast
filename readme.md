@@ -6,6 +6,23 @@ Markdown processing is enabled through the use of [idiomatic Hoedown bindings](h
 
 Documentation and examples are forthcoming, but here's a taste of what it's like:
 
+A rule that matches static assets and simply copies them to the output directory:
+
+``` rust
+let statics =
+    Rule::read("statics")
+    .source(source::select(or!(
+        "images/**/*".parse::<Glob>().unwrap(),
+        "static/**/*".parse::<Glob>().unwrap(),
+        "js/**/*".parse::<Glob>().unwrap(),
+        "favicon.png",
+        "CNAME"
+    )))
+    .handler(binding::each(Chain::new()
+        .link(route::identity)
+        .link(item::copy)));
+```
+
 Define a rule called `"posts"` which will match any file in the input directory that matches the glob pattern `posts/*.md`:
 
 ``` rust
@@ -87,6 +104,7 @@ let config = Configuration::new("input/", "output/");
 let mut command = command::from_args(config);
 
 // register the rules with the site
+command.site().register(statics);
 command.site().register(posts);
 command.site().register(index);
 
