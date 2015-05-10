@@ -177,6 +177,33 @@ impl typemap::Key for Page {
     type Value = Page;
 }
 
+// TODO: audit; perhaps have Item::versions
+pub struct Versions;
+
+impl typemap::Key for Versions {
+    type Value = HashMap<String, String>;
+}
+
+pub struct SaveVersion {
+    name: String,
+}
+
+impl Handle<Item> for SaveVersion {
+    fn handle(&self, item: &mut Item) -> handle::Result {
+        item.extensions.entry::<Versions>()
+            .or_insert_with(|| HashMap::new())
+            .insert(self.name.clone(), item.body.clone());
+
+        Ok(())
+    }
+}
+
+pub fn save_version<S: Into<String>>(name: S) -> SaveVersion {
+    SaveVersion {
+        name: name.into()
+    }
+}
+
 pub struct Date;
 
 impl typemap::Key for Date {

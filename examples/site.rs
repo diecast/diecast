@@ -17,6 +17,7 @@ extern crate websocket;
 extern crate zmq;
 extern crate git2;
 extern crate typemap;
+extern crate rss;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -44,6 +45,7 @@ use diecast::util::handle::{Chain, binding, item};
 mod hbs;
 mod scss;
 mod ws;
+mod feed;
 mod git;
 
 #[derive(Clone)]
@@ -394,6 +396,7 @@ fn main() {
             .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
                 .link(item::markdown)
+                .link(item::save_version("rendered"))
                 .link(route::pretty)))
             .link(ws::pipe(ws_tx))
             .link(git::git)
@@ -470,6 +473,14 @@ fn main() {
             .link(hbs::render_template(&templates, "layout", layout_template))
             .link(item::write)));
 
+    let feed =
+        Rule::create("feed")
+        .depends_on(&posts)
+        .source(source::create(PathBuf::from("rss.xml")))
+        .handler(binding::each(Chain::new()
+            .link(feed::rss)
+            .link(item::write)));
+
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
         .ignore(r"^\.|^#|~$|\.swp$|4913".parse::<Regex>().unwrap());
@@ -491,6 +502,7 @@ fn main() {
     command.site().register(tags);
     command.site().register(notes);
     command.site().register(notes_index);
+    command.site().register(feed);
 
     let start = PreciseTime::now();
 

@@ -44,10 +44,10 @@ websocket = "*"
 # for git
 git2 = "*"
 
-# anymap = "*"
 # typemap = "*"
+
+# for rss
+rss = "*"
 
 [dependencies.typemap]
 path = "../rust-typemap"
-# git = "https://github.com/chris-morgan/anymap.git"
-# branch = "clone"
