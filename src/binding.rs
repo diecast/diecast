@@ -8,9 +8,6 @@ use typemap::TypeMap;
 use item::Item;
 use configuration::Configuration;
 
-#[derive(Clone)]
-pub enum Build { Full, Partial(Vec<Item>), }
-
 // FIXME
 // problem is that an item handler can easily change
 // these fields and essentially corrupt the bind data
@@ -33,6 +30,9 @@ impl Data {
         }
     }
 }
+
+#[derive(Clone)]
+pub enum Build { Full, Partial(Vec<Item>), }
 
 #[derive(Clone)]
 pub struct Bind {
@@ -63,6 +63,25 @@ impl Bind {
         &mut self.items
     }
 
+    // FIXME
+    // this is incorrect because it contains the stale items instead
+    // of the ones from Build::Partial
+    //
+    // one potential solution is:
+    //
+    // * replace each item in self.items with the one from Build::Partial
+    // * then return a reference to it
+    //
+    // the problem is that then we would need to 'update' the ones from
+    // partial with the ones from items, in case the call to all_items_mut
+    // modified the ones from Partial
+    //
+    // another potential solution is:
+    //
+    // * maintain a set of the partial ones
+    // * all items are stored on self.items
+    // * on all_items(), just yield ref to self.items
+    // * on items(), partition all_items (?)
     pub unsafe fn all_items(&self) -> &Vec<Item> {
         &self.items
     }
