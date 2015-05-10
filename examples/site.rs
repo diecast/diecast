@@ -169,10 +169,10 @@ fn tags_index_template(item: &Item) -> Json {
                 if let Some(title) = meta.lookup("title") {
                     itm.insert(String::from("title"), title.as_str().unwrap().to_json());
                 }
+            }
 
-                if let Some(path) = post.route.writing() {
-                    itm.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
-                }
+            if let Some(path) = post.route.writing() {
+                itm.insert(String::from("url"), path.parent().unwrap().to_str().unwrap().to_json());
             }
 
             items.push(itm);
@@ -351,7 +351,6 @@ fn main() {
                 .link(item::date)))
             // TODO: replace with some sort of filter/only_if
             // .link(binding::retain(item::publishable))
-            .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
                 .link(item::markdown)
                 .link(route::pretty)))
@@ -393,11 +392,12 @@ fn main() {
                 .link(item::parse_metadata)
                 .link(item::date)))
             .link(binding::retain(item::publishable))
-            .link(binding::tags)
             .link(binding::parallel_each(Chain::new()
                 .link(item::markdown)
                 .link(item::save_version("rendered"))
                 .link(route::pretty)))
+            // TODO: should be called after routing
+            .link(binding::tags)
             .link(ws::pipe(ws_tx))
             .link(git::git)
             .link(binding::parallel_each(Chain::new()
