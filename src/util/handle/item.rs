@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::path::PathBuf;
 use std::ops::Range;
 use std::any::Any;
+use std::collections::HashMap;
 
 use regex::Regex;
 use toml;
