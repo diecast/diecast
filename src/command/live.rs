@@ -116,7 +116,7 @@ impl Command for Live {
                     // tune the rebounce period to be higher, e.g. 5 seconds,
                     // to be able to catch these kinds of quick fixes, at the expense
                     // of lack of immediacy
-                    let rebounce = Duration::milliseconds(300);
+                    let rebounce = Duration::milliseconds(100);
                     let mut last_bounce = SteadyTime::now();
                     let mut set: HashSet<PathBuf> = HashSet::new();
 
@@ -198,7 +198,7 @@ impl Command for Live {
                                 } else {
                                     // TODO audit
                                     // consume rebounce time in 100ms chunks
-                                    thread::sleep_ms(100);
+                                    thread::sleep_ms(10);
                                 }
                             },
                             Err(TryRecvError::Disconnected) => {
