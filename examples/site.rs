@@ -481,6 +481,15 @@ fn main() {
             .link(feed::rss)
             .link(item::write)));
 
+    let not_found =
+        Rule::create("404")
+        .depends_on(&templates)
+        .source(source::create(PathBuf::from("404.html")))
+        .handler(binding::each(Chain::new()
+            .link(hbs::render_template(&templates, "404", |_| { Json::Null }))
+            .link(hbs::render_template(&templates, "layout", layout_template))
+            .link(item::write)));
+
     let config =
         Configuration::new("tests/fixtures/hakyll", "output")
         .ignore(r"^\.|^#|~$|\.swp$|4913".parse::<Regex>().unwrap());
@@ -503,6 +512,7 @@ fn main() {
     command.site().register(notes);
     command.site().register(notes_index);
     command.site().register(feed);
+    command.site().register(not_found);
 
     let start = PreciseTime::now();
 
