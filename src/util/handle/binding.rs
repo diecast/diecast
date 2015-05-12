@@ -207,6 +207,10 @@ pub fn adjacent(bind: &mut Bind) -> handle::Result {
     };
 
     // TODO: yet another reason to have Arc<Item>?
+    // FIXME
+    // the problem with this is that unlike Paginate,
+    // it'll contain copies of the item Should probably
+    // instead insert an index?
     let cloned =
         bind.items().iter()
         .map(|i| Arc::new(i.clone()))

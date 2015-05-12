@@ -96,6 +96,9 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     }
 }
 
+// FIXME
+// the problem with this using indices is that if the bind is sorted
+// or the order is otherwise changed, the indices will no longer match!
 pub fn pages<R>(input: usize, factor: usize, router: &R, bind: Arc<binding::Data>) -> Vec<Item>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     let mut items = vec![];
