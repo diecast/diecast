@@ -50,4 +50,4 @@ git2 = "*"
 rss = "*"
 
 [dependencies.typemap]
-path = "../rust-typemap"
+path = "../../rust-typemap"

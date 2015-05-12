@@ -8,7 +8,6 @@
 #![feature(path_ext)]
 #![feature(fs_walk)]
 #![feature(path_relative_from)]
-#![feature(str_char)] // for char_at
 #![feature(collections)]
 
 extern crate glob;

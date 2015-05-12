@@ -107,7 +107,9 @@ impl Site {
             let path = child.unwrap().path();
 
             if !self.configuration.ignore_hidden ||
-                path.file_name().unwrap().to_str().unwrap().char_at(0) != '.' {
+                path.file_name().unwrap()
+                    .to_str().unwrap()
+                    .chars().next().unwrap() != '.' {
                 if path.is_dir() {
                     remove_dir_all(&path).unwrap();
                 } else {
