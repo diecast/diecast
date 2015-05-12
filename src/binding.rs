@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
-use std::slice;
 use std::fmt;
 
 use typemap::TypeMap;
@@ -32,13 +31,14 @@ impl Data {
 }
 
 #[derive(Clone)]
-pub enum Build { Full, Partial(Vec<Item>), }
-
-#[derive(Clone)]
 pub struct Bind {
     items: Vec<Item>,
     data: Arc<Data>,
-    build: Build,
+    is_partial: bool,
+}
+
+pub fn set_partial(bind: &mut Bind, is_partial: bool) {
+    bind.is_partial = is_partial;
 }
 
 impl Bind {
@@ -47,49 +47,56 @@ impl Bind {
         Bind {
             items: items,
             data: data,
-            build: Build::Full,
+            is_partial: false,
         }
     }
 
-    pub fn update(&mut self, items: Vec<Item>) {
-        self.build = Build::Partial(items);
+    pub fn is_partial(&self) -> bool {
+        self.is_partial
     }
 
-    pub fn set_full_build(&mut self) {
-        self.build = Build::Full;
-    }
-
+    // TODO rename this
     pub unsafe fn all_items_mut(&mut self) -> &mut Vec<Item> {
         &mut self.items
     }
 
-    // FIXME
-    // this is incorrect because it contains the stale items instead
-    // of the ones from Build::Partial
-    //
-    // one potential solution is:
-    //
-    // * replace each item in self.items with the one from Build::Partial
-    // * then return a reference to it
-    //
-    // the problem is that then we would need to 'update' the ones from
-    // partial with the ones from items, in case the call to all_items_mut
-    // modified the ones from Partial
-    //
-    // another potential solution is:
-    //
-    // * maintain a set of the partial ones
-    // * all items are stored on self.items
-    // * on all_items(), just yield ref to self.items
-    // * on items(), partition all_items (?)
-    pub unsafe fn all_items(&self) -> &Vec<Item> {
+    /// Yields _all_ of the items
+    pub fn items_mut(&mut self) -> &mut [Item] {
+        &mut self.items
+    }
+
+    /// Yields _all_ of the items
+    pub fn items(&self) -> &[Item] {
         &self.items
     }
 
-    pub unsafe fn items_mut(&mut self) -> &mut Vec<Item> {
-        match self.build {
-            Build::Full => &mut self.items,
-            Build::Partial(ref mut items) => items,
+    /// conditionally yields either all of the items or only the ones that
+    /// have been updated
+    pub fn iter<'a>(&'a self) -> Iter<'a> {
+        if !self.is_partial {
+            Iter {
+                iter: IterKind::Full(self.items.iter())
+            }
+        } else {
+            Iter {
+                iter: IterKind::Partial(StaleIter {
+                    iter: self.items.iter(),
+                })
+            }
+        }
+    }
+
+    pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a> {
+        if !self.is_partial {
+            IterMut {
+                iter: IterKindMut::Full(self.items.iter_mut())
+            }
+        } else {
+            IterMut {
+                iter: IterKindMut::Partial(StaleIterMut {
+                    iter: self.items.iter_mut(),
+                })
+            }
         }
     }
 
@@ -102,57 +109,108 @@ impl Bind {
     }
 }
 
-impl ::std::ops::Deref for Bind {
-    type Target = [Item];
+struct StaleIter<'a> {
+    iter: ::std::slice::Iter<'a, Item>,
+}
 
-    fn deref(&self) -> &[Item] {
-        match self.build {
-            Build::Full => &self.items,
-            Build::Partial(ref items) => items,
+impl<'a> Iterator for StaleIter<'a> {
+    type Item = &'a Item;
+
+    fn next(&mut self) -> Option<&'a Item> {
+        while let Some(item) = self.iter.next() {
+            if !item.is_stale() {
+                continue;
+            }
+
+            return Some(item);
+        }
+
+        return None;
+    }
+}
+
+struct StaleIterMut<'a> {
+    iter: ::std::slice::IterMut<'a, Item>,
+}
+
+impl<'a> Iterator for StaleIterMut<'a> {
+    type Item = &'a mut Item;
+
+    fn next(&mut self) -> Option<&'a mut Item> {
+        while let Some(item) = self.iter.next() {
+            if !item.is_stale() {
+                continue;
+            }
+
+            return Some(item);
+        }
+
+        return None;
+    }
+}
+
+enum IterKind<'a> {
+    Full(::std::slice::Iter<'a, Item>),
+    Partial(StaleIter<'a>)
+}
+
+pub struct Iter<'a> {
+    iter: IterKind<'a>,
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a Item;
+
+    fn next(&mut self) -> Option<&'a Item> {
+        match self.iter {
+            IterKind::Full(ref mut i) => i.next(),
+            IterKind::Partial(ref mut i) => i.next(),
         }
     }
 }
 
-impl ::std::ops::DerefMut for Bind {
-    fn deref_mut(&mut self) -> &mut [Item] {
-        match self.build {
-            Build::Full => &mut self.items,
-            Build::Partial(ref mut items) => items,
+enum IterKindMut<'a> {
+    Full(::std::slice::IterMut<'a, Item>),
+    Partial(StaleIterMut<'a>)
+}
+
+pub struct IterMut<'a> {
+    iter: IterKindMut<'a>,
+}
+
+impl<'a> Iterator for IterMut<'a> {
+    type Item = &'a mut Item;
+
+    fn next(&mut self) -> Option<&'a mut Item> {
+        match self.iter {
+            IterKindMut::Full(ref mut i) => i.next(),
+            IterKindMut::Partial(ref mut i) => i.next(),
         }
     }
 }
 
 impl<'a> IntoIterator for &'a Bind {
     type Item = &'a Item;
-    type IntoIter = slice::Iter<'a, Item>;
+    type IntoIter = Iter<'a>;
 
-    fn into_iter(self) -> slice::Iter<'a, Item> {
-        match self.build {
-            Build::Full => self.items.iter(),
-            Build::Partial(ref items) => items.iter(),
-        }
+    fn into_iter(self) -> Iter<'a> {
+        self.iter()
     }
 }
 
 impl<'a> IntoIterator for &'a mut Bind {
     type Item = &'a mut Item;
-    type IntoIter = slice::IterMut<'a, Item>;
+    type IntoIter = IterMut<'a>;
 
-    fn into_iter(self) -> slice::IterMut<'a, Item> {
-        match self.build {
-            Build::Full => self.items.iter_mut(),
-            Build::Partial(ref mut items) => items.iter_mut(),
-        }
+    fn into_iter(self) -> IterMut<'a> {
+        self.iter_mut()
     }
 }
 
 // TODO update for Partial(items)
 impl fmt::Debug for Bind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {}", self.data().name, match self.build {
-            Build::Full => format!("full build of {:?}", self.items),
-            Build::Partial(ref items) => format!("partial build of {:?}", items),
-        })
+        write!(f, "{}: {:?}", self.data().name, self.items)
     }
 }
 

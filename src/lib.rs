@@ -47,6 +47,9 @@ pub use item::Item;
 pub use binding::Bind;
 pub use handle::{Handle, Result};
 pub use source::Source;
+// TODO command hooks
+pub use command::Command;
+pub use deploy::Deploy;
 
 mod handle;
 mod job;

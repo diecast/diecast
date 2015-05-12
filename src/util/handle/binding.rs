@@ -82,6 +82,10 @@ where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
     }
 }
 
+// TODO
+// should this probably be a separate crate?
+// store mutex<threadpool> in extensions,
+// then this handler would use it?
 pub fn parallel_each<H>(handler: H) -> ParallelEach<H>
 where H: Handle<Item> + Sync + Send + 'static {
     ParallelEach {
@@ -109,8 +113,21 @@ impl<H> Handle<Bind> for ParallelEach<H>
 where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
         let pool: Pool<Vec<Item>> = Pool::new(bind.data().configuration.threads);
-        let item_count = bind.len();
+        let total = bind.items().len();
 
+        let mut items = unsafe { ::std::mem::replace(bind.all_items_mut(), vec![]) };
+        let mut retainer = vec![];
+
+        // if it's updating, then we should collect the
+        if bind.is_partial() {
+            let (stale, ignore): (Vec<_>, Vec<_>) =
+                items.into_iter().partition(|i| i.is_stale());
+
+            items = stale;
+            retainer = ignore;
+        }
+
+        let item_count = items.len();
         let chunks = {
             let (div, rem) = (item_count / self.chunk, item_count % self.chunk);
 
@@ -120,9 +137,6 @@ where H: Handle<Item> + Sync + Send + 'static {
                 div + 1
             }
         };
-
-        // FIXME: drain() won't be stable!
-        let mut items = unsafe { ::std::mem::replace(bind.items_mut(), vec![]) };
 
         // TODO: optimize this for general case of chunk=1?
         while !items.is_empty() {
@@ -155,10 +169,14 @@ where H: Handle<Item> + Sync + Send + 'static {
 
         for _ in 0 .. chunks {
             // TODO: this completely defeats the purpose of hiding the items field
-            unsafe { bind.items_mut().extend(pool.dequeue().unwrap().into_iter()) };
+            unsafe { bind.all_items_mut().extend(pool.dequeue().unwrap().into_iter()) };
         }
 
-        assert!(item_count == bind.len(), "received different number of items from pool");
+        if !retainer.is_empty() {
+            unsafe { bind.all_items_mut().extend(retainer.into_iter()) };
+        }
+
+        assert_eq!(total, bind.items().len());
 
         Ok(())
     }
@@ -180,7 +198,7 @@ impl typemap::Key for Adjacent {
 }
 
 pub fn adjacent(bind: &mut Bind) -> handle::Result {
-    let count = unsafe { bind.all_items().len() };
+    let count = bind.items().len();
 
     let last_num = if count == 0 {
         0
@@ -189,11 +207,10 @@ pub fn adjacent(bind: &mut Bind) -> handle::Result {
     };
 
     // TODO: yet another reason to have Arc<Item>?
-    let cloned = unsafe {
-        bind.all_items().iter()
+    let cloned =
+        bind.items().iter()
         .map(|i| Arc::new(i.clone()))
-        .collect::<Vec<Arc<Item>>>()
-    };
+        .collect::<Vec<Arc<Item>>>();
 
     for (idx, item) in unsafe { bind.all_items_mut().iter_mut().enumerate() } {
         let prev =
@@ -267,11 +284,9 @@ impl<F> Handle<Bind> for SortBy<F>
 where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
       F: Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        unsafe {
-            bind.items_mut().sort_by(|a, b| -> ::std::cmp::Ordering {
-                (self.compare)(a, b)
-            });
-        }
+        bind.items_mut().sort_by(|a, b| -> ::std::cmp::Ordering {
+            (self.compare)(a, b)
+        });
 
         Ok(())
     }

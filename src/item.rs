@@ -103,6 +103,12 @@ pub struct Item {
 
     /// Any additional data
     pub extensions: TypeMap<::typemap::CloneAny + Sync + Send>,
+
+    is_stale: bool,
+}
+
+pub fn set_stale(item: &mut Item, stale: bool) {
+    item.is_stale = stale;
 }
 
 impl Item {
@@ -119,7 +125,12 @@ impl Item {
             body: String::new(),
             extensions: TypeMap::custom(),
             bind: bind,
+            is_stale: false,
         }
+    }
+
+    pub fn is_stale(&self) -> bool {
+        self.is_stale
     }
 
     pub fn source(&self) -> Option<PathBuf> {

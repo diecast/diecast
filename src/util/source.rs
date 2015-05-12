@@ -92,7 +92,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 impl<R> Source for Paginate<R>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     fn source(&self, bind: Arc<binding::Data>) -> Vec<Item> {
-        pages(bind.dependencies[&self.target].len(), self.factor, &self.router, bind)
+        pages(bind.dependencies[&self.target].items().len(), self.factor, &self.router, bind)
     }
 }
 

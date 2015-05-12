@@ -123,7 +123,7 @@ fn posts_index_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
     let mut items = vec![];
 
-    for post in &item.bind().dependencies["posts"][page.range.clone()] {
+    for post in &item.bind().dependencies["posts"].items()[page.range.clone()] {
         let mut itm = BTreeMap::new();
 
         if let Some(meta) = post.extensions.get::<item::Metadata>() {
@@ -198,7 +198,7 @@ fn notes_index_template(item: &Item) -> Json {
     let mut bt = BTreeMap::new();
     let mut items = vec![];
 
-    for post in &item.bind().dependencies["notes"][page.range.clone()] {
+    for post in &item.bind().dependencies["notes"].items()[page.range.clone()] {
         let mut itm = BTreeMap::new();
 
         if let Some(meta) = post.extensions.get::<item::Metadata>() {

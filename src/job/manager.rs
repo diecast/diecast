@@ -196,7 +196,7 @@ where E: Evaluator {
 
         // find the binds that contain the paths
         for bind in self.finished.values() {
-            use item::{Item, Route};
+            use item;
 
             let name = bind.data().name.clone();
             let rule = &self.rules[&name];
@@ -212,18 +212,20 @@ where E: Evaluator {
 
             let affected =
                 bind_paths.intersection(&paths).cloned()
-                .map(|p| Item::new(Route::Read(p), bind.get_data()))
-                .collect::<Vec<Item>>();
+                .collect::<HashSet<PathBuf>>();
             let is_match = affected.len() > 0;
 
+            // TODO
+            // preferably don't clone, instead just modify it in place
             let mut modified: Bind = (**bind).clone();
 
-            // TODO
-            // what does it mean if it's left as a Partial?
-            // in subsequent builds, as a dependent of a different affected?
-            // it seems to me like a Partial should only apply on a single iteration,
-            // and then it should flip back to Full
-            modified.update(affected);
+            for item in modified.items_mut() {
+                if item.route.reading().map(|p| affected.contains(p)).unwrap_or(false) {
+                    item::set_stale(item, true);
+                }
+            }
+
+            binding::set_partial(&mut modified, true);
 
             if is_match {
                 bindings.insert(name.clone(), modified);
@@ -322,7 +324,8 @@ where E: Evaluator {
         // if they're done, move from staging to finished
         self.finished.insert(binding.clone(), Arc::new({
             let mut bind = current.into_bind();
-            bind.set_full_build();
+            // bind.set_full_build();
+            binding::set_partial(&mut bind, false);
             bind
         }));
 

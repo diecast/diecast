@@ -12,7 +12,7 @@ use toml;
 pub fn rss(item: &mut Item) -> diecast::Result {
     let site = String::from("http://www.blaenkdenum.com");
 
-    let count = item.bind().dependencies["posts"].len();
+    let count = item.bind().dependencies["posts"].items().len();
 
     let feed_items =
         item.bind().dependencies["posts"].iter()
