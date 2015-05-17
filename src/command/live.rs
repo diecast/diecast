@@ -1,4 +1,3 @@
-use std::fs::PathExt;
 use std::sync::mpsc::{channel, TryRecvError};
 use std::path::PathBuf;
 use std::collections::HashSet;
@@ -8,7 +7,7 @@ use docopt::Docopt;
 use tempdir::TempDir;
 use time::{SteadyTime, Duration};
 use notify::{RecommendedWatcher, Error, Watcher};
-use iron::Iron;
+use iron::{self, Iron};
 use mount::Mount;
 use staticfile::Static;
 
@@ -84,7 +83,11 @@ impl Command for Live {
         let mut mount = Mount::new();
         mount.mount("/", Static::new(&self.site.configuration().output));
 
-        let _guard = Iron::new(mount).http("0.0.0.0:3000").unwrap();
+        let _guard =
+            Iron::new(mount)
+            .listen_with("0.0.0.0:3000", 1, iron::Protocol::Http)
+            .unwrap();
+            // .http("0.0.0.0:3000").unwrap();
 
         let target = self.site.configuration().input.clone();
 
@@ -116,7 +119,7 @@ impl Command for Live {
                     // tune the rebounce period to be higher, e.g. 5 seconds,
                     // to be able to catch these kinds of quick fixes, at the expense
                     // of lack of immediacy
-                    let rebounce = Duration::milliseconds(100);
+                    let rebounce = Duration::milliseconds(10);
                     let mut last_bounce = SteadyTime::now();
                     let mut set: HashSet<PathBuf> = HashSet::new();
 
@@ -238,18 +241,23 @@ impl Command for Live {
             trace!("paths:\n{:?}", paths);
 
             let (mut ready, mut waiting): (HashSet<PathBuf>, HashSet<PathBuf>) =
-                paths.into_iter().partition(|p| p.exists());
+                paths.into_iter().partition(|p| ::file_exists(p));
 
             // TODO optimize
             // so only non-existing paths are still polled?
             // perhaps using a partition
             while !waiting.is_empty() {
+                // FIXME if user doesn't properly ignore files,
+                // this can go on forever. instead, after a while,
+                // this should just give up and remove the non-existing
+                // file from the set
+
                 trace!("waiting for all paths to exist");
                 // TODO: this should probably be thread::yield_now
                 thread::park_timeout_ms(10);
 
                 let (r, w): (HashSet<PathBuf>, HashSet<PathBuf>) =
-                    waiting.into_iter().partition(|p| p.exists());
+                    waiting.into_iter().partition(|p| ::file_exists(p));
 
                 ready.extend(r.into_iter());
                 waiting = w;
@@ -262,7 +270,7 @@ impl Command for Live {
             // TODO
             // this would probably become something like self.site.update();
             let p = paths.into_iter()
-            .map(|p| p.relative_from(&self.site.configuration().input).unwrap().to_path_buf())
+            .map(|p| ::path_relative_from(&p, &self.site.configuration().input).unwrap().to_path_buf())
             .collect::<HashSet<PathBuf>>();
             println!("mapped: {:?}", p);
             self.site.update(p);

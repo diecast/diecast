@@ -23,6 +23,11 @@ impl Site {
     pub fn new(configuration: Configuration) -> Site {
         trace!("output directory is: {:?}", configuration.output);
 
+        if !::file_exists(&configuration.input) {
+            println!("the input directory `{:?}` does not exist!", configuration.input);
+            ::std::process::exit(1);
+        }
+
         // let queue: VecDeque<job::Job> = VecDeque::new();
         let queue = job::evaluator::Pool::new(4);
 
@@ -71,8 +76,10 @@ impl Site {
 
     pub fn register(&mut self, rule: Rule) {
         if !rule.dependencies().is_empty() {
-            let names = self.rules.iter().map(|r| String::from(r.name())).collect();
-            let diff: HashSet<_> = rule.dependencies().difference(&names).cloned().collect();
+            let names =
+                self.rules.iter().map(|r| String::from(r.name())).collect();
+            let diff: HashSet<_> =
+                rule.dependencies().difference(&names).cloned().collect();
 
             if !diff.is_empty() {
                 println!("`{}` depends on unregistered rule(s) `{:?}`", rule.name(), diff);
@@ -88,7 +95,6 @@ impl Site {
     }
 
     pub fn clean(&self) {
-        use std::fs::PathExt;
         use std::fs::{
             read_dir,
             remove_dir_all,
@@ -97,7 +103,7 @@ impl Site {
 
         trace!("cleaning");
 
-        if !self.configuration.output.exists() {
+        if !::file_exists(&self.configuration.output) {
             return;
         }
 
@@ -110,7 +116,7 @@ impl Site {
                 path.file_name().unwrap()
                     .to_str().unwrap()
                     .chars().next().unwrap() != '.' {
-                if path.is_dir() {
+                if ::std::fs::metadata(&path).unwrap().is_dir() {
                     remove_dir_all(&path).unwrap();
                 } else {
                     remove_file(&path).unwrap();

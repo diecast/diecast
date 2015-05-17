@@ -52,11 +52,9 @@ impl Command for Clean {
     }
 
     fn run(&mut self) {
-        use std::fs::PathExt;
-
         let target = &self.site.configuration().output;
 
-        if target.exists() {
+        if ::file_exists(target) {
             println!("removing {:?}", target);
         } else {
             println!("nothing to remove");

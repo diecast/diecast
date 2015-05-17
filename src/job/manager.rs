@@ -190,7 +190,9 @@ where E: Evaluator {
         let mut matched = vec![];
         let mut didnt = BTreeSet::new();
 
-        // TODO handle deletes? how? on delete, do full build no matter what
+        // TODO handle deletes and new files
+        // * deletes: full build
+        // * new files: add Item
 
         let mut bindings = HashMap::new();
 

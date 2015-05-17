@@ -1,7 +1,8 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::fs;
+
+use walker::Walker;
 
 use binding;
 use item::{Item, Route};
@@ -20,9 +21,10 @@ impl Source for Create {
 }
 
 #[inline]
-pub fn create(path: PathBuf) -> Create {
+pub fn create<P>(path: P) -> Create
+where P: Into<PathBuf> {
     Create {
-        path: path,
+        path: path.into(),
     }
 }
 
@@ -34,12 +36,12 @@ where P: Pattern + Sync + Send + 'static {
 impl<P> Source for Select<P>
 where P: Pattern + Sync + Send + 'static {
     fn source(&self, bind: Arc<binding::Data>) -> Vec<Item> {
-        use std::fs::PathExt;
-
         let mut items = vec![];
 
+        // TODO
+        // use fs::walk once stable
         let paths =
-            fs::walk_dir(&bind.configuration.input).unwrap()
+            Walker::new(&bind.configuration.input).unwrap()
             .filter_map(|p| {
                 let path = p.unwrap().path();
 
@@ -49,7 +51,7 @@ where P: Pattern + Sync + Send + 'static {
                     }
                 }
 
-                if path.is_file() {
+                if ::std::fs::metadata(&path).unwrap().is_file() {
                     Some(path.to_path_buf())
                 } else {
                     None
@@ -59,7 +61,7 @@ where P: Pattern + Sync + Send + 'static {
 
         for path in &paths {
             let relative =
-                path.relative_from(&bind.configuration.input).unwrap()
+                ::path_relative_from(path, &bind.configuration.input).unwrap()
                 .to_path_buf();
 
             // TODO: JOIN STANDARDS

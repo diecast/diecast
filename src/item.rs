@@ -113,10 +113,8 @@ pub fn set_stale(item: &mut Item, stale: bool) {
 
 impl Item {
     pub fn new(route: Route, bind: Arc<binding::Data>) -> Item {
-        use std::fs::PathExt;
-
         if let Some(path) = route.reading() {
-            assert!(bind.configuration.input.join(path).is_file())
+            assert!(::std::fs::metadata(bind.configuration.input.join(path)).unwrap().is_file())
         }
 
         // ensure that the source is a file

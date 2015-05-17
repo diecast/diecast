@@ -16,38 +16,24 @@ rpath = true
 glob = "*"
 regex = "*"
 log = "*"
-env_logger = "*"
-hoedown = "*"
-rustc-serialize = "*"
 docopt = "*"
+walker = "*"
+
 toml = "*"
-notify = "*"
-libc = "*"
 time = "*"
 threadpool = "*"
 tempdir = "*"
 num_cpus = "*"
 iron = "*"
-staticfile = "*"
 mount = "*"
+typemap = "*"
+rustc-serialize = "*"
+
+# for date
 chrono = "*"
 
-# for templates
-handlebars = "*"
+# unstable
+notify = "*"
 
-# for renderer
-zmq = "*"
-
-# for ws
-websocket = "*"
-
-# for git
-git2 = "*"
-
-# typemap = "*"
-
-# for rss
-rss = "*"
-
-[dependencies.typemap]
-path = "../../rust-typemap"
+[dependencies.staticfile]
+path = "../../staticfile"

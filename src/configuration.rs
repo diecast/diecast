@@ -1,10 +1,11 @@
-use std::path::{Path, PathBuf};
-use std::convert::AsRef;
+use std::path::PathBuf;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 
 use num_cpus;
 use toml;
+use regex::Regex;
 
 use command;
 use pattern::Pattern;
@@ -49,33 +50,71 @@ pub struct Configuration {
     // socket_addr: SocketAddr
 }
 
+// TODO configuration hierarchy
+// CLI -> toml -> code -> defaults
 impl Configuration {
-    pub fn new<P: ?Sized, Q: ?Sized>(input: &P, output: &Q) -> Configuration
-    where P: AsRef<Path>, Q: AsRef<Path> {
+    pub fn new() -> Configuration {
         // if there's no file just set an empty toml table
         // otherwise forcibly attempt to read the contents and parsing them
         // if either of those two fails the program should and will panic
         let toml =
-            File::open("config.toml")
+            File::open("Diecast.toml")
             .map(|mut file| {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents).unwrap();
                 contents.parse::<toml::Value>().unwrap()
             })
-            .unwrap_or(toml::Value::Table(::std::collections::BTreeMap::new()));
+            .unwrap_or(toml::Value::Table(BTreeMap::new()));
+
+        let ignore =
+            toml.lookup("diecast.ignore")
+            .and_then(toml::Value::as_str)
+            .and_then(|s| {
+                match Regex::new(s) {
+                    Ok(r) => Some(Box::new(r) as Box<Pattern + Send + Sync>),
+                    Err(e) => {
+                        error!("could not parse regex: {}", e);
+                        None
+                    },
+                }
+            });
+
+        let input =
+            toml.lookup("diecast.input")
+            .and_then(toml::Value::as_str)
+            .map(PathBuf::from)
+            .unwrap_or(PathBuf::from("input"));
+
+        let output =
+            toml.lookup("diecast.output")
+            .and_then(toml::Value::as_str)
+            .map(PathBuf::from)
+            .unwrap_or(PathBuf::from("output"));
 
         Configuration {
             toml: toml,
             // TODO: setting it to error by default seems like a wart
-            input: input.as_ref().to_path_buf(),
-            output: output.as_ref().to_path_buf(),
+            input: input,
+            output: output,
             command: command::Kind::None,
             threads: num_cpus::get(),
             is_verbose: false,
-            ignore: None,
+            ignore: ignore,
             is_preview: false,
             ignore_hidden: false,
         }
+    }
+
+    pub fn input<P: ?Sized>(mut self, input: P) -> Configuration
+    where P: Into<PathBuf> {
+        self.input = input.into();
+        self
+    }
+
+    pub fn output<P: ?Sized>(mut self, output: P) -> Configuration
+    where P: Into<PathBuf> {
+        self.output = output.into();
+        self
     }
 
     pub fn toml(&self) -> &toml::Value {

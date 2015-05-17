@@ -92,14 +92,6 @@ where T: Ord + Clone + Hash {
         self.reverse.get(node).map(|s| s.len()).unwrap_or(0usize)
     }
 
-    /// Topological ordering starting at the provided node.
-    ///
-    /// This essentially means: the given node plus all nodes
-    /// that depend on it.
-    pub fn resolve_only(&self, node: T) -> Result<VecDeque<T>, VecDeque<T>> {
-        Topological::new(self).only(node)
-    }
-
     pub fn resolve(&self, nodes: Vec<T>) -> Result<VecDeque<T>, VecDeque<T>> {
         Topological::new(self).from(nodes)
     }
@@ -193,15 +185,6 @@ where T: Ord + Clone + Hash {
         self.on_stack.remove(&node);
         out.push_front(node);
         Ok(())
-    }
-
-    /// recompile the dependencies of `node` and then `node` itself
-    pub fn only(mut self, node: T) -> Result<Order<T>, Cycle<T>> {
-        let mut order = VecDeque::new();
-
-        try!(self.dfs(node, &mut order));
-
-        Ok(order)
     }
 
     pub fn from(mut self, nodes: Vec<T>) -> Result<Order<T>, Cycle<T>> {

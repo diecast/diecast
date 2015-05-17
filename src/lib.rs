@@ -1,35 +1,24 @@
 // TODO: when ready, this prevents it from building
 //       if there are missing docs or warnings
 // #![warn(missing_docs)]
-// #![deny(warnings)]
+#![deny(warnings)]
 
 //! This crate facilitates the creation of static site generators.
-
-#![feature(path_ext)]
-#![feature(fs_walk)]
-#![feature(path_relative_from)]
-#![feature(collections)]
 
 extern crate glob;
 extern crate regex;
 extern crate toml;
 extern crate threadpool;
 extern crate chrono;
-extern crate zmq;
-extern crate websocket;
-extern crate git2;
 extern crate typemap;
+extern crate walker;
 
 #[macro_use]
 extern crate log;
 
-#[macro_use]
-extern crate hoedown;
 extern crate rustc_serialize;
-extern crate handlebars;
 extern crate docopt;
 extern crate notify;
-extern crate libc;
 extern crate time;
 extern crate tempdir;
 extern crate num_cpus;
@@ -73,7 +62,7 @@ use std::io;
 
 pub fn mkdir_p<P: AsRef<Path>>(path: P) -> io::Result<()> {
     let path = path.as_ref();
-    if path == Path::new("") || path.is_dir() { return Ok(()) }
+    if path == Path::new("") || ::std::fs::metadata(path).unwrap().is_dir() { return Ok(()) }
     if let Some(p) = path.parent() { try!(mkdir_p(p)) }
     match fs::create_dir(path) {
         Ok(()) => {
@@ -89,3 +78,27 @@ pub fn mkdir_p<P: AsRef<Path>>(path: P) -> io::Result<()> {
     }
 }
 
+pub fn file_exists<P: AsRef<Path>>(path: P) -> bool {
+    ::std::fs::metadata(path).is_ok()
+}
+
+pub fn path_relative_from<'a, P: ?Sized + AsRef<Path>, R: ?Sized + AsRef<Path>>(target: &'a R, base: &'a P) -> Option<&'a Path> {
+    iter_after(target.as_ref().components(), base.as_ref().components()).map(|c| c.as_path())
+}
+
+fn iter_after<A, I, J>(mut iter: I, mut prefix: J) -> Option<I> where
+    I: Iterator<Item=A> + Clone, J: Iterator<Item=A>, A: PartialEq
+{
+    loop {
+        let mut iter_next = iter.clone();
+        match (iter_next.next(), prefix.next()) {
+            (Some(x), Some(y)) => {
+                if x != y { return None }
+            }
+            (Some(_), None) => return Some(iter),
+            (None, None) => return Some(iter),
+            (None, Some(_)) => return None,
+        }
+        iter = iter_next;
+    }
+}

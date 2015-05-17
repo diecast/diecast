@@ -43,7 +43,14 @@ impl Job {
             self.handler.handle(binding)
         } else {
             let data = Arc::new(self.bind.clone());
-            let mut binding = Bind::new(self.source.source(data.clone()), data.clone());
+            let mut binding =
+                Bind::new(self.source.source(data.clone()), data.clone());
+
+            // TODO
+            // why not just create an empty Bind and give ref
+            // of it to source processors?
+            // then source processors can push the items themselves?
+            // this would break the manager though
 
             let res = self.handler.handle(&mut binding);
 

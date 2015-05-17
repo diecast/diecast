@@ -143,7 +143,21 @@ where H: Handle<Item> + Sync + Send + 'static {
             let rest = if self.chunk > items.len() {
                 vec![]
             } else {
-                items.split_off(self.chunk)
+                let xs = items;
+                items = vec![];
+                let mut rest = vec![];
+
+                // TODO
+                // less efficient than split_off which is unstable
+                for (i, itm) in xs.into_iter().enumerate() {
+                    if i < self.chunk {
+                        items.push(itm);
+                    } else {
+                        rest.push(itm);
+                    }
+                }
+
+                rest
             };
 
             let handler = self.handler.clone();
