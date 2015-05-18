@@ -4,6 +4,7 @@ use std::io::Write;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
+use std::fs;
 
 use typemap::TypeMap;
 
@@ -23,6 +24,7 @@ pub enum Route {
 }
 
 impl Route {
+    /// Whether or not the route is reading from a file.
     pub fn is_reading(&self) -> bool {
         match *self {
             Route::Write(_) => false,
@@ -30,6 +32,7 @@ impl Route {
         }
     }
 
+    /// Returns the file being read from, if any.
     pub fn reading(&self) -> Option<&Path> {
         match *self {
             Route::Write(_) => None,
@@ -37,6 +40,7 @@ impl Route {
         }
     }
 
+    /// Whether or not the route is writing to a file.
     pub fn is_writing(&self) -> bool {
         match *self {
             Route::Read(_) => false,
@@ -44,6 +48,7 @@ impl Route {
         }
     }
 
+    /// Returns the file being written to, if any.
     pub fn writing(&self) -> Option<&Path> {
         match *self {
             Route::Read(_) => None,
@@ -51,6 +56,15 @@ impl Route {
         }
     }
 
+    /// Apply a router to this route.
+    ///
+    /// The semantics are as follows:
+    ///
+    /// * `Read`: results in a `ReadWrite` by applying the router to
+    ///   the read path and using the result as the write path
+    /// * `Write`: do nothing
+    /// * `ReadWrite`: apply router to the read path and overwrite the
+    ///   write path with the result
     pub fn route_with<R>(&mut self, router: R)
     where R: Fn(&Path) -> PathBuf {
         use std::mem;
@@ -92,13 +106,6 @@ impl Debug for Route {
 }
 
 /// Represents a file to be processed.
-///
-/// This represents either a file read, a file write, or a mapping from
-/// a file read to a file write.
-///
-/// It includes a body field which represents the read or to-be-written data.
-///
-/// It also includes a `TypeMap` which is used to represent miscellaneous data.
 
 #[derive(Clone)]
 pub struct Item {
@@ -108,10 +115,10 @@ pub struct Item {
 
     is_stale: bool,
 
-    /// The Item's body which will fill the target file.
+    /// The data that was read or that is to be written
     pub body: String,
 
-    /// Any additional data
+    /// Arbitrary additional data
     pub extensions: TypeMap<::typemap::CloneAny + Sync + Send>,
 }
 
@@ -122,44 +129,50 @@ pub fn set_stale(item: &mut Item, stale: bool) {
 impl Item {
     pub fn new(route: Route, bind: Arc<binding::Data>) -> Item {
         if let Some(path) = route.reading() {
-            assert!(::std::fs::metadata(bind.configuration.input.join(path)).unwrap().is_file())
+            assert!(fs::metadata(bind.configuration.input.join(path)).unwrap().is_file())
         }
 
-        // ensure that the source is a file
         Item {
+            bind: bind,
             route: route,
+            is_stale: false,
+
             body: String::new(),
             extensions: TypeMap::custom(),
-            bind: bind,
-            is_stale: false,
         }
     }
 
+    /// Access the item's route.
     pub fn route(&self) -> &Route {
         &self.route
     }
 
+    /// Route the item with the given router.
     pub fn route_with<R>(&mut self, router: R)
     where R: Fn(&Path) -> PathBuf {
         self.route.route_with(router)
     }
 
+    /// Whether the item is out-dated.
     pub fn is_stale(&self) -> bool {
         self.is_stale
     }
 
+    /// The path to the underlying file being read.
     pub fn source(&self) -> Option<PathBuf> {
         self.route.reading().map(|from| {
             self.bind.configuration.input.join(from)
         })
     }
 
+    /// The path to the underlying file being written to.
     pub fn target(&self) -> Option<PathBuf> {
         self.route.writing().map(|to| {
             self.bind.configuration.output.join(to)
         })
     }
 
+    /// Access the bind's data
     pub fn bind(&self) -> &binding::Data {
         &self.bind
     }
