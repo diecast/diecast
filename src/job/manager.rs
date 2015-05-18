@@ -227,7 +227,7 @@ where E: Evaluator {
                 }
             }
 
-            bind::set_partial(&mut modified, true);
+            bind::set_stale(&mut modified, true);
 
             if is_match {
                 binds.insert(name.clone(), modified);
@@ -327,7 +327,7 @@ where E: Evaluator {
         self.finished.insert(bind.clone(), Arc::new({
             let mut bind = current.into_bind();
             // bind.set_full_build();
-            bind::set_partial(&mut bind, false);
+            bind::set_stale(&mut bind, false);
             bind
         }));
 

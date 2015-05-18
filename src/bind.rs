@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use std::fmt;
+use std::slice;
 
 use typemap::TypeMap;
 
@@ -43,11 +44,11 @@ impl Data {
 pub struct Bind {
     items: Vec<Item>,
     data: Arc<Data>,
-    is_partial: bool,
+    is_stale: bool,
 }
 
-pub fn set_partial(bind: &mut Bind, is_partial: bool) {
-    bind.is_partial = is_partial;
+pub fn set_stale(bind: &mut Bind, is_stale: bool) {
+    bind.is_stale = is_stale;
 }
 
 impl Bind {
@@ -56,13 +57,13 @@ impl Bind {
         Bind {
             items: items,
             data: data,
-            is_partial: false,
+            is_stale: false,
         }
     }
 
     /// Whether a bind is out-dated
-    pub fn is_partial(&self) -> bool {
-        self.is_partial
+    pub fn is_stale(&self) -> bool {
+        self.is_stale
     }
 
     /// Mutably access the vector of items.
@@ -90,13 +91,13 @@ impl Bind {
     /// outdated. Normally this shouldn't matter. If you do need access
     /// to all of the items, use the `items`/`items_mut` methods.
     pub fn iter<'a>(&'a self) -> Iter<'a> {
-        if !self.is_partial {
+        if !self.is_stale {
             Iter {
                 iter: IterKind::Full(self.items.iter())
             }
         } else {
             Iter {
-                iter: IterKind::Partial(StaleIter {
+                iter: IterKind::Stale(StaleIter {
                     iter: self.items.iter(),
                 })
             }
@@ -109,13 +110,13 @@ impl Bind {
     /// outdated. Normally this shouldn't matter. If you do need access
     /// to all of the items, use the `items`/`items_mut` methods.
     pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a> {
-        if !self.is_partial {
+        if !self.is_stale {
             IterMut {
                 iter: IterKindMut::Full(self.items.iter_mut())
             }
         } else {
             IterMut {
-                iter: IterKindMut::Partial(StaleIterMut {
+                iter: IterKindMut::Stale(StaleIterMut {
                     iter: self.items.iter_mut(),
                 })
             }
@@ -135,7 +136,7 @@ impl Bind {
 }
 
 struct StaleIter<'a> {
-    iter: ::std::slice::Iter<'a, Item>,
+    iter: slice::Iter<'a, Item>,
 }
 
 impl<'a> Iterator for StaleIter<'a> {
@@ -155,7 +156,7 @@ impl<'a> Iterator for StaleIter<'a> {
 }
 
 struct StaleIterMut<'a> {
-    iter: ::std::slice::IterMut<'a, Item>,
+    iter: slice::IterMut<'a, Item>,
 }
 
 impl<'a> Iterator for StaleIterMut<'a> {
@@ -175,8 +176,8 @@ impl<'a> Iterator for StaleIterMut<'a> {
 }
 
 enum IterKind<'a> {
-    Full(::std::slice::Iter<'a, Item>),
-    Partial(StaleIter<'a>)
+    Full(slice::Iter<'a, Item>),
+    Stale(StaleIter<'a>)
 }
 
 pub struct Iter<'a> {
@@ -189,14 +190,14 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<&'a Item> {
         match self.iter {
             IterKind::Full(ref mut i) => i.next(),
-            IterKind::Partial(ref mut i) => i.next(),
+            IterKind::Stale(ref mut i) => i.next(),
         }
     }
 }
 
 enum IterKindMut<'a> {
-    Full(::std::slice::IterMut<'a, Item>),
-    Partial(StaleIterMut<'a>)
+    Full(slice::IterMut<'a, Item>),
+    Stale(StaleIterMut<'a>)
 }
 
 pub struct IterMut<'a> {
@@ -209,7 +210,7 @@ impl<'a> Iterator for IterMut<'a> {
     fn next(&mut self) -> Option<&'a mut Item> {
         match self.iter {
             IterKindMut::Full(ref mut i) => i.next(),
-            IterKindMut::Partial(ref mut i) => i.next(),
+            IterKindMut::Stale(ref mut i) => i.next(),
         }
     }
 }
@@ -232,7 +233,7 @@ impl<'a> IntoIterator for &'a mut Bind {
     }
 }
 
-// TODO update for Partial(items)
+// TODO update for Stale(items)
 impl fmt::Debug for Bind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}: {:?}", self.data().name, self.items)

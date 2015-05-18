@@ -119,7 +119,7 @@ where H: Handle<Item> + Sync + Send + 'static {
         let mut retainer = vec![];
 
         // if it's updating, then we should collect the
-        if bind.is_partial() {
+        if bind.is_stale() {
             let (stale, ignore): (Vec<_>, Vec<_>) =
                 items.into_iter().partition(|i| i.is_stale());
 
