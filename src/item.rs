@@ -8,7 +8,7 @@ use std::fs;
 
 use typemap::TypeMap;
 
-use binding;
+use bind;
 
 /// The route of an `Item`.
 #[derive(Clone)]
@@ -109,7 +109,7 @@ impl Debug for Route {
 
 #[derive(Clone)]
 pub struct Item {
-    bind: Arc<binding::Data>,
+    bind: Arc<bind::Data>,
 
     route: Route,
 
@@ -127,7 +127,7 @@ pub fn set_stale(item: &mut Item, stale: bool) {
 }
 
 impl Item {
-    pub fn new(route: Route, bind: Arc<binding::Data>) -> Item {
+    pub fn new(route: Route, bind: Arc<bind::Data>) -> Item {
         if let Some(path) = route.reading() {
             assert!(fs::metadata(bind.configuration.input.join(path)).unwrap().is_file())
         }
@@ -173,7 +173,7 @@ impl Item {
     }
 
     /// Access the bind's data
-    pub fn bind(&self) -> &binding::Data {
+    pub fn bind(&self) -> &bind::Data {
         &self.bind
     }
 }

@@ -6,7 +6,7 @@ use typemap;
 
 use job::evaluator::Pool;
 use item::Item;
-use binding::Bind;
+use bind::Bind;
 use handle::{self, Handle, Result};
 
 use super::{Chain, Extender};
@@ -55,8 +55,8 @@ where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
 
 impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> {
-    fn handle(&self, binding: &mut Bind) -> Result {
-        for item in binding.iter_mut() {
+    fn handle(&self, bind: &mut Bind) -> Result {
+        for item in bind.iter_mut() {
             try!(self.handler.handle(item));
         }
 
@@ -65,9 +65,9 @@ where H: Handle<Item> {
 }
 
 impl Handle<Bind> for Chain<Bind> {
-    fn handle(&self, binding: &mut Bind) -> Result {
+    fn handle(&self, bind: &mut Bind) -> Result {
         for handler in &self.handlers {
-            try!(handler.handle(binding));
+            try!(handler.handle(bind));
         }
 
         Ok(())

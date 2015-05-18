@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::collections::HashSet;
 use std::convert::Into;
 
-use binding::Bind;
+use bind::Bind;
 use source::Source;
 use util;
 use handle::Handle;
@@ -33,7 +33,7 @@ impl Rule {
         Rule {
             name: name.into(),
             source: Arc::new(Box::new(util::source::none)),
-            handler: Arc::new(Box::new(util::handle::binding::stub)),
+            handler: Arc::new(Box::new(util::handle::bind::stub)),
             dependencies: HashSet::new(),
             kind: Kind::Read,
         }
@@ -44,7 +44,7 @@ impl Rule {
         Rule {
             name: name.into(),
             source: Arc::new(Box::new(util::source::none)),
-            handler: Arc::new(Box::new(util::handle::binding::stub)),
+            handler: Arc::new(Box::new(util::handle::bind::stub)),
             dependencies: HashSet::new(),
             kind: Kind::Create,
         }

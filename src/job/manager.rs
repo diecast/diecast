@@ -6,7 +6,7 @@ use std::mem;
 use configuration::Configuration;
 use dependency::Graph;
 use rule::{self, Rule};
-use binding::{self, Bind};
+use bind::{self, Bind};
 use super::evaluator::Evaluator;
 use super::Job;
 
@@ -18,10 +18,10 @@ where E: Evaluator {
 
     graph: Graph<String>,
 
-    /// the dependency count of each binding
+    /// the dependency count of each bind
     dependencies: BTreeMap<String, usize>,
 
-    /// a map of bindings to the list of jobs that haven't been processed yet
+    /// a map of binds to the list of jobs that haven't been processed yet
     waiting: VecDeque<Job>,
 
     /// finished dependencies
@@ -58,31 +58,31 @@ where E: Evaluator {
     }
 
     pub fn add(&mut self, rule: Arc<Rule>) {
-        let bind = binding::Data::new(String::from(rule.name()), self.configuration.clone());
-        let binding = bind.name.clone();
+        let data = bind::Data::new(String::from(rule.name()), self.configuration.clone());
+        let bind = data.name.clone();
 
         // TODO: this still necessary?
         // it's only used to determine if anything will actually be done
-        // operate on a binding-level
+        // operate on a bind-level
         self.count += 1;
 
         // if there's no handler then no need to dispatch a job
         // or anything like that
-        self.waiting.push_front(Job::new(bind, rule.get_source().clone(), rule.get_handler().clone()));
+        self.waiting.push_front(Job::new(data, rule.get_source().clone(), rule.get_handler().clone()));
 
-        self.graph.add_node(binding.clone());
+        self.graph.add_node(bind.clone());
 
         for dep in rule.dependencies() {
-            trace!("setting dependency {} -> {}", dep, binding);
-            self.graph.add_edge(dep.clone(), binding.clone());
+            trace!("setting dependency {} -> {}", dep, bind);
+            self.graph.add_edge(dep.clone(), bind.clone());
         }
 
         self.rules.insert(String::from(rule.name()), rule);
     }
 
     // TODO: will need Borrow bound
-    fn satisfy(&mut self, binding: &str) {
-        if let Some(dependents) = self.graph.dependents_of(binding) {
+    fn satisfy(&mut self, bind: &str) {
+        if let Some(dependents) = self.graph.dependents_of(bind) {
             let names = self.dependencies.keys().cloned().collect::<Vec<String>>();
 
             for name in names {
@@ -98,12 +98,12 @@ where E: Evaluator {
 
         let (ready, waiting): (VecDeque<Job>, VecDeque<Job>) =
             waiting.into_iter()
-               .partition(|job| self.dependencies[&job.bind.name] == 0);
+               .partition(|job| self.dependencies[&job.bind_data.name] == 0);
 
         self.waiting = waiting;
 
         trace!("the remaining order is {:?}", self.waiting);
-        trace!("the ready bindings are {:?}", ready);
+        trace!("the ready binds are {:?}", ready);
 
         ready
     }
@@ -115,7 +115,7 @@ where E: Evaluator {
             mem::replace(&mut self.waiting, VecDeque::new())
             .into_iter()
             .map(|job| {
-                let name = job.bind.name.clone();
+                let name = job.bind_data.name.clone();
                 (name, job)
             })
             .collect::<HashMap<String, Job>>();
@@ -127,7 +127,7 @@ where E: Evaluator {
                 let job = job_map.remove(&name).unwrap();
 
                 // set dep counts
-                let name = job.bind.name.clone();
+                let name = job.bind_data.name.clone();
 
                 let count = self.graph.dependency_count(&name);
                 trace!("{} has {} dependencies", name, count);
@@ -194,7 +194,7 @@ where E: Evaluator {
         // * deletes: full build
         // * new files: add Item
 
-        let mut bindings = HashMap::new();
+        let mut binds = HashMap::new();
 
         // find the binds that contain the paths
         for bind in self.finished.values() {
@@ -227,10 +227,10 @@ where E: Evaluator {
                 }
             }
 
-            binding::set_partial(&mut modified, true);
+            bind::set_partial(&mut modified, true);
 
             if is_match {
-                bindings.insert(name.clone(), modified);
+                binds.insert(name.clone(), modified);
                 matched.push(name);
             } else {
                 didnt.insert(name);
@@ -244,7 +244,7 @@ where E: Evaluator {
 
         self.waiting.clear();
 
-        // the name of each binding
+        // the name of each bind
         match self.graph.resolve(matched) {
             Ok(order) => {
                 // create a job for each bind in the order
@@ -253,12 +253,12 @@ where E: Evaluator {
                     let rule = &self.rules[&bind.data().name];
 
                     let mut job = Job::new(
-                        // TODO this might differ from bindings bind?
+                        // TODO this might differ from binds bind?
                         bind.data().clone(),
                         rule.get_source().clone(),
                         rule.get_handler().clone());
 
-                    job.binding = bindings.remove(name);
+                    job.bind = binds.remove(name);
 
                     self.waiting.push_front(job);
                 }
@@ -315,40 +315,40 @@ where E: Evaluator {
     }
 
     fn handle_done(&mut self, current: Job) {
-        trace!("finished {}", current.bind.name);
+        trace!("finished {}", current.bind_data.name);
         trace!("before waiting: {:?}", self.waiting);
 
-        let binding = current.bind.name.clone();
+        let bind = current.bind_data.name.clone();
 
-        // binding is complete
-        trace!("binding {} finished", binding);
+        // bind is complete
+        trace!("bind {} finished", bind);
 
         // if they're done, move from staging to finished
-        self.finished.insert(binding.clone(), Arc::new({
+        self.finished.insert(bind.clone(), Arc::new({
             let mut bind = current.into_bind();
             // bind.set_full_build();
-            binding::set_partial(&mut bind, false);
+            bind::set_partial(&mut bind, false);
             bind
         }));
 
-        self.satisfy(&binding);
+        self.satisfy(&bind);
         self.enqueue_ready();
     }
 
     // TODO: I think this should be part of satisfy
     // one of the benefits of keeping it separate is that
-    // we can satisfy multiple bindings at once and then perform
+    // we can satisfy multiple binds at once and then perform
     // a bulk enqueue_ready
     fn enqueue_ready(&mut self) {
         for mut job in self.ready() {
-            let name = job.bind.name.clone();
+            let name = job.bind_data.name.clone();
             trace!("{} is ready", name);
 
             // use Borrow?
             if let Some(ds) = self.graph.dependencies_of(&name) {
                 for dep in ds {
                     trace!("adding dependency: {:?}", dep);
-                    job.bind.dependencies.insert(dep.clone(), self.finished[dep].clone());
+                    job.bind_data.dependencies.insert(dep.clone(), self.finished[dep].clone());
                 }
             }
 

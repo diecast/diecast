@@ -32,7 +32,7 @@ pub use site::Site;
 pub use rule::Rule;
 pub use configuration::Configuration;
 pub use item::Item;
-pub use binding::Bind;
+pub use bind::Bind;
 pub use handle::{Handle, Result};
 pub use source::Source;
 // TODO command hooks
@@ -47,7 +47,7 @@ mod source;
 #[macro_use]
 pub mod macros;
 pub mod item;
-pub mod binding;
+pub mod bind;
 pub mod rule;
 pub mod pattern;
 pub mod site;

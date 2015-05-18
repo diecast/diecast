@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use walker::Walker;
 
-use binding;
+use bind;
 use item::{Item, Route};
 use source::Source;
 use pattern::Pattern;
@@ -15,7 +15,7 @@ pub struct Create {
 }
 
 impl Source for Create {
-    fn source(&self, bind: Arc<binding::Data>) -> Vec<Item> {
+    fn source(&self, bind: Arc<bind::Data>) -> Vec<Item> {
         vec![Item::new(Route::Write(self.path.clone()), bind.clone())]
     }
 }
@@ -35,7 +35,7 @@ where P: Pattern + Sync + Send + 'static {
 
 impl<P> Source for Select<P>
 where P: Pattern + Sync + Send + 'static {
-    fn source(&self, bind: Arc<binding::Data>) -> Vec<Item> {
+    fn source(&self, bind: Arc<bind::Data>) -> Vec<Item> {
         let mut items = vec![];
 
         // TODO
@@ -93,7 +93,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 
 impl<R> Source for Paginate<R>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
-    fn source(&self, bind: Arc<binding::Data>) -> Vec<Item> {
+    fn source(&self, bind: Arc<bind::Data>) -> Vec<Item> {
         pages(bind.dependencies[&self.target].items().len(), self.factor, &self.router, bind)
     }
 }
@@ -101,7 +101,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 // FIXME
 // the problem with this using indices is that if the bind is sorted
 // or the order is otherwise changed, the indices will no longer match!
-pub fn pages<R>(input: usize, factor: usize, router: &R, bind: Arc<binding::Data>) -> Vec<Item>
+pub fn pages<R>(input: usize, factor: usize, router: &R, bind: Arc<bind::Data>) -> Vec<Item>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     let mut items = vec![];
     let post_count = input;
@@ -184,6 +184,6 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     }
 }
 
-pub fn none(_bind: Arc<binding::Data>) -> Vec<Item> {
+pub fn none(_bind: Arc<bind::Data>) -> Vec<Item> {
     vec![]
 }

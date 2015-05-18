@@ -7,7 +7,7 @@ use handle::Handle;
 use typemap;
 
 pub mod item;
-pub mod binding;
+pub mod bind;
 
 pub struct Chain<T> {
     handlers: Vec<Box<Handle<T> + Sync + Send>>,

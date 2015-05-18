@@ -35,9 +35,9 @@ impl Data {
     }
 }
 
-/// The resulting binding of a `Rule`
+/// The resulting bind of a `Rule`
 ///
-/// `Bind` represents the resulting binding of a particular `Rule`.
+/// `Bind` represents the resulting bind of a particular `Rule`.
 
 #[derive(Clone)]
 pub struct Bind {
@@ -84,7 +84,7 @@ impl Bind {
         &self.items
     }
 
-    /// Iterate over the items in the binding.
+    /// Iterate over the items in the bind.
     ///
     /// Note that this possibly only yields the items that have become
     /// outdated. Normally this shouldn't matter. If you do need access
@@ -103,7 +103,7 @@ impl Bind {
         }
     }
 
-    /// Iterate over the mutable items in the binding.
+    /// Iterate over the mutable items in the bind.
     ///
     /// Note that this possibly only yields the items that have become
     /// outdated. Normally this shouldn't matter. If you do need access
