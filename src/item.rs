@@ -9,10 +9,16 @@ use typemap::TypeMap;
 
 use binding;
 
+/// The route of an `Item`.
 #[derive(Clone)]
 pub enum Route {
+    /// A file is being read.
     Read(PathBuf),
+
+    /// A file is being created.
     Write(PathBuf),
+
+    /// A file is being read and another is being written to.
     ReadWrite(PathBuf, PathBuf),
 }
 
@@ -58,8 +64,10 @@ impl Route {
                 let target = router(&from);
                 Route::ReadWrite(from, target)
             },
+
             // a Write isn't be routed
             Route::Write(_) => current,
+
             // a ReadWrite simply re-routes the source path
             Route::ReadWrite(from, _) => {
                 let target = router(&from);
@@ -83,10 +91,10 @@ impl Debug for Route {
     }
 }
 
-/// Represents a compilation unit.
+/// Represents a file to be processed.
 ///
-/// This represents either a file read, a file write, or
-/// a mapping from a file read to a file write.
+/// This represents either a file read, a file write, or a mapping from
+/// a file read to a file write.
 ///
 /// It includes a body field which represents the read or to-be-written data.
 ///
@@ -96,15 +104,15 @@ impl Debug for Route {
 pub struct Item {
     bind: Arc<binding::Data>,
 
-    pub route: Route,
+    route: Route,
+
+    is_stale: bool,
 
     /// The Item's body which will fill the target file.
     pub body: String,
 
     /// Any additional data
     pub extensions: TypeMap<::typemap::CloneAny + Sync + Send>,
-
-    is_stale: bool,
 }
 
 pub fn set_stale(item: &mut Item, stale: bool) {
@@ -125,6 +133,15 @@ impl Item {
             bind: bind,
             is_stale: false,
         }
+    }
+
+    pub fn route(&self) -> &Route {
+        &self.route
+    }
+
+    pub fn route_with<R>(&mut self, router: R)
+    where R: Fn(&Path) -> PathBuf {
+        self.route.route_with(router)
     }
 
     pub fn is_stale(&self) -> bool {

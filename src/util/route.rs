@@ -13,7 +13,7 @@ use regex;
 /// file.txt -> file.txt
 /// gen.route(Identity)
 pub fn identity(item: &mut Item) -> handle::Result {
-    item.route.route_with(|path: &Path| -> PathBuf {
+    item.route_with(|path: &Path| -> PathBuf {
         trace!("routing {} with the identity router", path.display());
         path.to_path_buf()
     });
@@ -22,7 +22,7 @@ pub fn identity(item: &mut Item) -> handle::Result {
 }
 
 pub fn pretty(item: &mut Item) -> handle::Result {
-    item.route.route_with(|path: &Path| -> PathBuf {
+    item.route_with(|path: &Path| -> PathBuf {
         let mut result = path.with_extension("");
         result.push("index.html");
         result
@@ -47,7 +47,7 @@ pub struct SetExtension {
 
 impl Handle<Item> for SetExtension {
     fn handle(&self, item: &mut Item) -> handle::Result {
-        item.route.route_with(|path: &Path| -> PathBuf {
+        item.route_with(|path: &Path| -> PathBuf {
             path.with_extension(self.extension)
         });
 
@@ -81,7 +81,7 @@ impl Regex {
 
 impl Handle<Item> for Regex {
     fn handle(&self, item: &mut Item) -> handle::Result {
-        item.route.route_with(|path: &Path| -> PathBuf {
+        item.route_with(|path: &Path| -> PathBuf {
             let caps = self.regex.captures(path.to_str().unwrap()).unwrap();
             PathBuf::from(&caps.expand(self.template))
         });

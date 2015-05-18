@@ -209,7 +209,7 @@ where E: Evaluator {
 
             let bind_paths =
                 rule.get_source().source(bind.get_data()).into_iter()
-                .map(|i| i.route.reading().unwrap().to_path_buf())
+                .map(|i| i.route().reading().unwrap().to_path_buf())
                 .collect::<HashSet<PathBuf>>();
 
             let affected =
@@ -222,7 +222,7 @@ where E: Evaluator {
             let mut modified: Bind = (**bind).clone();
 
             for item in modified.items_mut() {
-                if item.route.reading().map(|p| affected.contains(p)).unwrap_or(false) {
+                if item.route().reading().map(|p| affected.contains(p)).unwrap_or(false) {
                     item::set_stale(item, true);
                 }
             }

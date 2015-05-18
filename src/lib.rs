@@ -60,7 +60,7 @@ use std::fs::{self, PathExt};
 use std::path::Path;
 use std::io;
 
-pub fn mkdir_p<P: AsRef<Path>>(path: P) -> io::Result<()> {
+fn mkdir_p<P: AsRef<Path>>(path: P) -> io::Result<()> {
     let path = path.as_ref();
     if path == Path::new("") || ::std::fs::metadata(path).unwrap().is_dir() { return Ok(()) }
     if let Some(p) = path.parent() { try!(mkdir_p(p)) }
@@ -78,11 +78,11 @@ pub fn mkdir_p<P: AsRef<Path>>(path: P) -> io::Result<()> {
     }
 }
 
-pub fn file_exists<P: AsRef<Path>>(path: P) -> bool {
+fn file_exists<P: AsRef<Path>>(path: P) -> bool {
     ::std::fs::metadata(path).is_ok()
 }
 
-pub fn path_relative_from<'a, P: ?Sized + AsRef<Path>, R: ?Sized + AsRef<Path>>(target: &'a R, base: &'a P) -> Option<&'a Path> {
+fn path_relative_from<'a, P: ?Sized + AsRef<Path>, R: ?Sized + AsRef<Path>>(target: &'a R, base: &'a P) -> Option<&'a Path> {
     iter_after(target.as_ref().components(), base.as_ref().components()).map(|c| c.as_path())
 }
 
