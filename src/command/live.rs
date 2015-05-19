@@ -14,6 +14,7 @@ use staticfile::Static;
 use command::Command;
 use site::Site;
 use configuration::Configuration;
+use support;
 
 #[derive(RustcDecodable, Debug)]
 struct Options {
@@ -241,7 +242,7 @@ impl Command for Live {
             trace!("paths:\n{:?}", paths);
 
             let (mut ready, mut waiting): (HashSet<PathBuf>, HashSet<PathBuf>) =
-                paths.into_iter().partition(|p| ::file_exists(p));
+                paths.into_iter().partition(|p| support::file_exists(p));
 
             // TODO optimize
             // so only non-existing paths are still polled?
@@ -257,7 +258,7 @@ impl Command for Live {
                 thread::park_timeout_ms(10);
 
                 let (r, w): (HashSet<PathBuf>, HashSet<PathBuf>) =
-                    waiting.into_iter().partition(|p| ::file_exists(p));
+                    waiting.into_iter().partition(|p| support::file_exists(p));
 
                 ready.extend(r.into_iter());
                 waiting = w;
@@ -270,7 +271,7 @@ impl Command for Live {
             // TODO
             // this would probably become something like self.site.update();
             let p = paths.into_iter()
-            .map(|p| ::path_relative_from(&p, &self.site.configuration().input).unwrap().to_path_buf())
+            .map(|p| support::path_relative_from(&p, &self.site.configuration().input).unwrap().to_path_buf())
             .collect::<HashSet<PathBuf>>();
             println!("mapped: {:?}", p);
             self.site.update(p);

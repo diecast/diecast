@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use job::{self, Job};
 use configuration::Configuration;
 use rule::Rule;
+use support;
 
 /// A Site scans the input path to find
 /// files that match the given pattern. It then
@@ -23,7 +24,7 @@ impl Site {
     pub fn new(configuration: Configuration) -> Site {
         trace!("output directory is: {:?}", configuration.output);
 
-        if !::file_exists(&configuration.input) {
+        if !support::file_exists(&configuration.input) {
             println!("the input directory `{:?}` does not exist!", configuration.input);
             ::std::process::exit(1);
         }
@@ -54,7 +55,7 @@ impl Site {
         trace!("creating output directory at {:?}", &self.configuration.output);
 
         // create the output directory
-        ::mkdir_p(&self.configuration.output).unwrap();
+        support::mkdir_p(&self.configuration.output).unwrap();
 
         // TODO: use resolve_from for partial builds?
         trace!("resolving graph");
@@ -103,7 +104,7 @@ impl Site {
 
         trace!("cleaning");
 
-        if !::file_exists(&self.configuration.output) {
+        if !support::file_exists(&self.configuration.output) {
             return;
         }
 

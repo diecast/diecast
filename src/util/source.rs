@@ -9,6 +9,7 @@ use item::{Item, Route};
 use source::Source;
 use pattern::Pattern;
 use util;
+use support;
 
 pub struct Create {
     path: PathBuf,
@@ -61,7 +62,7 @@ where P: Pattern + Sync + Send + 'static {
 
         for path in &paths {
             let relative =
-                ::path_relative_from(path, &bind.configuration.input).unwrap()
+                support::path_relative_from(path, &bind.configuration.input).unwrap()
                 .to_path_buf();
 
             // TODO: JOIN STANDARDS

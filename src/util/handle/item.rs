@@ -11,6 +11,7 @@ use typemap;
 
 use handle::{self, Handle, Result};
 use item::Item;
+use support;
 
 use super::{Chain, Extender};
 
@@ -42,7 +43,7 @@ pub fn copy(item: &mut Item) -> handle::Result {
 
             if let Some(parent) = to.parent() {
                 // TODO: this errors out if the path already exists? dumb
-                ::mkdir_p(parent).unwrap();
+                support::mkdir_p(parent).unwrap();
             }
 
             try!(fs::copy(from, to));
@@ -82,7 +83,7 @@ pub fn write(item: &mut Item) -> handle::Result {
         // writing to output folder
         if let Some(parent) = to.parent() {
             // TODO: this errors out if the path already exists? dumb
-            ::mkdir_p(parent).unwrap();
+            support::mkdir_p(parent).unwrap();
         }
 
         trace!("writing file {:?}", to);
