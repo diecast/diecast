@@ -45,6 +45,9 @@ impl Clean {
         }
     }
 
+    pub fn plugin(configuration: Configuration) -> Box<Command> {
+        Box::new(Clean::new(configuration))
+    }
 }
 
 impl Command for Clean {

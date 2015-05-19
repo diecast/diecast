@@ -171,6 +171,8 @@ pub mod dsl {
 
 #[cfg(test)]
 mod test {
+    use regex::Regex;
+
     use super::{Pattern, Everything};
     use std::path::Path;
 
@@ -241,7 +243,7 @@ mod test {
     fn match_single_files() {
         let about_page = Path::new("pages/about.md");
 
-        assert!("pages/about.md".matches(&about_page));
+        assert!(Pattern::matches("pages/about.md", &about_page));
     }
 
     #[test]

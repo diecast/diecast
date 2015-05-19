@@ -7,8 +7,9 @@ use num_cpus;
 use toml;
 use regex::Regex;
 
-use command;
 use pattern::Pattern;
+
+// TODO: audit
 
 /// The configuration of the build
 /// an Arc of this is given to each Item
@@ -21,16 +22,19 @@ pub struct Configuration {
     /// The output directory
     pub output: PathBuf,
 
-    pub command: command::Kind,
+    // TODO: necessary?
+    // The cache directory
+    // cache: PathBuf,
+
+    /// The root command that was invoked
+    pub command: String,
 
     /// The number of cpu count
     pub threads: usize,
 
+    // TODO trigger this programmatically to emit trace!()
+    /// Verbosity flag
     pub is_verbose: bool,
-
-    // TODO: necessary?
-    // The cache directory
-    // cache: PathBuf,
 
     /// a global pattern used to ignore files and paths
     ///
@@ -45,9 +49,6 @@ pub struct Configuration {
     /// Whether to ignore hidden files and directories at the
     /// top level of the output directory when cleaning it out
     pub ignore_hidden: bool,
-
-    // Socket on which to listen when in preview mode
-    // socket_addr: SocketAddr
 }
 
 // TODO configuration hierarchy
@@ -62,7 +63,11 @@ impl Configuration {
             .map(|mut file| {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents).unwrap();
-                contents.parse::<toml::Value>().unwrap()
+                let parsed: toml::Value = contents.parse().unwrap();
+
+                parsed.as_table().expect("configuration must be a table!");
+
+                parsed
             })
             .unwrap_or(toml::Value::Table(BTreeMap::new()));
 
@@ -73,8 +78,7 @@ impl Configuration {
                 match Regex::new(s) {
                     Ok(r) => Some(Box::new(r) as Box<Pattern + Send + Sync>),
                     Err(e) => {
-                        error!("could not parse regex: {}", e);
-                        None
+                        panic!("could not parse regex: {}", e);
                     },
                 }
             });
@@ -96,7 +100,7 @@ impl Configuration {
             // TODO: setting it to error by default seems like a wart
             input: input,
             output: output,
-            command: command::Kind::None,
+            command: String::new(),
             threads: num_cpus::get(),
             is_verbose: false,
             ignore: ignore,
@@ -119,6 +123,14 @@ impl Configuration {
 
     pub fn toml(&self) -> &toml::Value {
         &self.toml
+    }
+
+    pub fn toml_mut(&mut self) -> &mut toml::Table {
+        if let toml::Value::Table(ref mut map) = self.toml {
+            map
+        } else {
+            panic!("configuration must be a table!")
+        }
     }
 
     pub fn thread_count(mut self, count: usize) -> Configuration {

@@ -71,6 +71,10 @@ impl Live {
             _temp_dir: temp_dir,
         }
     }
+
+    pub fn plugin(configuration: Configuration) -> Box<Command> {
+        Box::new(Live::new(configuration))
+    }
 }
 
 impl Command for Live {

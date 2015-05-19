@@ -49,6 +49,9 @@ impl Build {
         }
     }
 
+    pub fn plugin(configuration: Configuration) -> Box<Command> {
+        Box::new(Build::new(configuration))
+    }
 }
 
 impl Command for Build {

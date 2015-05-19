@@ -35,5 +35,11 @@ chrono = "*"
 # unstable
 notify = "*"
 
+# future deps
+# pad = "*"
+# ansi_term = "*"
+# rustbox = "*"
+# ncurses = "*"
+
 [dependencies.staticfile]
 path = "../../staticfile"

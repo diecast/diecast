@@ -16,20 +16,11 @@ use support;
 pub struct Site {
     configuration: Arc<Configuration>,
     rules: Vec<Arc<Rule>>,
-    // manager: job::Manager<VecDeque<job::Job>>,
     manager: job::Manager<job::evaluator::Pool<Job>>,
 }
 
 impl Site {
     pub fn new(configuration: Configuration) -> Site {
-        trace!("output directory is: {:?}", configuration.output);
-
-        if !support::file_exists(&configuration.input) {
-            println!("the input directory `{:?}` does not exist!", configuration.input);
-            ::std::process::exit(1);
-        }
-
-        // let queue: VecDeque<job::Job> = VecDeque::new();
         let queue = job::evaluator::Pool::new(4);
 
         let configuration = Arc::new(configuration);
@@ -41,11 +32,20 @@ impl Site {
             manager: manager,
         }
     }
-}
 
-impl Site {
+    fn configure(&mut self, configuration: Configuration) {
+        self.configuration = Arc::new(configuration);
+    }
+
     fn prepare(&mut self) {
         trace!("finding jobs");
+
+        trace!("output directory is: {:?}", self.configuration.output);
+
+        if !support::file_exists(&self.configuration.input) {
+            println!("the input directory `{:?}` does not exist!", self.configuration.input);
+            ::std::process::exit(1);
+        }
 
         for rule in &self.rules {
            // FIXME: this just seems weird re: strings
@@ -108,6 +108,7 @@ impl Site {
             return;
         }
 
+        // TODO: probably don't need ignore hidden?
         // TODO: maybe obey .gitignore?
         // clear directory
         for child in read_dir(&self.configuration.output).unwrap() {

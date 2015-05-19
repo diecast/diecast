@@ -217,7 +217,6 @@ where T: Ord + Clone + Hash {
 #[cfg(test)]
 mod test {
     use super::Graph;
-    use std::old_io::File;
 
     fn helper_graph() -> Graph<usize> {
         let mut graph = Graph::new();
@@ -255,7 +254,7 @@ mod test {
         graph.add_edge(2, 3);
         graph.add_edge(3, 1);
 
-        let cycle = graph.resolve();
+        let cycle = graph.resolve_all();
 
         assert!(cycle.is_err());
     }
@@ -264,7 +263,7 @@ mod test {
     fn resolve_all() {
         let graph = helper_graph();
 
-        let decomposed = graph.resolve();
+        let decomposed = graph.resolve_all();
 
         assert!(decomposed.is_ok());
     }
@@ -273,7 +272,7 @@ mod test {
     fn resolve_only() {
         let graph = helper_graph();
 
-        let resolve_single = graph.resolve_only(6);
+        let resolve_single = graph.resolve(vec![6]);
 
         assert!(resolve_single.is_ok());
     }
