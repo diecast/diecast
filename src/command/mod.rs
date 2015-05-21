@@ -1,10 +1,10 @@
 use std::collections::HashMap;
+use std::error::Error;
 
 use docopt::{self, Docopt};
 use configuration::Configuration;
 use rustc_serialize::{Decodable, Decoder};
 
-use site::Site;
 use rule::Rule;
 
 pub mod build;
@@ -15,6 +15,21 @@ pub struct Plugin {
     name: String,
     description: String,
     constructor: fn(Vec<Rule>, Configuration) -> Box<Command>,
+}
+
+impl Plugin {
+    pub fn new<N, D>(
+        name: N,
+        description: D,
+        constructor: fn(Vec<Rule>, Configuration) -> Box<Command>
+    ) -> Plugin
+    where N: Into<String>, D: Into<String> {
+        Plugin {
+            name: name.into(),
+            description: description.into(),
+            constructor: constructor,
+        }
+    }
 }
 
 pub trait Command {
@@ -34,6 +49,18 @@ struct Options {
     arg_args: Vec<String>,
 }
 
+static USAGE: &'static str = "
+Usage:
+    diecast <command> [<args>...]
+    diecast [options]
+
+Options:
+    -h, --help           Print this message
+    -v, --version        Print version info
+
+Possible commands include:
+";
+
 pub fn version() -> String {
     format!("diecast {}", match option_env!("CFG_VERSION") {
         Some(s) => String::from(s),
@@ -45,123 +72,104 @@ pub fn version() -> String {
     })
 }
 
-pub fn from_args(rules: Vec<Rule>, mut configuration: Configuration) -> Box<Command> {
-    let mut usage: String = String::from("
-Usage:
-    diecast <command> [<args>...]
-    diecast [options]
+pub struct CommandBuilder {
+    rules: Vec<Rule>,
+    configuration: Configuration,
+    plugins: HashMap<String, Plugin>,
+}
 
-Options:
-    -h, --help           Print this message
-    -v, --version        Print version info
+impl CommandBuilder {
+    pub fn new() -> CommandBuilder {
+        let mut plugins = HashMap::new();
 
-Possible commands include:
-");
+        let build = build::plugin();
+        let clean = clean::plugin();
+        let live = live::plugin();
 
-    let mut plugins: Vec<Plugin> = vec![];
+        plugins.insert(build.name.clone(), build);
+        plugins.insert(clean.name.clone(), clean);
+        plugins.insert(live.name.clone(), live);
 
-    // TODO
-    // * don't require String
-    // * don't require separate constructor fn
-    plugins.push(Plugin {
-        name: String::from("build"),
-        description: String::from("Build site"),
-        constructor: build::Build::plugin,
-    });
-
-    plugins.push(Plugin {
-        name: String::from("clean"),
-        description: String::from("Remove output directory"),
-        constructor: clean::Clean::plugin,
-    });
-
-    plugins.push(Plugin {
-        name: String::from("live"),
-        description: String::from("Preview the site live"),
-        constructor: live::Live::plugin,
-    });
-
-    let mut commands: HashMap<String, Plugin> = HashMap::new();
-
-    // later plugins override older ones
-    for plugin in plugins {
-        commands.insert(plugin.name.clone(), plugin);
+        CommandBuilder {
+            rules: vec![],
+            plugins: plugins,
+            configuration: Configuration::new(),
+        }
     }
 
-    // information needed:
-    // * constructor
-    // * name
-    // * description
+    pub fn plugin(mut self, plugin: Plugin) -> CommandBuilder {
+        self.plugins.insert(plugin.name.clone(), plugin);
+        self
+    }
 
-    // * build       Build site
-    // host        Host a server
-    // preview     Build site in preview mode and host preview web server
-    // watch       Watch files and re-build when a file changes
+    pub fn configure(mut self, configuration: Configuration) -> CommandBuilder {
+        self.configuration = configuration;
+        self
+    }
 
-    // iterate here so that we only use the actually-registered commands
-    for (k, v) in &commands {
-        usage.push_str("    ");
-        usage.push_str(&k);
+    pub fn rules(mut self, rules: Vec<Rule>) -> CommandBuilder {
+        self.rules = rules;
+        self
+    }
 
-        // TODO: proper padding
-        if k.len() > 11 {
-            panic!("the command name should be less than 12 characters");
+    pub fn build(mut self) -> Result<Box<Command>, Box<Error>> {
+        let mut usage = String::from(USAGE);
+
+        let mut plugs =
+            self.plugins.iter()
+            .collect::<Vec<(&String, &Plugin)>>();
+
+        plugs.sort_by(|a, b| a.0.cmp(b.0));
+
+        for &(k, v) in &plugs {
+            usage.push_str("    ");
+            usage.push_str(&k);
+
+            // TODO: proper padding
+            if k.len() > 11 {
+                panic!("the command name should be less than 12 characters");
+            }
+
+            let pad = 12 - k.len();
+            usage.push_str(&::std::iter::repeat(' ').take(pad).collect::<String>());
+            usage.push_str(&v.description);
+            usage.push('\n');
         }
 
-        let pad = 12 - k.len();
-        usage.push_str(&::std::iter::repeat(' ').take(pad).collect::<String>());
-        usage.push_str(&v.description);
-        usage.push('\n');
-    }
+        let options: Options =
+            try! {
+                Docopt::new(usage.clone())
+                .and_then(|d|
+                    d
+                    .options_first(true)
+                    .help(true)
+                    .version(Some(version()))
+                    .decode())
+            };
 
-    let docopt =
-        Docopt::new(usage.clone())
-            .unwrap_or_else(|e| e.exit())
-            .options_first(true)
-            .help(true)
-            .version(Some(version()));
+        let cmd = options.arg_command.unwrap();
+        self.configuration.command = cmd.clone();
 
-    let options: Options = docopt.decode().unwrap_or_else(|e| {
-        e.exit();
-    });
-
-    if options.arg_command.is_none() {
-        docopt::Error::WithProgramUsage(
-            Box::new(docopt::Error::Help),
-            usage)
-            .exit();
-    }
-
-    let cmd = options.arg_command.unwrap();
-    configuration.command = cmd.clone();
-
-    let command: Box<Command> = match &cmd[..] {
-        "help" => {
-            docopt::Error::WithProgramUsage(
+        let err =
+            Err(From::from(docopt::Error::WithProgramUsage(
                 Box::new(docopt::Error::Help),
-                String::from(usage))
-                .exit();
-        },
-        // "build" => Box::new(build::Build::new(configuration)),
-        // "live" => Box::new(live::Live::new(configuration)),
-        // "clean" => Box::new(clean::Clean::new(configuration)),
-        "" => {
-            unreachable!();
-        },
-        cmd => {
-            if let Some(plugin) = commands.get(cmd) {
-                (plugin.constructor)(rules, configuration)
-            } else {
-                // here look in PATH to find program named diecast-$cmd
-                // if not found, then output this message:
-                println!("unknown command `{}`", cmd);
-                docopt::Error::WithProgramUsage(
-                    Box::new(docopt::Error::Help),
-                    String::from(usage))
-                    .exit();
-            }
-        },
-    };
+                String::from(usage))));
 
-    command
+        let command: Box<Command> = match &cmd[..] {
+            "" | "help" => return err,
+            cmd => {
+                if let Some(plugin) = self.plugins.get(cmd) {
+                    (plugin.constructor)(self.rules, self.configuration)
+                } else {
+                    // here look in PATH to find program named diecast-$cmd
+                    // if not found, then output this message:
+                    println!("unknown command `{}`", cmd);
+                    return err;
+                }
+            },
+        };
+
+        Ok(command)
+    }
 }
+

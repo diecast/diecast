@@ -2,7 +2,7 @@ use docopt::Docopt;
 
 use site::Site;
 use configuration::Configuration;
-use command::Command;
+use command::{Command, Plugin};
 use rule::Rule;
 
 #[derive(RustcDecodable, Debug)]
@@ -20,6 +20,10 @@ Options:
     -j N, --jobs N      Number of jobs to run in parallel
     -v, --verbose       Use verbose output
 ";
+
+pub fn plugin() -> Plugin {
+    Plugin::new("build", "Build the site", Build::plugin)
+}
 
 pub struct Build {
     site: Site,

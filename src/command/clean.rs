@@ -1,7 +1,7 @@
 use docopt::Docopt;
 use configuration::Configuration;
 
-use command::Command;
+use command::{Command, Plugin};
 use site::Site;
 use rule::Rule;
 use support;
@@ -23,6 +23,10 @@ Options:
 
 This removes the output directory.
 ";
+
+pub fn plugin() -> Plugin {
+    Plugin::new("clean", "Remove output directory", Clean::plugin)
+}
 
 pub struct Clean {
     site: Site,

@@ -8,10 +8,9 @@ use tempdir::TempDir;
 use time::{SteadyTime, Duration};
 use notify::{RecommendedWatcher, Error, Watcher};
 use iron::{self, Iron};
-use mount::Mount;
 use staticfile::Static;
 
-use command::Command;
+use command::{Command, Plugin};
 use site::Site;
 use configuration::Configuration;
 use rule::Rule;
@@ -32,6 +31,10 @@ Options:
     -j N, --jobs N      Number of jobs to run in parallel
     -v, --verbose       Use verbose output
 ";
+
+pub fn plugin() -> Plugin {
+    Plugin::new("live", "Live preview of the site", Live::plugin)
+}
 
 pub struct Live {
     _temp_dir: TempDir,
@@ -82,14 +85,10 @@ impl Command for Live {
     fn run(&mut self) {
         let (e_tx, e_rx) = channel();
 
-        let mut mount = Mount::new();
-        mount.mount("/", Static::new(&self.site.configuration().output));
-
         let _guard =
-            Iron::new(mount)
-            .listen_with("0.0.0.0:3000", 1, iron::Protocol::Http)
+            Iron::new(Static::new(&self.site.configuration().output))
+            .listen_with("0.0.0.0:5000", 4, iron::Protocol::Http)
             .unwrap();
-            // .http("0.0.0.0:3000").unwrap();
 
         let target = self.site.configuration().input.clone();
 

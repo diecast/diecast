@@ -25,7 +25,6 @@ extern crate num_cpus;
 
 extern crate iron;
 extern crate staticfile;
-extern crate mount;
 
 pub use pattern::Pattern;
 pub use site::Site;
@@ -36,7 +35,7 @@ pub use bind::Bind;
 pub use handle::{Handle, Result};
 pub use source::Source;
 // TODO command hooks
-pub use command::Command;
+pub use command::{CommandBuilder, Command, Plugin};
 pub use deploy::Deploy;
 
 mod handle;
@@ -102,5 +101,20 @@ pub mod support {
             }
             iter = iter_next;
         }
+    }
+
+    pub fn slugify(s: &str) -> String {
+        s.chars()
+        .filter_map(|c| {
+            let is_ws = c.is_whitespace();
+            if c.is_alphanumeric() || is_ws {
+                let c = c.to_lowercase().next().unwrap();
+                if is_ws { Some('-') }
+                else { Some(c) }
+            } else {
+                None
+            }
+        })
+        .collect()
     }
 }
