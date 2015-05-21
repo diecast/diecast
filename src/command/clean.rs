@@ -3,6 +3,7 @@ use configuration::Configuration;
 
 use command::Command;
 use site::Site;
+use rule::Rule;
 use support;
 
 #[derive(RustcDecodable, Debug)]
@@ -28,7 +29,7 @@ pub struct Clean {
 }
 
 impl Clean {
-    pub fn new(mut configuration: Configuration) -> Clean {
+    pub fn new(rules: Vec<Rule>, mut configuration: Configuration) -> Clean {
         let docopt =
             Docopt::new(USAGE)
                 .unwrap_or_else(|e| e.exit())
@@ -41,20 +42,16 @@ impl Clean {
         configuration.ignore_hidden = options.flag_ignore_hidden;
 
         Clean {
-            site: Site::new(configuration),
+            site: Site::new(rules, configuration),
         }
     }
 
-    pub fn plugin(configuration: Configuration) -> Box<Command> {
-        Box::new(Clean::new(configuration))
+    pub fn plugin(rules: Vec<Rule>, configuration: Configuration) -> Box<Command> {
+        Box::new(Clean::new(rules, configuration))
     }
 }
 
 impl Command for Clean {
-    fn site(&mut self) -> &mut Site {
-        &mut self.site
-    }
-
     fn run(&mut self) {
         let target = &self.site.configuration().output;
 

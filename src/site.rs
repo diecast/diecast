@@ -20,21 +20,38 @@ pub struct Site {
 }
 
 impl Site {
-    pub fn new(configuration: Configuration) -> Site {
+    pub fn new(rules: Vec<Rule>, configuration: Configuration) -> Site {
         let queue = job::evaluator::Pool::new(4);
 
         let configuration = Arc::new(configuration);
         let manager = job::Manager::new(queue, configuration.clone());
 
+        let mut site_rules = vec![];
+
+        let names =
+            rules.iter()
+            .map(|r| String::from(r.name()))
+            .collect::<HashSet<_>>();
+
+        for rule in rules {
+            if !rule.dependencies().is_empty() {
+                let diff: HashSet<_> =
+                    rule.dependencies().difference(&names).collect();
+
+                if !diff.is_empty() {
+                    println!("`{}` depends on unregistered rule(s) `{:?}`", rule.name(), diff);
+                    ::std::process::exit(1);
+                }
+            }
+
+            site_rules.push(Arc::new(rule));
+        }
+
         Site {
             configuration: configuration,
-            rules: Vec::new(),
+            rules: site_rules,
             manager: manager,
         }
-    }
-
-    fn configure(&mut self, configuration: Configuration) {
-        self.configuration = Arc::new(configuration);
     }
 
     fn prepare(&mut self) {
@@ -73,22 +90,6 @@ impl Site {
     pub fn update(&mut self, paths: HashSet<PathBuf>) {
         self.prepare();
         self.manager.update(paths);
-    }
-
-    pub fn register(&mut self, rule: Rule) {
-        if !rule.dependencies().is_empty() {
-            let names =
-                self.rules.iter().map(|r| String::from(r.name())).collect();
-            let diff: HashSet<_> =
-                rule.dependencies().difference(&names).cloned().collect();
-
-            if !diff.is_empty() {
-                println!("`{}` depends on unregistered rule(s) `{:?}`", rule.name(), diff);
-                ::std::process::exit(1);
-            }
-        }
-
-        self.rules.push(Arc::new(rule));
     }
 
     pub fn configuration(&self) -> Arc<Configuration> {

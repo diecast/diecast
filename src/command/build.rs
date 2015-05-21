@@ -1,7 +1,9 @@
 use docopt::Docopt;
+
 use site::Site;
 use configuration::Configuration;
 use command::Command;
+use rule::Rule;
 
 #[derive(RustcDecodable, Debug)]
 struct Options {
@@ -24,7 +26,7 @@ pub struct Build {
 }
 
 impl Build {
-    pub fn new(mut configuration: Configuration) -> Build {
+    pub fn new(rules: Vec<Rule>, mut configuration: Configuration) -> Build {
         // 1. merge options into configuration; options overrides config
         // 2. construct site from configuration
         // 3. build site
@@ -45,20 +47,16 @@ impl Build {
         configuration.is_verbose = options.flag_verbose;
 
         Build {
-            site: Site::new(configuration),
+            site: Site::new(rules, configuration),
         }
     }
 
-    pub fn plugin(configuration: Configuration) -> Box<Command> {
-        Box::new(Build::new(configuration))
+    pub fn plugin(rules: Vec<Rule>, configuration: Configuration) -> Box<Command> {
+        Box::new(Build::new(rules, configuration))
     }
 }
 
 impl Command for Build {
-    fn site(&mut self) -> &mut Site {
-        &mut self.site
-    }
-
     fn run(&mut self) {
         self.site.build();
     }

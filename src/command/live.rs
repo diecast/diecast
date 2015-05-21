@@ -14,6 +14,7 @@ use staticfile::Static;
 use command::Command;
 use site::Site;
 use configuration::Configuration;
+use rule::Rule;
 use support;
 
 #[derive(RustcDecodable, Debug)]
@@ -38,7 +39,7 @@ pub struct Live {
 }
 
 impl Live {
-    pub fn new(mut configuration: Configuration) -> Live {
+    pub fn new(rules: Vec<Rule>, mut configuration: Configuration) -> Live {
         // 1. merge options into configuration; options overrides config
         // 2. construct site from configuration
         // 3. build site
@@ -67,21 +68,17 @@ impl Live {
         println!("output dir: {:?}", configuration.output);
 
         Live {
-            site: Site::new(configuration),
+            site: Site::new(rules, configuration),
             _temp_dir: temp_dir,
         }
     }
 
-    pub fn plugin(configuration: Configuration) -> Box<Command> {
-        Box::new(Live::new(configuration))
+    pub fn plugin(rules: Vec<Rule>, configuration: Configuration) -> Box<Command> {
+        Box::new(Live::new(rules, configuration))
     }
 }
 
 impl Command for Live {
-    fn site(&mut self) -> &mut Site {
-        &mut self.site
-    }
-
     fn run(&mut self) {
         let (e_tx, e_rx) = channel();
 

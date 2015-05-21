@@ -5,6 +5,7 @@ use configuration::Configuration;
 use rustc_serialize::{Decodable, Decoder};
 
 use site::Site;
+use rule::Rule;
 
 pub mod build;
 pub mod clean;
@@ -13,11 +14,10 @@ pub mod live;
 pub struct Plugin {
     name: String,
     description: String,
-    constructor: fn(Configuration) -> Box<Command>,
+    constructor: fn(Vec<Rule>, Configuration) -> Box<Command>,
 }
 
 pub trait Command {
-    fn site(&mut self) -> &mut Site;
     fn run(&mut self);
 }
 
@@ -25,10 +25,6 @@ impl<C> Command for Box<C>
 where C: Command {
     fn run(&mut self) {
         (**self).run();
-    }
-
-    fn site(&mut self) -> &mut Site {
-        (**self).site()
     }
 }
 
@@ -49,7 +45,7 @@ pub fn version() -> String {
     })
 }
 
-pub fn from_args(mut configuration: Configuration) -> Box<Command> {
+pub fn from_args(rules: Vec<Rule>, mut configuration: Configuration) -> Box<Command> {
     let mut usage: String = String::from("
 Usage:
     diecast <command> [<args>...]
@@ -154,7 +150,7 @@ Possible commands include:
         },
         cmd => {
             if let Some(plugin) = commands.get(cmd) {
-                (plugin.constructor)(configuration)
+                (plugin.constructor)(rules, configuration)
             } else {
                 // here look in PATH to find program named diecast-$cmd
                 // if not found, then output this message:
