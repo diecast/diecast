@@ -71,7 +71,7 @@ impl Bind {
     /// This is unsafe because adding items to the vector is
     /// undefined behavior.
     // TODO rename this
-    pub unsafe fn all_items_mut(&mut self) -> &mut Vec<Item> {
+    pub unsafe fn as_vec_mut(&mut self) -> &mut Vec<Item> {
         &mut self.items
     }
 

@@ -31,7 +31,7 @@ where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
 impl<C> Handle<Bind> for Retain<C>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        unsafe { bind.all_items_mut().retain(&self.condition) };
+        unsafe { bind.as_vec_mut().retain(&self.condition) };
         Ok(())
     }
 }
@@ -115,7 +115,7 @@ where H: Handle<Item> + Sync + Send + 'static {
         let pool: Pool<Vec<Item>> = Pool::new(bind.data().configuration.threads);
         let total = bind.items().len();
 
-        let mut items = unsafe { ::std::mem::replace(bind.all_items_mut(), vec![]) };
+        let mut items = unsafe { ::std::mem::replace(bind.as_vec_mut(), vec![]) };
         let mut retainer = vec![];
 
         // if it's updating, then we should collect the
@@ -183,11 +183,11 @@ where H: Handle<Item> + Sync + Send + 'static {
 
         for _ in 0 .. chunks {
             // TODO: this completely defeats the purpose of hiding the items field
-            unsafe { bind.all_items_mut().extend(pool.dequeue().unwrap().into_iter()) };
+            unsafe { bind.as_vec_mut().extend(pool.dequeue().unwrap().into_iter()) };
         }
 
         if !retainer.is_empty() {
-            unsafe { bind.all_items_mut().extend(retainer.into_iter()) };
+            unsafe { bind.as_vec_mut().extend(retainer.into_iter()) };
         }
 
         assert_eq!(total, bind.items().len());
@@ -230,7 +230,7 @@ pub fn adjacent(bind: &mut Bind) -> handle::Result {
         .map(|i| Arc::new(i.clone()))
         .collect::<Vec<Arc<Item>>>();
 
-    for (idx, item) in unsafe { bind.all_items_mut().iter_mut().enumerate() } {
+    for (idx, item) in bind.items_mut().iter_mut().enumerate() {
         let prev =
             if idx == 0 { None }
             else { let num = idx - 1; Some(cloned[num].clone()) };
