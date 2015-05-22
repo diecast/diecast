@@ -1,15 +1,37 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::any::Any;
+use std::path::PathBuf;
 
 use typemap;
 
 use job::evaluator::Pool;
-use item::Item;
+use item::{Item, Route};
 use bind::Bind;
 use handle::{self, Handle, Result};
 
 use super::{Chain, Extender};
+
+pub struct Create {
+    path: PathBuf,
+}
+
+impl Handle<Bind> for Create {
+    fn handle(&self, bind: &mut Bind) -> handle::Result {
+        let data = bind.get_data();
+        bind.items_mut()
+            .push(Item::new(Route::Write(self.path.clone()), data));
+        Ok(())
+    }
+}
+
+#[inline]
+pub fn create<P>(path: P) -> Create
+where P: Into<PathBuf> {
+    Create {
+        path: path.into(),
+    }
+}
 
 pub fn each<H>(handler: H) -> Each<H>
 where H: Handle<Item> {
@@ -31,7 +53,7 @@ where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
 impl<C> Handle<Bind> for Retain<C>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        unsafe { bind.as_vec_mut().retain(&self.condition) };
+        bind.items_mut().retain(&self.condition);
         Ok(())
     }
 }
@@ -115,7 +137,7 @@ where H: Handle<Item> + Sync + Send + 'static {
         let pool: Pool<Vec<Item>> = Pool::new(bind.data().configuration.threads);
         let total = bind.items().len();
 
-        let mut items = unsafe { ::std::mem::replace(bind.as_vec_mut(), vec![]) };
+        let mut items = ::std::mem::replace(bind.items_mut(), vec![]);
         let mut retainer = vec![];
 
         // if it's updating, then we should collect the
@@ -183,11 +205,11 @@ where H: Handle<Item> + Sync + Send + 'static {
 
         for _ in 0 .. chunks {
             // TODO: this completely defeats the purpose of hiding the items field
-            unsafe { bind.as_vec_mut().extend(pool.dequeue().unwrap().into_iter()) };
+            bind.items_mut().extend(pool.dequeue().unwrap().into_iter());
         }
 
         if !retainer.is_empty() {
-            unsafe { bind.as_vec_mut().extend(retainer.into_iter()) };
+            bind.items_mut().extend(retainer.into_iter());
         }
 
         assert_eq!(total, bind.items().len());
@@ -196,8 +218,8 @@ where H: Handle<Item> + Sync + Send + 'static {
     }
 }
 
-pub fn stub(_bind: &mut Bind) -> handle::Result {
-    trace!("stub handler");
+pub fn missing(_bind: &mut Bind) -> handle::Result {
+    trace!("missing handler");
     Ok(())
 }
 

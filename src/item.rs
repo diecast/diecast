@@ -109,19 +109,20 @@ impl Debug for Route {
 
 #[derive(Clone)]
 pub struct Item {
-    bind: Arc<bind::Data>,
-
-    route: Route,
-
-    is_stale: bool,
-
     /// The data that was read or that is to be written
     pub body: String,
 
     /// Arbitrary additional data
     pub extensions: TypeMap<::typemap::CloneAny + Sync + Send>,
+
+    bind: Arc<bind::Data>,
+
+    route: Route,
+
+    is_stale: bool,
 }
 
+// TODO this should be private
 pub fn set_stale(item: &mut Item, stale: bool) {
     item.is_stale = stale;
 }

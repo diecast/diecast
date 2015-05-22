@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::collections::{BTreeMap, BTreeSet, VecDeque, HashMap, HashSet};
 use std::mem;
 
@@ -32,6 +32,8 @@ where E: Evaluator {
 
     /// number of jobs being managed
     count: usize,
+
+    paths: Arc<Vec<PathBuf>>,
 }
 
 /// sample api:
@@ -54,7 +56,33 @@ where E: Evaluator {
             // TODO: this is what needs to change afaik
             evaluator: evaluator,
             count: 0,
+            paths: Arc::new(Vec::new()),
         }
+    }
+
+    pub fn update_paths(&mut self) {
+        use walker::Walker;
+
+        let paths =
+            Walker::new(&self.configuration.input).unwrap()
+            .filter_map(|p| {
+                let path = p.unwrap().path();
+
+                if let Some(ref ignore) = self.configuration.ignore {
+                    if ignore.matches(&Path::new(path.file_name().unwrap())) {
+                        return None;
+                    }
+                }
+
+                if ::std::fs::metadata(&path).unwrap().is_file() {
+                    Some(path.to_path_buf())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<PathBuf>>();
+
+        self.paths = Arc::new(paths);
     }
 
     pub fn add(&mut self, rule: Arc<Rule>) {
@@ -68,7 +96,7 @@ where E: Evaluator {
 
         // if there's no handler then no need to dispatch a job
         // or anything like that
-        self.waiting.push_front(Job::new(data, rule.get_source().clone(), rule.get_handler().clone()));
+        self.waiting.push_front(Job::new(data, rule.kind().clone(), rule.handler().clone(), self.paths.clone()));
 
         self.graph.add_node(bind.clone());
 
@@ -202,19 +230,24 @@ where E: Evaluator {
 
             let name = bind.data().name.clone();
             let rule = &self.rules[&name];
+            let kind = rule.kind().clone();
 
-            if let &rule::Kind::Create = rule.kind() {
-                continue;
-            }
+            let pattern =
+                if let rule::Kind::Matching(ref pattern) = *kind {
+                    pattern
+                } else {
+                    continue
+                };
 
-            let bind_paths =
-                rule.get_source().source(bind.get_data()).into_iter()
-                .map(|i| i.route().reading().unwrap().to_path_buf())
+            // Borrow<Path> for &PathBuf
+            // impl<'a, T, R> Borrow<T> for &'a R where R: Borrow<T>;
+
+            let mut affected =
+                paths.iter()
+                .filter(|p| pattern.matches(p))
+                .cloned()
                 .collect::<HashSet<PathBuf>>();
 
-            let affected =
-                bind_paths.intersection(&paths).cloned()
-                .collect::<HashSet<PathBuf>>();
             let is_match = affected.len() > 0;
 
             // TODO
@@ -222,10 +255,17 @@ where E: Evaluator {
             let mut modified: Bind = (**bind).clone();
 
             for item in modified.items_mut() {
-                if item.route().reading().map(|p| affected.contains(p)).unwrap_or(false) {
+                if item.route().reading().map(|p| affected.remove(p)).unwrap_or(false) {
                     item::set_stale(item, true);
                 }
             }
+
+            // paths that were added
+            // if affected.len() > 0 {
+            //     for path in affected {
+            //         bind.push(path);
+            //     }
+            // }
 
             bind::set_stale(&mut modified, true);
 
@@ -255,8 +295,9 @@ where E: Evaluator {
                     let mut job = Job::new(
                         // TODO this might differ from binds bind?
                         bind.data().clone(),
-                        rule.get_source().clone(),
-                        rule.get_handler().clone());
+                        rule.kind().clone(),
+                        rule.handler().clone(),
+                        self.paths.clone());
 
                     job.bind = binds.remove(name);
 
@@ -326,7 +367,6 @@ where E: Evaluator {
         // if they're done, move from staging to finished
         self.finished.insert(bind.clone(), Arc::new({
             let mut bind = current.into_bind();
-            // bind.set_full_build();
             bind::set_stale(&mut bind, false);
             bind
         }));

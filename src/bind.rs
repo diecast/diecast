@@ -47,36 +47,30 @@ pub struct Bind {
     is_stale: bool,
 }
 
+// TODO: this should be private
 pub fn set_stale(bind: &mut Bind, is_stale: bool) {
     bind.is_stale = is_stale;
 }
 
 impl Bind {
     // FIXME: I don't like that this has to be associated with the configuration
-    pub fn new(items: Vec<Item>, data: Arc<Data>) -> Bind {
+    pub fn new(data: Data) -> Bind {
         Bind {
-            items: items,
-            data: data,
+            items: Vec::new(),
+            data: Arc::new(data),
             is_stale: false,
         }
     }
 
+    // TODO this probably shouldn't be here
     /// Whether a bind is out-dated
     pub fn is_stale(&self) -> bool {
         self.is_stale
     }
 
-    /// Mutably access the vector of items.
-    ///
-    /// This is unsafe because adding items to the vector is
-    /// undefined behavior.
-    // TODO rename this
-    pub unsafe fn as_vec_mut(&mut self) -> &mut Vec<Item> {
-        &mut self.items
-    }
-
     /// Access the entire set of items mutably
-    pub fn items_mut(&mut self) -> &mut [Item] {
+    // TODO rename this
+    pub fn items_mut(&mut self) -> &mut Vec<Item> {
         &mut self.items
     }
 

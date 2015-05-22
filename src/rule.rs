@@ -3,13 +3,55 @@ use std::collections::HashSet;
 use std::convert::Into;
 
 use bind::Bind;
-use source::Source;
 use util;
 use handle::Handle;
+use pattern::Pattern;
 
 pub enum Kind {
-    Read,
-    Create,
+    Matching(Box<Pattern + Sync + Send + 'static>),
+    Creating,
+}
+
+#[must_use]
+pub struct RuleBuilder {
+    name: String,
+    handler: Arc<Box<Handle<Bind> + Sync + Send>>,
+    dependencies: HashSet<String>,
+    kind: Kind,
+}
+
+impl RuleBuilder {
+    fn new(name: String, kind: Kind) -> RuleBuilder {
+        RuleBuilder {
+            name: name,
+            handler: Arc::new(Box::new(util::handle::bind::missing)),
+            kind: kind,
+            dependencies: HashSet::new(),
+        }
+    }
+
+    /// Associate a handler with this rule.
+    pub fn handler<H>(mut self, handler: H) -> RuleBuilder
+    where H: Handle<Bind> + Sync + Send + 'static {
+        self.handler = Arc::new(Box::new(handler));
+        self
+    }
+
+    /// Register a dependency for this rule.
+    pub fn depends_on<D>(mut self, dependency: D) -> RuleBuilder
+    where D: Into<String> {
+        self.dependencies.insert(dependency.into());
+        self
+    }
+
+    pub fn build(self) -> Rule {
+        Rule {
+            name: self.name,
+            handler: self.handler,
+            dependencies: self.dependencies,
+            kind: Arc::new(self.kind),
+        }
+    }
 }
 
 /// Represents a rule that the static site generator must follow.
@@ -18,72 +60,30 @@ pub enum Kind {
 /// it may have.
 pub struct Rule {
     name: String,
-    source: Arc<Box<Source + Sync + Send>>,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
-    kind: Kind,
+    kind: Arc<Kind>,
 }
 
 impl Rule {
-    /// Requires the name of the rule.
-    ///
-    /// The parameter type can be an `&str` or `String`.
-    pub fn read<S>(name: S) -> Rule
+    pub fn matching<S, P>(name: S, pattern: P) -> RuleBuilder
+    where S: Into<String>, P: Pattern + Sync + Send + 'static {
+        RuleBuilder::new(name.into(), Kind::Matching(Box::new(pattern)))
+    }
+
+    pub fn creating<S>(name: S) -> RuleBuilder
     where S: Into<String> {
-        Rule {
-            name: name.into(),
-            source: Arc::new(Box::new(util::source::none)),
-            handler: Arc::new(Box::new(util::handle::bind::stub)),
-            dependencies: HashSet::new(),
-            kind: Kind::Read,
-        }
+        RuleBuilder::new(name.into(), Kind::Creating)
     }
 
-    pub fn create<S>(name: S) -> Rule
-    where S: Into<String> {
-        Rule {
-            name: name.into(),
-            source: Arc::new(Box::new(util::source::none)),
-            handler: Arc::new(Box::new(util::handle::bind::stub)),
-            dependencies: HashSet::new(),
-            kind: Kind::Create,
-        }
-    }
-
-    pub fn source<S>(mut self, source: S) -> Rule
-    where S: Source + Sync + Send + 'static {
-        self.source = Arc::new(Box::new(source));
-        self
-    }
-
-    /// Associate a handler with this rule.
-    pub fn handler<H>(mut self, handler: H) -> Rule
-    where H: Handle<Bind> + Sync + Send + 'static {
-        self.handler = Arc::new(Box::new(handler));
-        self
-    }
-
-    // TODO: don't return &Arc, just return Arc.clone()
-    pub fn get_source(&self) -> &Arc<Box<Source + Sync + Send + 'static>> {
-        &self.source
-    }
-
-    /// Access the handler.
-    pub fn get_handler(&self) -> &Arc<Box<Handle<Bind> + Sync + Send + 'static>> {
+    // TODO: why &Arc? make it &T or just Arc
+    // accessors
+    pub fn handler(&self) -> &Arc<Box<Handle<Bind> + Sync + Send + 'static>> {
         &self.handler
     }
 
-    /// Register a dependency for this rule.
-    pub fn depends_on<D>(mut self, dependency: D) -> Rule
-    where D: Into<String> {
-        self.dependencies.insert(dependency.into());
-
-        return self;
-    }
-
-    // accessors
-    pub fn kind(&self) -> &Kind {
-        &self.kind
+    pub fn kind(&self) -> Arc<Kind> {
+        self.kind.clone()
     }
 
     pub fn name(&self) -> &str {

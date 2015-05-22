@@ -1,9 +1,10 @@
 use std::sync::Arc;
+use std::path::PathBuf;
 use std::fmt;
 
 use bind::{self, Bind};
-use source::Source;
 use handle::{self, Handle};
+use rule;
 
 pub mod evaluator;
 mod manager;
@@ -13,9 +14,10 @@ pub use self::manager::Manager;
 
 pub struct Job {
     pub bind_data: bind::Data,
-    pub source: Arc<Box<Source + Sync + Send>>,
+    pub kind: Arc<rule::Kind>,
     pub handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     pub bind: Option<Bind>,
+    paths: Arc<Vec<PathBuf>>,
 }
 
 impl fmt::Debug for Job {
@@ -27,10 +29,11 @@ impl fmt::Debug for Job {
 impl Job {
     pub fn new(
         bind: bind::Data,
-        source: Arc<Box<Source + Sync + Send>>,
-        handler: Arc<Box<Handle<Bind> + Sync + Send>>)
+        kind: Arc<rule::Kind>,
+        handler: Arc<Box<Handle<Bind> + Sync + Send>>,
+        paths: Arc<Vec<PathBuf>>)
     -> Job {
-        Job { bind_data: bind, source: source, handler: handler, bind: None }
+        Job { bind_data: bind, kind: kind, handler: handler, bind: None, paths: paths }
     }
 
     // TODO
@@ -38,19 +41,43 @@ impl Job {
         self.bind.unwrap()
     }
 
+    // TODO: feels weird to have this here
+    fn populate(&self, bind: &mut Bind) {
+        use item::{Item, Route};
+        use support;
+
+        let data = bind.get_data();
+
+        match *self.kind {
+            rule::Kind::Creating => (),
+            rule::Kind::Matching(ref pattern) => {
+                for path in self.paths.iter() {
+                    let relative =
+                        support::path_relative_from(path, &bind.data().configuration.input).unwrap()
+                        .to_path_buf();
+
+                    // TODO: JOIN STANDARDS
+                    // should insert path.clone()
+                    if pattern.matches(&relative) {
+                        bind.items_mut().push(Item::new(Route::Read(relative), data.clone()));
+                    }
+                }
+            },
+        }
+    }
+
     pub fn process(&mut self) -> handle::Result {
         if let Some(ref mut bind) = self.bind {
             self.handler.handle(bind)
         } else {
-            let data = Arc::new(self.bind_data.clone());
             let mut bind =
-                Bind::new(self.source.source(data.clone()), data.clone());
+                Bind::new(self.bind_data.clone());
 
-            // TODO
-            // why not just create an empty Bind and give ref
-            // of it to source processors?
-            // then source processors can push the items themselves?
-            // this would break the manager though
+            trace!("populating {:?}", bind);
+
+            self.populate(&mut bind);
+
+            trace!("populated {:?} with {} items", bind, bind.items().len());
 
             let res = self.handler.handle(&mut bind);
 

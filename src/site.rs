@@ -64,6 +64,8 @@ impl Site {
             ::std::process::exit(1);
         }
 
+        self.manager.update_paths();
+
         for rule in &self.rules {
            // FIXME: this just seems weird re: strings
            self.manager.add(rule.clone());

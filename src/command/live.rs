@@ -5,7 +5,7 @@ use std::thread;
 
 use docopt::Docopt;
 use tempdir::TempDir;
-use time::{SteadyTime, Duration};
+use time::{SteadyTime, Duration, PreciseTime};
 use notify::{RecommendedWatcher, Error, Watcher};
 use iron::{self, Iron};
 use staticfile::Static;
@@ -274,9 +274,11 @@ impl Command for Live {
             .map(|p| support::path_relative_from(&p, &self.site.configuration().input).unwrap().to_path_buf())
             .collect::<HashSet<PathBuf>>();
             println!("mapped: {:?}", p);
-            self.site.update(p);
 
-            trace!("finished updating");
+            let start = PreciseTime::now();
+            self.site.update(p);
+            let end = PreciseTime::now();
+            println!("finished updating ({})", start.to(end));
 
             last_event = SteadyTime::now();
         }
