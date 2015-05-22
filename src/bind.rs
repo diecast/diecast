@@ -2,10 +2,11 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use std::fmt;
 use std::slice;
+use std::ops::Deref;
 
 use typemap::TypeMap;
 
-use item::Item;
+use item::{self, Item, Route};
 use configuration::Configuration;
 
 /// Bind data.
@@ -21,6 +22,7 @@ pub struct Data {
     /// The global configuration
     pub configuration: Arc<Configuration>,
 
+    // TODO: not a fan of exposing the Arc
     /// Arbitrary, bind-level data
     pub extensions: Arc<RwLock<TypeMap<::typemap::CloneAny + Sync + Send>>>,
 }
@@ -49,7 +51,20 @@ pub struct Bind {
 
 // TODO: this should be private
 pub fn set_stale(bind: &mut Bind, is_stale: bool) {
+    // if we're setting stale = false
+    // and it previously was stale,
+    // reset each item
+    if !is_stale && bind.is_stale() {
+        for item in bind.iter_mut() {
+            item::set_stale(item, false);
+        }
+    }
+
     bind.is_stale = is_stale;
+}
+
+pub fn get_data(bind: &Bind) -> &Data {
+    &bind.data
 }
 
 impl Bind {
@@ -60,6 +75,17 @@ impl Bind {
             data: Arc::new(data),
             is_stale: false,
         }
+    }
+
+    pub fn spawn(&self, route: Route) -> Item {
+        Item::new(route, self.data.clone())
+    }
+
+    // TODO audit
+    // TODO I would much rather not expose this
+    /// Access the bind data as an `Arc`
+    pub fn data(&self) -> &Data {
+        &self.data
     }
 
     // TODO this probably shouldn't be here
@@ -116,16 +142,13 @@ impl Bind {
             }
         }
     }
+}
 
-    /// Access the bind data
-    pub fn data(&self) -> &Data {
+impl Deref for Bind {
+    type Target = Data;
+
+    fn deref<'a>(&'a self) -> &'a Data {
         &self.data
-    }
-
-    // TODO audit
-    /// Access the bind data as an `Arc`
-    pub fn get_data(&self) -> Arc<Data> {
-        self.data.clone()
     }
 }
 
@@ -227,10 +250,16 @@ impl<'a> IntoIterator for &'a mut Bind {
     }
 }
 
+impl fmt::Display for Bind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.name.fmt(f)
+    }
+}
+
 // TODO update for Stale(items)
 impl fmt::Debug for Bind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:?}", self.data().name, self.items)
+        write!(f, "{}: {:?}", self.name, self.items)
     }
 }
 

@@ -18,13 +18,15 @@ extern crate log;
 
 extern crate rustc_serialize;
 extern crate docopt;
-extern crate notify;
 extern crate time;
 extern crate tempdir;
 extern crate num_cpus;
+extern crate ansi_term;
+extern crate pad;
 
 extern crate iron;
 extern crate staticfile;
+extern crate notify;
 
 pub use pattern::Pattern;
 pub use site::Site;
@@ -118,3 +120,9 @@ pub mod support {
         .collect()
     }
 }
+
+pub static STARTING: &'static str = "  Starting";
+pub static UPDATING: &'static str = "  Updating";
+pub static FINISHED: &'static str = "  Finished";
+pub static MODIFIED: &'static str = "  Modified";
+

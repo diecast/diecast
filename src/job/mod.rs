@@ -43,23 +43,25 @@ impl Job {
 
     // TODO: feels weird to have this here
     fn populate(&self, bind: &mut Bind) {
-        use item::{Item, Route};
+        use item::Route;
         use support;
 
-        let data = bind.get_data();
+        // TODO: bind.spawn(Route::Read(relative))
+        // let data = bind.data();
 
         match *self.kind {
             rule::Kind::Creating => (),
             rule::Kind::Matching(ref pattern) => {
                 for path in self.paths.iter() {
                     let relative =
-                        support::path_relative_from(path, &bind.data().configuration.input).unwrap()
+                        support::path_relative_from(path, &bind.configuration.input).unwrap()
                         .to_path_buf();
 
                     // TODO: JOIN STANDARDS
                     // should insert path.clone()
                     if pattern.matches(&relative) {
-                        bind.items_mut().push(Item::new(Route::Read(relative), data.clone()));
+                        let item = bind.spawn(Route::Read(relative));
+                        bind.items_mut().push(item);
                     }
                 }
             },
@@ -67,19 +69,59 @@ impl Job {
     }
 
     pub fn process(&mut self) -> handle::Result {
+        use ansi_term::Colour::Green;
+        use ansi_term::Style::Plain;
+        use pad::{PadStr, Alignment};
+
+        fn action(bind: &Bind) -> &'static str {
+            if bind.is_stale() {
+                ::UPDATING
+            } else {
+                ::STARTING
+            }
+        }
+
+        fn item_count(bind: &Bind) -> usize {
+            if bind.is_stale() {
+                bind.iter().count()
+            } else {
+                bind.items().len()
+            }
+        }
+
         if let Some(ref mut bind) = self.bind {
-            self.handler.handle(bind)
+            println!("{} {}",
+                Green.bold().paint(action(&bind)),
+                bind);
+
+            let res = self.handler.handle(bind);
+
+            println!("{} {} ({} items)",
+                Plain.bold().paint(::FINISHED),
+                bind,
+                item_count(&bind));
+
+            res
         } else {
+            // TODO I don't think this branch could possibly be an update
+            // optimize by removing that dynamic check
             let mut bind =
                 Bind::new(self.bind_data.clone());
 
-            trace!("populating {:?}", bind);
-
+            // populate with items
             self.populate(&mut bind);
 
-            trace!("populated {:?} with {} items", bind, bind.items().len());
+            println!("{} {}",
+                Green.bold().paint(action(&bind)),
+                bind);
 
+            // TODO: rust-pad patch to take Deref<Target=str> or AsRef<str>?
             let res = self.handler.handle(&mut bind);
+
+            println!("{} {} ({} items)",
+                Plain.bold().paint(::FINISHED),
+                bind,
+                item_count(&bind));
 
             self.bind = Some(bind);
 

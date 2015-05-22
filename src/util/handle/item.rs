@@ -86,21 +86,12 @@ pub fn write(item: &mut Item) -> handle::Result {
             support::mkdir_p(parent).unwrap();
         }
 
-        trace!("writing file {:?}", to);
-
         // TODO: this sometimes crashes
         File::create(&to)
             .unwrap()
             .write_all(item.body.as_bytes())
             .unwrap();
     }
-
-    Ok(())
-}
-
-/// Handle<Item> that prints the `Item`'s body.
-pub fn print(item: &mut Item) -> handle::Result {
-    println!("{}", item.body);
 
     Ok(())
 }

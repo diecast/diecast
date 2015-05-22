@@ -32,7 +32,6 @@ pub struct Configuration {
     /// The number of cpu count
     pub threads: usize,
 
-    // TODO trigger this programmatically to emit trace!()
     /// Verbosity flag
     pub is_verbose: bool,
 

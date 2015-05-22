@@ -18,30 +18,24 @@ where E: Evaluator {
 
     graph: Graph<String>,
 
-    /// the dependency count of each bind
+    /// Dependency count of each bind
     dependencies: BTreeMap<String, usize>,
 
-    /// a map of binds to the list of jobs that haven't been processed yet
-    waiting: VecDeque<Job>,
+    /// Map of binds to the list of jobs that haven't been processed yet
+    waiting: Vec<Job>,
 
-    /// finished dependencies
+    /// Finished dependencies
     finished: BTreeMap<String, Arc<Bind>>,
 
     /// Thread pool to process jobs
     evaluator: E,
 
-    /// number of jobs being managed
-    count: usize,
-
+    // TODO
+    // feels weird to have this here, but it's in-line with making
+    // matching Patterns first-class
+    /// Paths being considered
     paths: Arc<Vec<PathBuf>>,
 }
-
-/// sample api:
-///   manager.add_rule(rule);
-///   manager.build();
-///
-/// later:
-///   manager.update_path(path);
 
 impl<E> Manager<E>
 where E: Evaluator {
@@ -51,19 +45,18 @@ where E: Evaluator {
             rules: HashMap::new(),
             graph: Graph::new(),
             dependencies: BTreeMap::new(),
-            waiting: VecDeque::new(),
+            waiting: Vec::new(),
             finished: BTreeMap::new(),
-            // TODO: this is what needs to change afaik
             evaluator: evaluator,
-            count: 0,
             paths: Arc::new(Vec::new()),
         }
     }
 
+    /// Re-enumerate the paths in the input directory
     pub fn update_paths(&mut self) {
         use walker::Walker;
 
-        let paths =
+        self.paths = Arc::new({
             Walker::new(&self.configuration.input).unwrap()
             .filter_map(|p| {
                 let path = p.unwrap().path();
@@ -74,35 +67,39 @@ where E: Evaluator {
                     }
                 }
 
-                if ::std::fs::metadata(&path).unwrap().is_file() {
-                    Some(path.to_path_buf())
-                } else {
-                    None
-                }
+                ::std::fs::metadata(&path)
+                .map(|m|
+                     if m.is_file() { Some(path.to_path_buf()) }
+                     else { None }
+                 ).unwrap_or(None)
             })
-            .collect::<Vec<PathBuf>>();
-
-        self.paths = Arc::new(paths);
+            .collect()
+        });
     }
 
     pub fn add(&mut self, rule: Arc<Rule>) {
+        // prepare bind-data with the name and configuration
         let data = bind::Data::new(String::from(rule.name()), self.configuration.clone());
-        let bind = data.name.clone();
+        let name = data.name.clone();
 
-        // TODO: this still necessary?
-        // it's only used to determine if anything will actually be done
-        // operate on a bind-level
-        self.count += 1;
+        // TODO
+        // instead of rule_count == 0,
+        // check if self.waiting.is_empty()?
 
-        // if there's no handler then no need to dispatch a job
-        // or anything like that
-        self.waiting.push_front(Job::new(data, rule.kind().clone(), rule.handler().clone(), self.paths.clone()));
+        // construct job from bind-data, rule kind, rule handler, and paths
+        // push it to waiting queue
+        self.waiting.push(
+            Job::new(
+                data,
+                rule.kind().clone(),
+                rule.handler().clone(),
+                self.paths.clone()));
 
-        self.graph.add_node(bind.clone());
+        self.graph.add_node(name.clone());
 
+        // make its dependencies depend on this binding
         for dep in rule.dependencies() {
-            trace!("setting dependency {} -> {}", dep, bind);
-            self.graph.add_edge(dep.clone(), bind.clone());
+            self.graph.add_edge(dep.clone(), name.clone());
         }
 
         self.rules.insert(String::from(rule.name()), rule);
@@ -115,23 +112,26 @@ where E: Evaluator {
 
             for name in names {
                 if dependents.contains(&name) {
-                    *self.dependencies.entry(name).or_insert(0) -= 1;
+                    // FIXME this or_insert is incorrect, since using 0
+                    // and subtracting 1 will cause underflow
+                    if let Some(count) = self.dependencies.get_mut(&name) {
+                        *count -= 1;
+                    } else {
+                        panic!("dependency count for {} is not available!", name);
+                    }
                 }
             }
         }
     }
 
-    fn ready(&mut self) -> VecDeque<Job> {
-        let waiting = mem::replace(&mut self.waiting, VecDeque::new());
+    fn ready(&mut self) -> Vec<Job> {
+        let waiting = mem::replace(&mut self.waiting, Vec::new());
 
-        let (ready, waiting): (VecDeque<Job>, VecDeque<Job>) =
+        let (ready, waiting): (Vec<Job>, Vec<Job>) =
             waiting.into_iter()
                .partition(|job| self.dependencies[&job.bind_data.name] == 0);
 
         self.waiting = waiting;
-
-        trace!("the remaining order is {:?}", self.waiting);
-        trace!("the ready binds are {:?}", ready);
 
         ready
     }
@@ -140,7 +140,7 @@ where E: Evaluator {
         assert!(self.waiting.len() == order.len(), "`waiting` and `order` are not the same length");
 
         let mut job_map =
-            mem::replace(&mut self.waiting, VecDeque::new())
+            mem::replace(&mut self.waiting, Vec::new())
             .into_iter()
             .map(|job| {
                 let name = job.bind_data.name.clone();
@@ -158,13 +158,12 @@ where E: Evaluator {
                 let name = job.bind_data.name.clone();
 
                 let count = self.graph.dependency_count(&name);
-                trace!("{} has {} dependencies", name, count);
 
                 *self.dependencies.entry(name).or_insert(0) += count;
 
                 return job;
             })
-            .collect::<VecDeque<Job>>();
+            .collect::<Vec<Job>>();
 
         mem::replace(&mut self.waiting, ordered);
 
@@ -172,24 +171,23 @@ where E: Evaluator {
     }
 
     pub fn build(&mut self) {
-        if self.count == 0 {
+        if self.waiting.is_empty() {
             println!("there is nothing to do");
             return;
         }
+
+        let count = self.waiting.len();
 
         match self.graph.resolve_all() {
             Ok(order) => {
                 self.sort_jobs(order);
 
-                trace!("enqueueing ready jobs");
                 self.enqueue_ready();
 
                 // TODO: should have some sort of timeout here
-                trace!("looping");
-                for _ in (0 .. self.count) {
+                for _ in (0 .. count) {
                     match self.evaluator.dequeue() {
                         Some(job) => {
-                            trace!("received job from pool");
                             self.handle_done(job);
                         },
                         None => {
@@ -210,7 +208,7 @@ where E: Evaluator {
 
     // TODO paths ref
     pub fn update(&mut self, paths: HashSet<PathBuf>) {
-        if self.count == 0 {
+        if self.waiting.is_empty() {
             println!("there is nothing to do");
             return;
         }
@@ -225,10 +223,11 @@ where E: Evaluator {
         let mut binds = HashMap::new();
 
         // find the binds that contain the paths
+
         for bind in self.finished.values() {
             use item;
 
-            let name = bind.data().name.clone();
+            let name = bind.name.clone();
             let rule = &self.rules[&name];
             let kind = rule.kind().clone();
 
@@ -277,8 +276,8 @@ where E: Evaluator {
             }
         }
 
+        // no binds matched the path; nothing to update
         if matched.is_empty() {
-            trace!("no binds matched the path");
             return;
         }
 
@@ -290,22 +289,25 @@ where E: Evaluator {
                 // create a job for each bind in the order
                 for name in &order {
                     let bind = &self.finished[name];
-                    let rule = &self.rules[&bind.data().name];
+                    let rule = &self.rules[&bind.name];
 
+                    // TODO: need a way to get the existing bind's Arc<Data>
+                    // perhaps: Bind.to_job(&rule)
                     let mut job = Job::new(
                         // TODO this might differ from binds bind?
-                        bind.data().clone(),
+                        bind::get_data(&bind).clone(),
                         rule.kind().clone(),
                         rule.handler().clone(),
                         self.paths.clone());
 
                     job.bind = binds.remove(name);
 
-                    self.waiting.push_front(job);
+                    self.waiting.push(job);
                 }
 
-                let order_names = order.clone();
-                let job_count = order.len();
+                let order_names = order.iter().cloned().collect::<BTreeSet<_>>();
+
+                let didnt = didnt.difference(&order_names).cloned().collect::<BTreeSet<_>>();
 
                 self.sort_jobs(order);
 
@@ -318,18 +320,17 @@ where E: Evaluator {
                     }
                 }
 
-                trace!("enqueueing ready jobs");
+                let count = self.waiting.len();
+
                 self.enqueue_ready();
 
                 // TODO: should have some sort of timeout here
                 // FIXME
                 // can't do while waiting.is_empty() becuase it could
                 // be momentarily empty before the rest get added
-                trace!("looping");
-                for _ in (0 .. job_count) {
+                for _ in (0 .. count) {
                     match self.evaluator.dequeue() {
                         Some(job) => {
-                            trace!("received job from pool");
                             self.handle_done(job);
                         },
                         None => {
@@ -352,17 +353,10 @@ where E: Evaluator {
     fn reset(&mut self) {
         self.graph = Graph::new();
         self.waiting.clear();
-        self.count = 0;
     }
 
     fn handle_done(&mut self, current: Job) {
-        trace!("finished {}", current.bind_data.name);
-        trace!("before waiting: {:?}", self.waiting);
-
         let bind = current.bind_data.name.clone();
-
-        // bind is complete
-        trace!("bind {} finished", bind);
 
         // if they're done, move from staging to finished
         self.finished.insert(bind.clone(), Arc::new({
@@ -375,24 +369,16 @@ where E: Evaluator {
         self.enqueue_ready();
     }
 
-    // TODO: I think this should be part of satisfy
-    // one of the benefits of keeping it separate is that
-    // we can satisfy multiple binds at once and then perform
-    // a bulk enqueue_ready
     fn enqueue_ready(&mut self) {
         for mut job in self.ready() {
             let name = job.bind_data.name.clone();
-            trace!("{} is ready", name);
 
-            // use Borrow?
-            if let Some(ds) = self.graph.dependencies_of(&name) {
-                for dep in ds {
-                    trace!("adding dependency: {:?}", dep);
+            if let Some(deps) = self.graph.dependencies_of(&name) {
+                // insert each dependency
+                for dep in deps {
                     job.bind_data.dependencies.insert(dep.clone(), self.finished[dep].clone());
                 }
             }
-
-            trace!("job now ready: {:?}", job);
 
             self.evaluator.enqueue(job);
         }

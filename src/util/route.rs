@@ -14,7 +14,6 @@ use regex;
 /// gen.route(Identity)
 pub fn identity(item: &mut Item) -> handle::Result {
     item.route_with(|path: &Path| -> PathBuf {
-        trace!("routing {} with the identity router", path.display());
         path.to_path_buf()
     });
 

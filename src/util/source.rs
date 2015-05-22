@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use walker::Walker;
 
-use bind;
+use bind::{self, Bind};
 use item::{Item, Route};
 use source::Source;
 use pattern::Pattern;
@@ -95,17 +95,17 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
 impl<R> Source for Paginate<R>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     fn source(&self, bind: Arc<bind::Data>) -> Vec<Item> {
-        pages(bind.dependencies[&self.target].items().len(), self.factor, &self.router, bind)
+        pages(&bind.dependencies[&self.target], self.factor, &self.router)
     }
 }
 
 // FIXME
 // the problem with this using indices is that if the bind is sorted
 // or the order is otherwise changed, the indices will no longer match!
-pub fn pages<R>(input: usize, factor: usize, router: &R, bind: Arc<bind::Data>) -> Vec<Item>
+pub fn pages<R>(bind: &Bind, factor: usize, router: &R) -> Vec<Item>
 where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
     let mut items = vec![];
-    let post_count = input;
+    let post_count = bind.items().len();
 
     let page_count = {
         let (div, rem) = (post_count / factor, post_count % factor);
@@ -116,6 +116,10 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
             div + 1
         }
     };
+
+    if page_count == 0 {
+        return items;
+    }
 
     let last_num = page_count - 1;
 
@@ -165,7 +169,7 @@ where R: Fn(usize) -> PathBuf, R: Sync + Send + 'static {
                 range: start .. end,
             };
 
-        let mut page = Item::new(Route::Write((*target).clone()), bind.clone());
+        let mut page = bind.spawn(Route::Write((*target).clone()));
         page.extensions.insert::<util::handle::item::Page>(page_struct);
         items.push(page);
     }

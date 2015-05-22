@@ -55,9 +55,7 @@ impl Site {
     }
 
     fn prepare(&mut self) {
-        trace!("finding jobs");
-
-        trace!("output directory is: {:?}", self.configuration.output);
+        println!("building from {:?}", self.configuration.output);
 
         if !support::file_exists(&self.configuration.input) {
             println!("the input directory `{:?}` does not exist!", self.configuration.input);
@@ -71,18 +69,11 @@ impl Site {
            self.manager.add(rule.clone());
         }
 
-        trace!("creating output directory at {:?}", &self.configuration.output);
-
         // create the output directory
         support::mkdir_p(&self.configuration.output).unwrap();
-
-        // TODO: use resolve_from for partial builds?
-        trace!("resolving graph");
     }
 
     pub fn build(&mut self) {
-        // TODO: clean out the output directory here to avoid cruft and conflicts
-        // trace!("cleaning out directory");
         self.clean();
 
         self.prepare();
@@ -104,8 +95,6 @@ impl Site {
             remove_dir_all,
             remove_file,
         };
-
-        trace!("cleaning");
 
         if !support::file_exists(&self.configuration.output) {
             return;

@@ -37,8 +37,8 @@ chrono = "*"
 notify = "*"
 
 # future deps
-# pad = "*"
-# ansi_term = "*"
+ansi_term = "*"
+pad = "*"
 # rustbox = "*"
 # ncurses = "*"
 

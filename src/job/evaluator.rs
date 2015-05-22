@@ -50,7 +50,6 @@ impl<T> Pool<T>
 where T: Send {
     pub fn new(threads: usize) -> Pool<T> {
         assert!(threads >= 1);
-        trace!("using {} threads", threads);
 
         let (result_tx, result_rx) = channel::<Option<T>>();
 

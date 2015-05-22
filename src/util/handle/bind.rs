@@ -18,9 +18,15 @@ pub struct Create {
 
 impl Handle<Bind> for Create {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        let data = bind.get_data();
-        bind.items_mut()
-            .push(Item::new(Route::Write(self.path.clone()), data));
+        let item = bind.spawn(Route::Write(self.path.clone()));
+        bind.items_mut().push(item);
+
+        // TODO: bind.spawn(Route::Write(self.path.clone()))
+        // let data = bind.data();
+
+        // bind.items_mut()
+        //     .push(Item::new(Route::Write(self.path.clone()), data));
+
         Ok(())
     }
 }
@@ -66,15 +72,6 @@ where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
     }
 }
 
-// pub fn static_file<P>(pattern: P) -> Chain<Bind>
-// where P: Pattern + Sync + Send + 'static {
-//     Chain::new()
-//     .link(select(pattern))
-//     .link(each(Chain::new()
-//         .link(::util::route::identity)
-//         .link(item::copy)))
-// }
-
 impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> {
     fn handle(&self, bind: &mut Bind) -> Result {
@@ -99,7 +96,7 @@ impl Handle<Bind> for Chain<Bind> {
 impl<T> Handle<Bind> for Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        bind.data().extensions.write().unwrap().insert::<T>(self.payload.clone());
+        bind.extensions.write().unwrap().insert::<T>(self.payload.clone());
         Ok(())
     }
 }
@@ -134,7 +131,7 @@ where H: Handle<Item> + Sync + Send + 'static {
 impl<H> Handle<Bind> for ParallelEach<H>
 where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> handle::Result {
-        let pool: Pool<Vec<Item>> = Pool::new(bind.data().configuration.threads);
+        let pool: Pool<Vec<Item>> = Pool::new(bind.configuration.threads);
         let total = bind.items().len();
 
         let mut items = ::std::mem::replace(bind.items_mut(), vec![]);
@@ -218,8 +215,8 @@ where H: Handle<Item> + Sync + Send + 'static {
     }
 }
 
-pub fn missing(_bind: &mut Bind) -> handle::Result {
-    trace!("missing handler");
+pub fn missing(bind: &mut Bind) -> handle::Result {
+    println!("missing handler for {}", bind);
     Ok(())
 }
 
@@ -301,7 +298,7 @@ pub fn tags(bind: &mut Bind) -> handle::Result {
         arc_map.insert(k, Arc::new(v));
     }
 
-    bind.data().extensions.write().unwrap().insert::<Tags>(arc_map);
+    bind.extensions.write().unwrap().insert::<Tags>(arc_map);
 
     Ok(())
 }
