@@ -22,7 +22,6 @@ extern crate time;
 extern crate tempdir;
 extern crate num_cpus;
 extern crate ansi_term;
-extern crate pad;
 
 extern crate iron;
 extern crate staticfile;

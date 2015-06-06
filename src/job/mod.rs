@@ -70,8 +70,7 @@ impl Job {
 
     pub fn process(&mut self) -> handle::Result {
         use ansi_term::Colour::Green;
-        use ansi_term::Style::Plain;
-        use pad::{PadStr, Alignment};
+        use ansi_term::Style;
 
         fn action(bind: &Bind) -> &'static str {
             if bind.is_stale() {
@@ -97,7 +96,7 @@ impl Job {
             let res = self.handler.handle(bind);
 
             println!("{} {} ({} items)",
-                Plain.bold().paint(::FINISHED),
+                Style::default().bold().paint(::FINISHED),
                 bind,
                 item_count(&bind));
 
@@ -119,7 +118,7 @@ impl Job {
             let res = self.handler.handle(&mut bind);
 
             println!("{} {} ({} items)",
-                Plain.bold().paint(::FINISHED),
+                Style::default().bold().paint(::FINISHED),
                 bind,
                 item_count(&bind));
 
