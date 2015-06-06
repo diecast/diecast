@@ -10,27 +10,25 @@ A rule that matches static assets and simply copies them to the output directory
 
 ``` rust
 let statics =
-    Rule::read("statics")
-    .source(source::select(or!(
+    Rule::matching("statics", or!(
         "images/**/*".parse::<Glob>().unwrap(),
         "static/**/*".parse::<Glob>().unwrap(),
         "js/**/*".parse::<Glob>().unwrap(),
         "favicon.png",
         "CNAME"
-    )))
-    .handler(binding::each(Chain::new()
+    ))
+    .handler(binding::parallel_each(Chain::new()
         .link(route::identity)
-        .link(item::copy)));
+        .link(item::copy)))
+    .build();
 ```
 
 Define a rule called `"posts"` which will match any file in the input directory that matches the glob pattern `posts/*.md`:
 
 ``` rust
 let posts =
-    Rule::read("posts")
+    Rule::matching("posts", "posts/*.markdown".parse::<Glob>().unwrap())
     .depends_on(&templates)
-    // collect the posts
-    .source(source::select("posts/*.markdown".parse::<Glob>().unwrap()))
     // process each post
     .handler(Chain::new()
         // process this chain for each item in parallel
@@ -56,7 +54,26 @@ let posts =
             let a = a.extensions.get::<item::Date>().unwrap();
             let b = b.extensions.get::<item::Date>().unwrap();
             b.cmp(a)
-        })));
+        })))
+    .build();
+```
+
+Define a rule called `"post index"` which will create a paginated index of the posts:
+
+``` rust
+let posts_index =
+    Rule::creating("post index")
+    // this ensures that the post index is only run after
+    // the posts and templates rules are finished
+    .depends_on(&posts)
+    .depends_on(&templates)
+    .handler(Chain::new()
+        .link(bind::create("index.html"))
+        .link(bind::each(Chain::new()
+        .link(handlebars::render_template(&templates, "index", render_index))
+        .link(handlebars::render_template(&templates, "layout", layout_template))
+        .link(item::write))))
+    .build();
 ```
 
 A custom handler which would render the post index:
@@ -72,43 +89,14 @@ fn render_index(item: &mut Item) -> diecast::Result {
 }
 ```
 
-Define a rule called `"post index"` which will create a paginated index of the posts:
-
-``` rust
-let posts_index =
-    Rule::create("post index")
-    // this ensures that the post index is only run after
-    // the posts and templates rules are finished
-    .depends_on(&posts)
-    .depends_on(&templates)
-    // paginate the posts rule with 5 posts per page
-    .source(source::paginate(&posts, 5, |page: usize| -> PathBuf {
-        if page == 0 {
-            PathBuf::from("index.html")
-        } else {
-            PathBuf::from(&format!("{}/index.html", page))
-        }
-    }))
-    .handler(binding::parallel_each(Chain::new()
-        .link(hbs::render_template(&templates, "index", render_index))
-        .link(hbs::render_template(&templates, "layout", layout_template))
-        .link(item::write)));
-```
-
 Define a base configuration, register the rules, and run the user-provided command:
 
 ``` rust
-let config = Configuration::new("input/", "output/");
+let command =
+    CommandBuilder::new()
+    .rules(vec![statics, posts, index])
+    .build();
 
-// possibly overrides above configuration based on user input
-let mut command = command::from_args(config);
-
-// register the rules with the site
-command.site().register(statics);
-command.site().register(posts);
-command.site().register(index);
-
-// run the command supplied by the user
-command.run();
+cmd.run();
 ```
 
