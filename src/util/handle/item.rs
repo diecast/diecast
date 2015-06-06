@@ -9,14 +9,14 @@ use toml;
 use chrono;
 use typemap;
 
-use handle::{self, Handle, Result};
+use handle::Handle;
 use item::Item;
 use support;
 
 use super::{Chain, Extender};
 
 impl Handle<Item> for Chain<Item> {
-    fn handle(&self, item: &mut Item) -> Result {
+    fn handle(&self, item: &mut Item) -> ::Result {
         for handler in &self.handlers {
             try!(handler.handle(item));
         }
@@ -27,13 +27,13 @@ impl Handle<Item> for Chain<Item> {
 
 impl<T> Handle<Item> for Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
-    fn handle(&self, item: &mut Item) -> handle::Result {
+    fn handle(&self, item: &mut Item) -> ::Result {
         item.extensions.insert::<T>(self.payload.clone());
         Ok(())
     }
 }
 
-pub fn copy(item: &mut Item) -> handle::Result {
+pub fn copy(item: &mut Item) -> ::Result {
     use std::fs;
 
     if let Some(from) = item.source() {
@@ -54,7 +54,7 @@ pub fn copy(item: &mut Item) -> handle::Result {
 }
 
 /// Handle<Item> that reads the `Item`'s body.
-pub fn read(item: &mut Item) -> handle::Result {
+pub fn read(item: &mut Item) -> ::Result {
     use std::fs::File;
     use std::io::Read;
 
@@ -74,7 +74,7 @@ pub fn read(item: &mut Item) -> handle::Result {
 }
 
 /// Handle<Item> that writes the `Item`'s body.
-pub fn write(item: &mut Item) -> handle::Result {
+pub fn write(item: &mut Item) -> ::Result {
     use std::fs::File;
     use std::io::Write;
 
@@ -102,7 +102,7 @@ impl typemap::Key for Metadata {
     type Value = toml::Value;
 }
 
-pub fn parse_metadata(item: &mut Item) -> handle::Result {
+pub fn parse_metadata(item: &mut Item) -> ::Result {
     // TODO:
     // should probably allow arbitrary amount of
     // newlines after metadata block?
@@ -180,7 +180,7 @@ pub struct SaveVersion {
 }
 
 impl Handle<Item> for SaveVersion {
-    fn handle(&self, item: &mut Item) -> handle::Result {
+    fn handle(&self, item: &mut Item) -> ::Result {
         item.extensions.entry::<Versions>()
             .or_insert_with(|| HashMap::new())
             .insert(self.name.clone(), item.body.clone());
@@ -204,7 +204,7 @@ impl typemap::Key for Date {
 // TODO
 // * make time type generic
 // * customizable format
-pub fn date(item: &mut Item) -> handle::Result {
+pub fn date(item: &mut Item) -> ::Result {
     let date = {
         if let Some(meta) = item.extensions.get::<Metadata>() {
             let date = meta.lookup("published").and_then(toml::Value::as_str).unwrap();
@@ -232,7 +232,7 @@ where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
 impl<C, H> Handle<Item> for HandleIf<C, H>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
       H: Handle<Item> + Sync + Send + 'static {
-    fn handle(&self, item: &mut Item) -> handle::Result {
+    fn handle(&self, item: &mut Item) -> ::Result {
         if (self.condition)(item) {
             (self.handler.handle(item))
         } else {

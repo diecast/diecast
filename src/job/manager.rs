@@ -170,47 +170,42 @@ where E: Evaluator {
         assert!(job_map.is_empty(), "not all jobs were sorted!");
     }
 
-    pub fn build(&mut self) {
+    pub fn build(&mut self) -> ::Result {
         if self.waiting.is_empty() {
             println!("there is nothing to do");
-            return;
+            return Ok(());
         }
 
         let count = self.waiting.len();
 
-        match self.graph.resolve_all() {
-            Ok(order) => {
-                self.sort_jobs(order);
+        let order = try!(self.graph.resolve_all());
 
-                self.enqueue_ready();
+        self.sort_jobs(order);
 
-                // TODO: should have some sort of timeout here
-                for _ in (0 .. count) {
-                    match self.evaluator.dequeue() {
-                        Some(job) => {
-                            self.handle_done(job);
-                        },
-                        None => {
-                            println!("a job panicked. stopping everything");
-                            ::std::process::exit(1);
-                        }
-                    }
+        self.enqueue_ready();
+
+        // TODO: should have some sort of timeout here
+        for _ in (0 .. count) {
+            match self.evaluator.dequeue() {
+                Some(job) => {
+                    self.handle_done(job);
+                },
+                None => {
+                    return Err(From::from("a job panicked. stopping everything"));
                 }
-            },
-            Err(cycle) => {
-                println!("a dependency cycle was detected: {:?}", cycle);
-                ::std::process::exit(1);
-            },
+            }
         }
 
         self.reset();
+
+        Ok(())
     }
 
     // TODO paths ref
-    pub fn update(&mut self, paths: HashSet<PathBuf>) {
+    pub fn update(&mut self, paths: HashSet<PathBuf>) -> ::Result {
         if self.waiting.is_empty() {
             println!("there is nothing to do");
-            return;
+            return Ok(());
         }
 
         let mut matched = vec![];
@@ -278,75 +273,71 @@ where E: Evaluator {
 
         // no binds matched the path; nothing to update
         if matched.is_empty() {
-            return;
+            println!("no matches");
+            return Ok(());
         }
 
         self.waiting.clear();
 
         // the name of each bind
-        match self.graph.resolve(matched) {
-            Ok(order) => {
-                // create a job for each bind in the order
-                for name in &order {
-                    let bind = &self.finished[name];
-                    let rule = &self.rules[&bind.name];
+        let order = try!(self.graph.resolve(matched));
 
-                    // TODO: need a way to get the existing bind's Arc<Data>
-                    // perhaps: Bind.to_job(&rule)
-                    let mut job = Job::new(
-                        // TODO this might differ from binds bind?
-                        bind::get_data(&bind).clone(),
-                        rule.kind().clone(),
-                        rule.handler().clone(),
-                        self.paths.clone());
+        // create a job for each bind in the order
+        for name in &order {
+            let bind = &self.finished[name];
+            let rule = &self.rules[&bind.name];
 
-                    job.bind = binds.remove(name);
+            // TODO: need a way to get the existing bind's Arc<Data>
+            // perhaps: Bind.to_job(&rule)
+            let mut job = Job::new(
+                // TODO this might differ from binds bind?
+                bind::get_data(&bind).clone(),
+                rule.kind().clone(),
+                rule.handler().clone(),
+                self.paths.clone());
 
-                    self.waiting.push(job);
+            job.bind = binds.remove(name);
+
+            self.waiting.push(job);
+        }
+
+        let order_names = order.iter().cloned().collect::<BTreeSet<_>>();
+
+        let didnt = didnt.difference(&order_names).cloned().collect::<BTreeSet<_>>();
+
+        self.sort_jobs(order);
+
+        // binds that aren't in the returned order should be assumed
+        // to have already been satisfied
+        for name in &order_names {
+            if let Some(deps) = self.graph.dependencies_of(name) {
+                let affected = deps.intersection(&didnt).count();
+                *self.dependencies.get_mut(name).unwrap() -= affected;
+            }
+        }
+
+        let count = self.waiting.len();
+
+        self.enqueue_ready();
+
+        // TODO: should have some sort of timeout here
+        // FIXME
+        // can't do while waiting.is_empty() becuase it could
+        // be momentarily empty before the rest get added
+        for _ in (0 .. count) {
+            match self.evaluator.dequeue() {
+                Some(job) => {
+                    self.handle_done(job);
+                },
+                None => {
+                    return Err(From::from("a job panicked. stopping everything"));
                 }
-
-                let order_names = order.iter().cloned().collect::<BTreeSet<_>>();
-
-                let didnt = didnt.difference(&order_names).cloned().collect::<BTreeSet<_>>();
-
-                self.sort_jobs(order);
-
-                // binds that aren't in the returned order should be assumed
-                // to have already been satisfied
-                for name in &order_names {
-                    if let Some(deps) = self.graph.dependencies_of(name) {
-                        let affected = deps.intersection(&didnt).count();
-                        *self.dependencies.get_mut(name).unwrap() -= affected;
-                    }
-                }
-
-                let count = self.waiting.len();
-
-                self.enqueue_ready();
-
-                // TODO: should have some sort of timeout here
-                // FIXME
-                // can't do while waiting.is_empty() becuase it could
-                // be momentarily empty before the rest get added
-                for _ in (0 .. count) {
-                    match self.evaluator.dequeue() {
-                        Some(job) => {
-                            self.handle_done(job);
-                        },
-                        None => {
-                            println!("a job panicked. stopping everything");
-                            ::std::process::exit(1);
-                        }
-                    }
-                }
-            },
-            Err(cycle) => {
-                println!("a dependency cycle was detected: {:?}", cycle);
-                ::std::process::exit(1);
-            },
+            }
         }
 
         self.reset();
+
+        Ok(())
     }
 
     // TODO: audit

@@ -14,6 +14,8 @@ use std::fmt;
 
 use std::borrow::Borrow;
 
+// TODO: just make Graph use usize? or String?
+
 /// Represents a dependency graph.
 ///
 /// This graph tracks items and is able to produce an ordering
@@ -92,12 +94,14 @@ where T: Ord + Clone + Hash {
         self.reverse.get(node).map(|s| s.len()).unwrap_or(0usize)
     }
 
-    pub fn resolve(&self, nodes: Vec<T>) -> Result<VecDeque<T>, VecDeque<T>> {
+    pub fn resolve(&self, nodes: Vec<T>) -> Result<Order<T>, CycleError<T>>
+    where T: fmt::Debug + fmt::Display + ::std::any::Any {
         Topological::new(self).from(nodes)
     }
 
     /// Topological ordering of the entire graph.
-    pub fn resolve_all(&self) -> Result<VecDeque<T>, VecDeque<T>> {
+    pub fn resolve_all(&self) -> Result<Order<T>, CycleError<T>>
+    where T: fmt::Debug + fmt::Display + ::std::any::Any {
         Topological::new(self).all()
     }
 }
@@ -111,7 +115,32 @@ where T: fmt::Debug + Ord + Clone + Hash {
 }
 
 pub type Order<T> = VecDeque<T>;
-pub type Cycle<T> = VecDeque<T>;
+
+#[derive(Debug)]
+pub struct CycleError<T>
+where T: fmt::Debug + fmt::Display + ::std::any::Any {
+    cycle: VecDeque<T>,
+}
+
+impl<T> fmt::Display for CycleError<T>
+where T: fmt::Debug + fmt::Display + ::std::any::Any {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(writeln!(f, "dependency cycle detected:"));
+
+        for (idx, item) in self.cycle.iter().enumerate() {
+            try!(writeln!(f, "  {}. {}", idx + 1, item));
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> ::std::error::Error for CycleError<T>
+where T: fmt::Debug + fmt::Display + ::std::any::Any {
+    fn description(&self) -> &str {
+        "dependency cycle detected"
+    }
+}
 
 /// Encapsulates a topological sorting algorithm.
 ///
@@ -149,7 +178,8 @@ where T: Ord + Clone + Hash {
     ///
     /// This uses a recursive depth-first search, as it facilitates
     /// keeping track of a cycle, if any is present.
-    fn dfs(&mut self, node: T, out: &mut VecDeque<T>) -> Result<(), VecDeque<T>> {
+    fn dfs(&mut self, node: T, out: &mut VecDeque<T>) -> Result<(), CycleError<T>>
+    where T: fmt::Debug + fmt::Display + ::std::any::Any {
         self.on_stack.insert(node.clone());
         self.visited.insert(node.clone());
 
@@ -177,7 +207,7 @@ where T: Ord + Clone + Hash {
                         previous = self.edge_to.get(&found);
                     }
 
-                    return Err(path);
+                    return Err(CycleError { cycle: path });
                 }
             }
         }
@@ -187,7 +217,8 @@ where T: Ord + Clone + Hash {
         Ok(())
     }
 
-    pub fn from(mut self, nodes: Vec<T>) -> Result<Order<T>, Cycle<T>> {
+    pub fn from(mut self, nodes: Vec<T>) -> Result<Order<T>, CycleError<T>>
+    where T: fmt::Display + fmt::Debug + ::std::any::Any {
         let mut order = VecDeque::new();
 
         for node in nodes {
@@ -201,7 +232,8 @@ where T: Ord + Clone + Hash {
 
     /// the typical resolution algorithm, returns a topological ordering
     /// of the nodes which honors the dependencies
-    pub fn all(mut self) -> Result<Order<T>, Cycle<T>> {
+    pub fn all(mut self) -> Result<Order<T>, CycleError<T>>
+    where T: fmt::Display + fmt::Debug + ::std::any::Any {
         let mut order = VecDeque::new();
 
         for node in self.graph.nodes() {

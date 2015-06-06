@@ -73,43 +73,51 @@ impl Site {
         support::mkdir_p(&self.configuration.output).unwrap();
     }
 
-    pub fn build(&mut self) {
-        self.clean();
+    pub fn build(&mut self) -> ::Result {
+        try!(self.clean());
 
         self.prepare();
-        self.manager.build();
+        self.manager.build()
     }
 
-    pub fn update(&mut self, paths: HashSet<PathBuf>) {
+    pub fn update(&mut self, paths: HashSet<PathBuf>) -> ::Result {
         self.prepare();
-        self.manager.update(paths);
+        self.manager.update(paths)
     }
 
     pub fn configuration(&self) -> Arc<Configuration> {
         self.configuration.clone()
     }
 
-    pub fn clean(&self) {
+    pub fn clean(&self) -> ::Result {
         use std::fs::{
             read_dir,
             remove_dir_all,
             remove_file,
         };
 
+        // output directory doesn't even exist; nothing to clean
         if !support::file_exists(&self.configuration.output) {
-            return;
+            return Ok(());
         }
 
         // TODO: probably don't need ignore hidden?
         // TODO: maybe obey .gitignore?
         // clear directory
-        for child in read_dir(&self.configuration.output).unwrap() {
-            let path = child.unwrap().path();
+        for child in try!(read_dir(&self.configuration.output)) {
+            let child = try!(child);
+            let path = child.path();
 
-            if !self.configuration.ignore_hidden ||
-                path.file_name().unwrap()
-                    .to_str().unwrap()
-                    .chars().next().unwrap() != '.' {
+            let is_hidden =
+                path.file_name()
+                .map(|name|
+                     name.to_str()
+                     .map(|s|
+                          s.chars().next().map(|c| c != '.').unwrap_or(false))
+                     .unwrap_or(false))
+                .unwrap_or(false);
+
+            if !self.configuration.ignore_hidden || is_hidden {
                 if ::std::fs::metadata(&path).unwrap().is_dir() {
                     remove_dir_all(&path).unwrap();
                 } else {
@@ -117,6 +125,8 @@ impl Site {
                 }
             }
         }
+
+        Ok(())
     }
 }
 

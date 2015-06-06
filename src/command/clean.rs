@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use docopt::Docopt;
 use configuration::Configuration;
 
@@ -56,7 +58,7 @@ impl Clean {
 }
 
 impl Command for Clean {
-    fn run(&mut self) {
+    fn run(&mut self) -> ::Result {
         let target = &self.site.configuration().output;
 
         if support::file_exists(target) {
@@ -65,6 +67,7 @@ impl Command for Clean {
             println!("nothing to remove");
         }
 
-        self.site.clean();
+        // TODO: clean return Result?
+        self.site.clean()
     }
 }

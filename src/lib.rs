@@ -33,7 +33,7 @@ pub use rule::Rule;
 pub use configuration::Configuration;
 pub use item::Item;
 pub use bind::Bind;
-pub use handle::{Handle, Result};
+pub use handle::Handle;
 pub use source::Source;
 // TODO command hooks
 pub use command::{CommandBuilder, Command, Plugin};
@@ -124,4 +124,6 @@ pub static STARTING: &'static str = "  Starting";
 pub static UPDATING: &'static str = "  Updating";
 pub static FINISHED: &'static str = "  Finished";
 pub static MODIFIED: &'static str = "  Modified";
+
+pub type Result = ::std::result::Result<(), Box<::std::error::Error + Sync + Send>>;
 

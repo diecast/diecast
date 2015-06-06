@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use docopt::Docopt;
 
 use site::Site;
@@ -61,7 +63,8 @@ impl Build {
 }
 
 impl Command for Build {
-    fn run(&mut self) {
-        self.site.build();
+    fn run(&mut self) -> ::Result {
+        // TODO: build return Result?
+        self.site.build()
     }
 }

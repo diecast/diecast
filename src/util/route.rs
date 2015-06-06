@@ -1,5 +1,5 @@
 use item::Item;
-use handle::{self, Handle};
+use handle::Handle;
 use std::path::{PathBuf, Path};
 
 use regex;
@@ -12,7 +12,7 @@ use regex;
 
 /// file.txt -> file.txt
 /// gen.route(Identity)
-pub fn identity(item: &mut Item) -> handle::Result {
+pub fn identity(item: &mut Item) -> ::Result {
     item.route_with(|path: &Path| -> PathBuf {
         path.to_path_buf()
     });
@@ -20,7 +20,7 @@ pub fn identity(item: &mut Item) -> handle::Result {
     Ok(())
 }
 
-pub fn pretty(item: &mut Item) -> handle::Result {
+pub fn pretty(item: &mut Item) -> ::Result {
     item.route_with(|path: &Path| -> PathBuf {
         let mut result = path.with_extension("");
         result.push("index.html");
@@ -45,7 +45,7 @@ pub struct SetExtension {
 }
 
 impl Handle<Item> for SetExtension {
-    fn handle(&self, item: &mut Item) -> handle::Result {
+    fn handle(&self, item: &mut Item) -> ::Result {
         item.route_with(|path: &Path| -> PathBuf {
             path.with_extension(self.extension)
         });
@@ -79,7 +79,7 @@ impl Regex {
 }
 
 impl Handle<Item> for Regex {
-    fn handle(&self, item: &mut Item) -> handle::Result {
+    fn handle(&self, item: &mut Item) -> ::Result {
         item.route_with(|path: &Path| -> PathBuf {
             let caps = self.regex.captures(path.to_str().unwrap()).unwrap();
             PathBuf::from(&caps.expand(self.template))

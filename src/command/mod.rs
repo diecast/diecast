@@ -33,13 +33,13 @@ impl Plugin {
 }
 
 pub trait Command {
-    fn run(&mut self);
+    fn run(&mut self) -> ::Result;
 }
 
 impl<C> Command for Box<C>
 where C: Command {
-    fn run(&mut self) {
-        (**self).run();
+    fn run(&mut self) -> ::Result {
+        (**self).run()
     }
 }
 

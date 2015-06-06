@@ -2,11 +2,12 @@ use std::sync::mpsc::{channel, TryRecvError};
 use std::path::PathBuf;
 use std::collections::HashSet;
 use std::thread;
+use std::error::Error;
 
 use docopt::Docopt;
 use tempdir::TempDir;
 use time::{SteadyTime, Duration, PreciseTime};
-use notify::{RecommendedWatcher, Error, Watcher};
+use notify::{self, RecommendedWatcher, Watcher};
 use iron::{self, Iron};
 use staticfile::Static;
 use ansi_term::Colour::Green;
@@ -82,18 +83,18 @@ impl Live {
     }
 }
 
-fn error_str(e: ::notify::Error) -> String {
+fn error_str(e: notify::Error) -> String {
     match e {
-        ::notify::Error::Generic(e) => e.to_string(),
-        ::notify::Error::Io(e) => e.to_string(),
-        ::notify::Error::NotImplemented => String::from("Not Implemented"),
-        ::notify::Error::PathNotFound => String::from("Path Not Found"),
-        ::notify::Error::WatchNotFound => String::from("Watch Not Found"),
+        notify::Error::Generic(e) => e.to_string(),
+        notify::Error::Io(e) => e.to_string(),
+        notify::Error::NotImplemented => String::from("Not Implemented"),
+        notify::Error::PathNotFound => String::from("Path Not Found"),
+        notify::Error::WatchNotFound => String::from("Watch Not Found"),
     }
 }
 
 impl Command for Live {
-    fn run(&mut self) {
+    fn run(&mut self) -> ::Result {
         let (e_tx, e_rx) = channel();
 
         let _guard =
@@ -105,7 +106,7 @@ impl Command for Live {
 
         thread::spawn(move || {
             let (tx, rx) = channel();
-            let w: Result<RecommendedWatcher, Error> = Watcher::new(tx);
+            let w: Result<RecommendedWatcher, notify::Error> = Watcher::new(tx);
 
             match w {
                 Ok(mut watcher) => {
@@ -215,7 +216,8 @@ impl Command for Live {
             }
         });
 
-        self.site.build();
+        try!(self.site.build());
+
         println!("finished building");
 
         let mut last_event = SteadyTime::now();
@@ -224,8 +226,8 @@ impl Command for Live {
         for (mut paths, tm) in e_rx.iter() {
             let delta = tm - last_event;
 
+            // debounced; skip
             if delta < debounce {
-                // debounced; skip
                 continue;
             }
 
@@ -276,7 +278,9 @@ impl Command for Live {
             }
 
             let start = PreciseTime::now();
-            self.site.update(paths);
+
+            try!(self.site.update(paths));
+
             let end = PreciseTime::now();
 
             println!("finished updating ({})", start.to(end));

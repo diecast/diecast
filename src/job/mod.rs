@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::fmt;
 
 use bind::{self, Bind};
-use handle::{self, Handle};
+use handle::Handle;
 use rule;
 
 pub mod evaluator;
@@ -68,7 +68,7 @@ impl Job {
         }
     }
 
-    pub fn process(&mut self) -> handle::Result {
+    pub fn process(&mut self) -> ::Result {
         use ansi_term::Colour::Green;
         use ansi_term::Style;
 
