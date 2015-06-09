@@ -208,14 +208,14 @@ where E: Evaluator {
             return Ok(());
         }
 
-        let mut matched = vec![];
-        let mut didnt = BTreeSet::new();
+        let mut matched: Vec<String> = vec![];
+        let mut didnt: BTreeSet<String> = BTreeSet::new();
 
         // TODO handle deletes and new files
         // * deletes: full build
         // * new files: add Item
 
-        let mut binds = HashMap::new();
+        let mut binds: HashMap<String, Bind> = HashMap::new();
 
         // find the binds that contain the paths
 
@@ -249,7 +249,11 @@ where E: Evaluator {
             let mut modified: Bind = (**bind).clone();
 
             for item in modified.items_mut() {
-                if item.route().reading().map(|p| affected.remove(p)).unwrap_or(false) {
+                // FIXME rust 1.0
+                // https://github.com/rust-lang/rust/pull/25060
+                if item.route().reading()
+                   .map(|p| affected.remove(&p.to_path_buf()))
+                   .unwrap_or(false) {
                     item::set_stale(item, true);
                 }
             }

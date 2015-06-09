@@ -126,7 +126,8 @@ impl Pattern for Path {
 
 impl Pattern for HashSet<PathBuf> {
     fn matches(&self, p: &Path) -> bool {
-        // FIXME: upon https://github.com/rust-lang/rust/issues/23261
+        // FIXME rust 1.0
+        // https://github.com/rust-lang/rust/pull/25060
         self.contains(&p.to_path_buf())
     }
 }
