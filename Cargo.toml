@@ -26,6 +26,7 @@ tempdir = "*"
 num_cpus = "*"
 
 iron = "*"
+staticfile = "*"
 typemap = "*"
 
 rustc-serialize = "*"
@@ -41,5 +42,3 @@ ansi_term = "*"
 # rustbox = "*"
 # ncurses = "*"
 
-[dependencies.staticfile]
-path = "../../staticfile"
