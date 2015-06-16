@@ -23,10 +23,6 @@ extern crate tempdir;
 extern crate num_cpus;
 extern crate ansi_term;
 
-extern crate iron;
-extern crate staticfile;
-extern crate notify;
-
 pub use pattern::Pattern;
 pub use site::Site;
 pub use rule::Rule;

@@ -25,17 +25,11 @@ threadpool = "*"
 tempdir = "*"
 num_cpus = "*"
 
-iron = "*"
-staticfile = "*"
 typemap = "*"
-
 rustc-serialize = "*"
 
 # for date
 chrono = "*"
-
-# unstable
-notify = "*"
 
 # future deps
 ansi_term = "*"

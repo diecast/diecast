@@ -9,7 +9,6 @@ use rule::Rule;
 
 pub mod build;
 pub mod clean;
-pub mod live;
 
 pub struct Plugin {
     name: String,
@@ -84,11 +83,9 @@ impl CommandBuilder {
 
         let build = build::plugin();
         let clean = clean::plugin();
-        let live = live::plugin();
 
         plugins.insert(build.name.clone(), build);
         plugins.insert(clean.name.clone(), clean);
-        plugins.insert(live.name.clone(), live);
 
         CommandBuilder {
             rules: vec![],
