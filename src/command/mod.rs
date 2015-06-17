@@ -71,14 +71,14 @@ pub fn version() -> String {
     })
 }
 
-pub struct CommandBuilder {
+pub struct Builder {
     rules: Vec<Rule>,
     configuration: Configuration,
     plugins: HashMap<String, Plugin>,
 }
 
-impl CommandBuilder {
-    pub fn new() -> CommandBuilder {
+impl Builder {
+    pub fn new() -> Builder {
         let mut plugins = HashMap::new();
 
         let build = build::plugin();
@@ -87,24 +87,24 @@ impl CommandBuilder {
         plugins.insert(build.name.clone(), build);
         plugins.insert(clean.name.clone(), clean);
 
-        CommandBuilder {
+        Builder {
             rules: vec![],
             plugins: plugins,
             configuration: Configuration::new(),
         }
     }
 
-    pub fn plugin(mut self, plugin: Plugin) -> CommandBuilder {
+    pub fn plugin(mut self, plugin: Plugin) -> Builder {
         self.plugins.insert(plugin.name.clone(), plugin);
         self
     }
 
-    pub fn configure(mut self, configuration: Configuration) -> CommandBuilder {
+    pub fn configure(mut self, configuration: Configuration) -> Builder {
         self.configuration = configuration;
         self
     }
 
-    pub fn rules(mut self, rules: Vec<Rule>) -> CommandBuilder {
+    pub fn rules(mut self, rules: Vec<Rule>) -> Builder {
         self.rules = rules;
         self
     }

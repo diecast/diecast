@@ -32,7 +32,7 @@ pub use bind::Bind;
 pub use handle::Handle;
 pub use source::Source;
 // TODO command hooks
-pub use command::{CommandBuilder, Command, Plugin};
+pub use command::{Command, Plugin};
 pub use deploy::Deploy;
 
 mod handle;
