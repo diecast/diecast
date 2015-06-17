@@ -70,9 +70,9 @@ let posts_index =
     .handler(Chain::new()
         .link(bind::create("index.html"))
         .link(bind::each(Chain::new()
-        .link(handlebars::render_template(&templates, "index", render_index))
-        .link(handlebars::render_template(&templates, "layout", layout_template))
-        .link(item::write))))
+          .link(handlebars::render_template(&templates, "index", render_index))
+          .link(handlebars::render_template(&templates, "layout", layout_template))
+          .link(item::write))))
     .build();
 ```
 
