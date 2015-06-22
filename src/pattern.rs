@@ -99,10 +99,21 @@ impl Pattern for Everything {
     }
 }
 
+/// Pattern that matches nothing.
+#[derive(Copy, Clone)]
+pub struct Nothing;
+
+impl Pattern for Nothing {
+    fn matches(&self, _: &Path) -> bool {
+        false
+    }
+}
+
 /// Allow regular expression patterns.
 impl Pattern for Regex {
     fn matches(&self, p: &Path) -> bool {
-        self.is_match(p.to_str().unwrap())
+        p.to_str()
+            .map_or(false, |s| self.is_match(s))
     }
 }
 
@@ -114,7 +125,8 @@ impl Pattern for Regex {
 /// to begin with.
 impl Pattern for str {
     fn matches(&self, p: &Path) -> bool {
-        self == p.to_str().unwrap()
+        p.to_str()
+            .map_or(false, |s| self == s)
     }
 }
 
@@ -135,7 +147,7 @@ impl Pattern for HashSet<PathBuf> {
 impl Pattern for glob::Pattern {
     // TODO: glob should be updated to work on Path
     fn matches(&self, p: &Path) -> bool {
-        self.matches(p.to_str().unwrap())
+        self.matches_path(p)
     }
 }
 
@@ -152,20 +164,20 @@ pub mod dsl {
     }
 
     /// Constructs the conjunction of two patterns.
-    pub fn and<P1, P2>(p1: P1, p2: P2) -> And<P1, P2>
-    where P1: Pattern, P2: Pattern {
+    pub fn and<A, B>(a: A, b: B) -> And<A, B>
+    where A: Pattern, B: Pattern {
         And {
-            left: p1,
-            right: p2
+            left: a,
+            right: b
         }
     }
 
     /// Constructs the disjunction of two patterns.
-    pub fn or<P1, P2>(p1: P1, p2: P2) -> Or<P1, P2>
-    where P1: Pattern, P2: Pattern {
+    pub fn or<A, B>(a: A, b: B) -> Or<A, B>
+    where A: Pattern, B: Pattern {
         Or {
-            left: p1,
-            right: p2
+            left: a,
+            right: b
         }
     }
 }
