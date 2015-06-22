@@ -11,9 +11,9 @@ A rule that matches static assets and simply copies them to the output directory
 ``` rust
 let statics =
     Rule::matching("statics", or!(
-        "images/**/*".parse::<Glob>().unwrap(),
-        "static/**/*".parse::<Glob>().unwrap(),
-        "js/**/*".parse::<Glob>().unwrap(),
+        Glob::new("images/**/*").unwrap(),
+        Glob::new("static/**/*").unwrap(),
+        Glob::new("js/**/*").unwrap(),
         "favicon.png",
         "CNAME"
     ))
@@ -27,7 +27,7 @@ Define a rule called `"posts"` which will match any file in the input directory 
 
 ``` rust
 let posts =
-    Rule::matching("posts", "posts/*.markdown".parse::<Glob>().unwrap())
+    Rule::matching("posts", Glob::new("posts/*.markdown").unwrap())
     .depends_on(&templates)
     .handler(Chain::new()
         .link(binding::each(Chain::new()
