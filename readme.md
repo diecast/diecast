@@ -17,7 +17,7 @@ let statics =
         "favicon.png",
         "CNAME"
     ))
-    .handler(binding::parallel_each(Chain::new()
+    .handler(binding::each(Chain::new()
         .link(route::identity)
         .link(item::copy)))
     .build();
@@ -29,27 +29,18 @@ Define a rule called `"posts"` which will match any file in the input directory 
 let posts =
     Rule::matching("posts", "posts/*.markdown".parse::<Glob>().unwrap())
     .depends_on(&templates)
-    // process each post
     .handler(Chain::new()
-        // process this chain for each item in parallel
-        .link(binding::parallel_each(Chain::new()
+        .link(binding::each(Chain::new()
             .link(item::read)
-            .link(item::parse_metadata)
-            // parse date from metadata
+            .link(toml::parse)
             .link(item::date)))
-        // only retain publishable posts, e.g. non-drafts
         .link(binding::retain(item::publishable))
-        .link(binding::parallel_each(Chain::new()
-            // render markdown
+        .link(binding::each(Chain::new()
             .link(item::markdown)
-            // route to target destination
             .link(route::pretty)
-            // render post template and layout
-            .link(hbs::render_template(&templates, "post", post_template))
-            .link(hbs::render_template(&templates, "layout", layout_template))
-            // write to the target file
+            .link(hbs::render(&templates, "post", post_template))
+            .link(hbs::render(&templates, "layout", layout_template))
             .link(item::write)))
-        // sort posts by date for future rules, such as post index
         .link(binding::sort_by(|a, b| {
             let a = a.extensions.get::<item::Date>().unwrap();
             let b = b.extensions.get::<item::Date>().unwrap();
@@ -63,15 +54,13 @@ Define a rule called `"post index"` which will create a paginated index of the p
 ``` rust
 let posts_index =
     Rule::creating("post index")
-    // this ensures that the post index is only run after
-    // the posts and templates rules are finished
     .depends_on(&posts)
     .depends_on(&templates)
     .handler(Chain::new()
         .link(bind::create("index.html"))
         .link(bind::each(Chain::new()
-          .link(handlebars::render_template(&templates, "index", render_index))
-          .link(handlebars::render_template(&templates, "layout", layout_template))
+          .link(handlebars::render(&templates, "index", render_index))
+          .link(handlebars::render(&templates, "layout", layout_template))
           .link(item::write))))
     .build();
 ```
@@ -93,7 +82,7 @@ Define a base configuration, register the rules, and run the user-provided comma
 
 ``` rust
 let command =
-    CommandBuilder::new()
+    command::Builder::new()
     .rules(vec![statics, posts, index])
     .build();
 
