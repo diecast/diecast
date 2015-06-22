@@ -136,12 +136,11 @@ pub fn parse_metadata(item: &mut Item) -> ::Result {
 
 pub fn is_draft(item: &Item) -> bool {
     item.extensions.get::<Metadata>()
-        .map(|meta| {
+        .map_or(false, |meta| {
             meta.lookup("draft")
                 .and_then(::toml::Value::as_bool)
                 .unwrap_or(false)
         })
-        .unwrap_or(false)
 }
 
 pub fn publishable(item: &Item) -> bool {

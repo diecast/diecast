@@ -91,7 +91,7 @@ where T: Ord + Clone + Hash {
     /// The number of dependencies a node has.
     pub fn dependency_count<Q: ?Sized>(&self, node: &Q) -> usize
     where T: Borrow<Q>, Q: Ord {
-        self.reverse.get(node).map(|s| s.len()).unwrap_or(0usize)
+        self.reverse.get(node).map_or(0usize, |s| s.len())
     }
 
     pub fn resolve(&self, nodes: Vec<T>) -> Result<Order<T>, CycleError<T>>

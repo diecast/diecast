@@ -85,14 +85,12 @@ impl Configuration {
         let input =
             toml.lookup("diecast.input")
             .and_then(toml::Value::as_str)
-            .map(PathBuf::from)
-            .unwrap_or(PathBuf::from("input"));
+            .map_or_else(|| PathBuf::from("input"), PathBuf::from);
 
         let output =
             toml.lookup("diecast.output")
             .and_then(toml::Value::as_str)
-            .map(PathBuf::from)
-            .unwrap_or(PathBuf::from("output"));
+            .map_or_else(|| PathBuf::from("output"), PathBuf::from);
 
         Configuration {
             toml: toml,

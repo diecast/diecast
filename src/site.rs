@@ -110,12 +110,10 @@ impl Site {
 
             let is_hidden =
                 path.file_name()
-                .map(|name|
+                .map_or(false, |name|
                      name.to_str()
-                     .map(|s|
-                          s.chars().next().map(|c| c != '.').unwrap_or(false))
-                     .unwrap_or(false))
-                .unwrap_or(false);
+                     .map_or(false, |s|
+                          s.chars().next().map_or(false, |c| c != '.')));
 
             if !self.configuration.ignore_hidden || is_hidden {
                 if ::std::fs::metadata(&path).unwrap().is_dir() {

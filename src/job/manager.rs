@@ -252,8 +252,7 @@ where E: Evaluator {
                 // FIXME rust 1.0
                 // https://github.com/rust-lang/rust/pull/25060
                 if item.route().reading()
-                   .map(|p| affected.remove(&p.to_path_buf()))
-                   .unwrap_or(false) {
+                   .map_or(false, |p| affected.remove(&p.to_path_buf())) {
                     item::set_stale(item, true);
                 }
             }
