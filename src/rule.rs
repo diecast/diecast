@@ -13,16 +13,16 @@ pub enum Kind {
 }
 
 #[must_use]
-pub struct RuleBuilder {
+pub struct Builder {
     name: String,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
     kind: Kind,
 }
 
-impl RuleBuilder {
-    fn new(name: String, kind: Kind) -> RuleBuilder {
-        RuleBuilder {
+impl Builder {
+    fn new(name: String, kind: Kind) -> Builder {
+        Builder {
             name: name,
             handler: Arc::new(Box::new(util::handle::bind::missing)),
             kind: kind,
@@ -31,14 +31,14 @@ impl RuleBuilder {
     }
 
     /// Associate a handler with this rule.
-    pub fn handler<H>(mut self, handler: H) -> RuleBuilder
+    pub fn handler<H>(mut self, handler: H) -> Builder
     where H: Handle<Bind> + Sync + Send + 'static {
         self.handler = Arc::new(Box::new(handler));
         self
     }
 
     /// Register a dependency for this rule.
-    pub fn depends_on<D>(mut self, dependency: D) -> RuleBuilder
+    pub fn depends_on<D>(mut self, dependency: D) -> Builder
     where D: Into<String> {
         self.dependencies.insert(dependency.into());
         self
@@ -66,20 +66,20 @@ pub struct Rule {
 }
 
 impl Rule {
-    pub fn matching<S, P>(name: S, pattern: P) -> RuleBuilder
+    pub fn matching<S, P>(name: S, pattern: P) -> Builder
     where S: Into<String>, P: Pattern + Sync + Send + 'static {
-        RuleBuilder::new(name.into(), Kind::Matching(Box::new(pattern)))
+        Builder::new(name.into(), Kind::Matching(Box::new(pattern)))
     }
 
-    pub fn creating<S>(name: S) -> RuleBuilder
+    pub fn creating<S>(name: S) -> Builder
     where S: Into<String> {
-        RuleBuilder::new(name.into(), Kind::Creating)
+        Builder::new(name.into(), Kind::Creating)
     }
 
     // TODO: why &Arc? make it &T or just Arc
     // accessors
-    pub fn handler(&self) -> &Arc<Box<Handle<Bind> + Sync + Send + 'static>> {
-        &self.handler
+    pub fn handler(&self) -> Arc<Box<Handle<Bind> + Sync + Send + 'static>> {
+        self.handler.clone()
     }
 
     pub fn kind(&self) -> Arc<Kind> {

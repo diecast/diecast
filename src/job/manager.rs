@@ -91,8 +91,8 @@ where E: Evaluator {
         self.waiting.push(
             Job::new(
                 data,
-                rule.kind().clone(),
-                rule.handler().clone(),
+                rule.kind(),
+                rule.handler(),
                 self.paths.clone()));
 
         self.graph.add_node(name.clone());
@@ -224,7 +224,7 @@ where E: Evaluator {
 
             let name = bind.name.clone();
             let rule = &self.rules[&name];
-            let kind = rule.kind().clone();
+            let kind = rule.kind();
 
             let pattern =
                 if let rule::Kind::Matching(ref pattern) = *kind {
@@ -296,8 +296,8 @@ where E: Evaluator {
             let mut job = Job::new(
                 // TODO this might differ from binds bind?
                 bind::get_data(&bind).clone(),
-                rule.kind().clone(),
-                rule.handler().clone(),
+                rule.kind(),
+                rule.handler(),
                 self.paths.clone());
 
             job.bind = binds.remove(name);
