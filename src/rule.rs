@@ -68,6 +68,12 @@ pub struct Rule {
     name: String,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
+
+    // TODO
+    // if default Kind is Creating,
+    // might as well just make this an optional
+    // pattern?
+    // kind: Option<Arc<Box<Pattern + Sync + Send>>>
     kind: Arc<Kind>,
 }
 
