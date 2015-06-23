@@ -62,28 +62,28 @@ where P: Pattern {
 }
 
 /// This conjunction of two patterns.
-pub struct And<P1, P2>
-where P1: Pattern, P2: Pattern {
-    left: P1,
-    right: P2
+pub struct And<A, B>
+where A: Pattern, B: Pattern {
+    left: A,
+    right: B
 }
 
-impl<P1, P2> Pattern for And<P1, P2>
-where P1: Pattern, P2: Pattern {
+impl<A, B> Pattern for And<A, B>
+where A: Pattern, B: Pattern {
     fn matches(&self, p: &Path) -> bool {
         self.left.matches(p) && self.right.matches(p)
     }
 }
 
 /// The disjunction of two patterns.
-pub struct Or<P1, P2>
-where P1: Pattern, P2: Pattern {
-    left: P1,
-    right: P2
+pub struct Or<A, B>
+where A: Pattern, B: Pattern {
+    left: A,
+    right: B
 }
 
-impl<P1, P2> Pattern for Or<P1, P2>
-where P1: Pattern, P2: Pattern {
+impl<A, B> Pattern for Or<A, B>
+where A: Pattern, B: Pattern {
     fn matches(&self, p: &Path) -> bool {
         self.left.matches(p) || self.right.matches(p)
     }
@@ -117,7 +117,6 @@ impl Pattern for Regex {
     }
 }
 
-// TODO: consider making &str impl be exact match?
 /// Treat string slices as globs.
 ///
 /// This simply converts the string to glob::Pattern.
@@ -125,8 +124,7 @@ impl Pattern for Regex {
 /// to begin with.
 impl Pattern for str {
     fn matches(&self, p: &Path) -> bool {
-        p.to_str()
-            .map_or(false, |s| self == s)
+        p.to_str().map_or(false, |s| self == s)
     }
 }
 
@@ -145,7 +143,6 @@ impl Pattern for HashSet<PathBuf> {
 }
 
 impl Pattern for glob::Pattern {
-    // TODO: glob should be updated to work on Path
     fn matches(&self, p: &Path) -> bool {
         self.matches_path(p)
     }
