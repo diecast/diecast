@@ -1,3 +1,18 @@
+#[macro_export]
+macro_rules! chain {
+    ($($handler:expr),+) => {
+        $crate::util::handle::Chain::new()$(.link($handler))+
+    };
+}
+
+#[macro_export]
+macro_rules! glob {
+    ($string:expr) => {
+        // TODO how to reference glob?
+        ::glob::Pattern::new($string).unwrap()
+    }
+}
+
 /// This macro simply brings the dsl module's contents
 /// within the scope of the expression passed to it.
 ///
