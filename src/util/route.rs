@@ -30,6 +30,24 @@ pub fn pretty(item: &mut Item) -> ::Result {
     Ok(())
 }
 
+// TODO fallback semantics
+// currently if there is no file_name, then keeps same path?
+pub fn pretty_page(item: &mut Item) -> ::Result {
+    item.route_with(|path: &Path| -> PathBuf {
+        let without = path.with_extension("");
+
+        if let Some(file_name) = without.file_name() {
+            let mut result = PathBuf::from(file_name);
+            result.push("index.html");
+            result
+        } else {
+            path.to_path_buf()
+        }
+    });
+
+    Ok(())
+}
+
 #[inline]
 pub fn set_extension(extension: &'static str) -> SetExtension {
     SetExtension {
