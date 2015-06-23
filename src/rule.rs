@@ -21,13 +21,19 @@ pub struct Builder {
 }
 
 impl Builder {
-    fn new(name: String, kind: Kind) -> Builder {
+    fn new(name: String) -> Builder {
         Builder {
             name: name,
             handler: Arc::new(Box::new(util::handle::bind::missing)),
-            kind: kind,
+            kind: Kind::Creating,
             dependencies: HashSet::new(),
         }
+    }
+
+    pub fn matching<P>(mut self, pattern: P) -> Builder
+    where P: Pattern + Sync + Send + 'static {
+        self.kind = Kind::Matching(Box::new(pattern));
+        self
     }
 
     /// Associate a handler with this rule.
@@ -66,19 +72,12 @@ pub struct Rule {
 }
 
 impl Rule {
-    pub fn matching<S, P>(name: S, pattern: P) -> Builder
-    where S: Into<String>, P: Pattern + Sync + Send + 'static {
-        Builder::new(name.into(), Kind::Matching(Box::new(pattern)))
+    pub fn named<N>(name: N) -> Builder
+    where N: Into<String> {
+        Builder::new(name.into())
     }
 
-    pub fn creating<S>(name: S) -> Builder
-    where S: Into<String> {
-        Builder::new(name.into(), Kind::Creating)
-    }
-
-    // TODO: why &Arc? make it &T or just Arc
-    // accessors
-    pub fn handler(&self) -> Arc<Box<Handle<Bind> + Sync + Send + 'static>> {
+    pub fn handler(&self) -> Arc<Box<Handle<Bind> + Sync + Send>> {
         self.handler.clone()
     }
 

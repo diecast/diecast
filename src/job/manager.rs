@@ -79,7 +79,9 @@ where E: Evaluator {
 
     pub fn add(&mut self, rule: Arc<Rule>) {
         // prepare bind-data with the name and configuration
-        let data = bind::Data::new(String::from(rule.name()), self.configuration.clone());
+        let data = bind::Data::new(
+            String::from(rule.name()),
+            self.configuration.clone());
         let name = data.name.clone();
 
         // TODO
@@ -102,7 +104,7 @@ where E: Evaluator {
             self.graph.add_edge(dep.clone(), name.clone());
         }
 
-        self.rules.insert(String::from(rule.name()), rule);
+        self.rules.insert(name.clone(), rule);
     }
 
     // TODO: will need Borrow bound

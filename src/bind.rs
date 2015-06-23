@@ -68,7 +68,6 @@ pub fn get_data(bind: &Bind) -> &Data {
 }
 
 impl Bind {
-    // FIXME: I don't like that this has to be associated with the configuration
     pub fn new(data: Data) -> Bind {
         Bind {
             items: Vec::new(),

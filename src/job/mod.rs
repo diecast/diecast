@@ -117,7 +117,7 @@ impl Job {
             // TODO: rust-pad patch to take Deref<Target=str> or AsRef<str>?
             let res = self.handler.handle(&mut bind);
 
-            println!("{} {} ({} items)",
+            println!("{} {} [{}]",
                 Style::default().bold().paint(::FINISHED),
                 bind,
                 item_count(&bind));
