@@ -1,4 +1,43 @@
 #[macro_export]
+macro_rules! rule {
+    (name: $name:expr,
+     pattern: $pattern:expr,
+     handler: $handler:expr) => {
+        $crate::rule::Rule::named($name)
+            .matching($pattern)
+            .handler($handler)
+            .build()
+    };
+
+    (name: $name:expr,
+     dependencies: [$($dependency:expr),+],
+     handler: $handler:expr) => {
+        $crate::rule::Rule::named($name)
+            $(.depends_on($dependency))+
+            .handler($handler)
+            .build()
+    };
+
+    (name: $name:expr,
+     handler: $handler:expr) => {
+        $crate::rule::Rule::named($name)
+            .handler($handler)
+            .build()
+    };
+
+    (name: $name:expr,
+     dependencies: [$($dependency:expr),+],
+     pattern: $pattern:expr,
+     handler: $handler:expr) => {
+        $crate::rule::Rule::named($name)
+            $(.depends_on($dependency))+
+            .matching($pattern)
+            .handler($handler)
+            .build()
+    }
+}
+
+#[macro_export]
 macro_rules! chain {
     ($($handler:expr),+) => {
         $crate::util::handle::Chain::new()$(.link($handler))+
