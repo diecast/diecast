@@ -130,7 +130,12 @@ pub fn set_stale(item: &mut Item, stale: bool) {
 impl Item {
     pub fn new(route: Route, bind: Arc<bind::Data>) -> Item {
         if let Some(path) = route.reading() {
-            assert!(fs::metadata(bind.configuration.input.join(path)).unwrap().is_file())
+            let is_file =
+                fs::metadata(bind.configuration.input.join(path))
+                .map(|m| m.is_file())
+                .unwrap_or(false);
+
+            assert!(is_file, "{:?} is not a file", path)
         }
 
         Item {
