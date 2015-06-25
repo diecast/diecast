@@ -5,7 +5,7 @@ use std::mem;
 
 use configuration::Configuration;
 use dependency::Graph;
-use rule::{self, Rule};
+use rule::Rule;
 use bind::{self, Bind};
 use super::evaluator::Evaluator;
 use super::Job;
@@ -93,7 +93,7 @@ where E: Evaluator {
         self.waiting.push(
             Job::new(
                 data,
-                rule.kind(),
+                rule.pattern(),
                 rule.handler(),
                 self.paths.clone()));
 
@@ -226,10 +226,9 @@ where E: Evaluator {
 
             let name = bind.name.clone();
             let rule = &self.rules[&name];
-            let kind = rule.kind();
 
             let pattern =
-                if let rule::Kind::Matching(ref pattern) = *kind {
+                if let Some(pattern) = rule.pattern() {
                     pattern
                 } else {
                     continue
@@ -297,7 +296,7 @@ where E: Evaluator {
             let mut job = Job::new(
                 // TODO this might differ from binds bind?
                 bind::get_data(&bind).clone(),
-                rule.kind(),
+                rule.pattern(),
                 rule.handler(),
                 self.paths.clone());
 

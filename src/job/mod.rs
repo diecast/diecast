@@ -4,7 +4,7 @@ use std::fmt;
 
 use bind::{self, Bind};
 use handle::Handle;
-use rule;
+use pattern::Pattern;
 
 pub mod evaluator;
 mod manager;
@@ -14,7 +14,7 @@ pub use self::manager::Manager;
 
 pub struct Job {
     pub bind_data: bind::Data,
-    pub kind: Arc<rule::Kind>,
+    pub pattern: Option<Arc<Box<Pattern + Sync + Send>>>,
     pub handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     pub bind: Option<Bind>,
     paths: Arc<Vec<PathBuf>>,
@@ -29,11 +29,17 @@ impl fmt::Debug for Job {
 impl Job {
     pub fn new(
         bind: bind::Data,
-        kind: Arc<rule::Kind>,
+        pattern: Option<Arc<Box<Pattern + Sync + Send>>>,
         handler: Arc<Box<Handle<Bind> + Sync + Send>>,
         paths: Arc<Vec<PathBuf>>)
     -> Job {
-        Job { bind_data: bind, kind: kind, handler: handler, bind: None, paths: paths }
+        Job {
+            bind_data: bind,
+            pattern: pattern,
+            handler: handler,
+            bind: None,
+            paths: paths
+        }
     }
 
     // TODO
@@ -46,25 +52,23 @@ impl Job {
         use item::Route;
         use support;
 
-        // TODO: bind.spawn(Route::Read(relative))
+        // TODO:
+        // bind.spawn(Route::Read(relative))
         // let data = bind.data();
 
-        match *self.kind {
-            rule::Kind::Creating => (),
-            rule::Kind::Matching(ref pattern) => {
-                for path in self.paths.iter() {
-                    let relative =
-                        support::path_relative_from(path, &bind.configuration.input).unwrap()
-                        .to_path_buf();
+        if let Some(ref pattern) = self.pattern {
+            for path in self.paths.iter() {
+                let relative =
+                    support::path_relative_from(path, &bind.configuration.input).unwrap()
+                    .to_path_buf();
 
-                    // TODO: JOIN STANDARDS
-                    // should insert path.clone()
-                    if pattern.matches(&relative) {
-                        let item = bind.spawn(Route::Read(relative));
-                        bind.items_mut().push(item);
-                    }
+                // TODO: JOIN STANDARDS
+                // should insert path.clone()
+                if pattern.matches(&relative) {
+                    let item = bind.spawn(Route::Read(relative));
+                    bind.items_mut().push(item);
                 }
-            },
+            }
         }
     }
 

@@ -7,17 +7,12 @@ use util;
 use handle::Handle;
 use pattern::Pattern;
 
-pub enum Kind {
-    Matching(Box<Pattern + Sync + Send + 'static>),
-    Creating,
-}
-
 #[must_use]
 pub struct Builder {
     name: String,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
-    kind: Kind,
+    pattern: Option<Box<Pattern + Sync + Send>>,
 }
 
 impl Builder {
@@ -25,14 +20,14 @@ impl Builder {
         Builder {
             name: name,
             handler: Arc::new(Box::new(util::handle::bind::missing)),
-            kind: Kind::Creating,
+            pattern: None,
             dependencies: HashSet::new(),
         }
     }
 
-    pub fn matching<P>(mut self, pattern: P) -> Builder
+    pub fn pattern<P>(mut self, pattern: P) -> Builder
     where P: Pattern + Sync + Send + 'static {
-        self.kind = Kind::Matching(Box::new(pattern));
+        self.pattern = Some(Box::new(pattern));
         self
     }
 
@@ -55,7 +50,7 @@ impl Builder {
             name: self.name,
             handler: self.handler,
             dependencies: self.dependencies,
-            kind: Arc::new(self.kind),
+            pattern: self.pattern.map(|p| Arc::new(p)),
         }
     }
 }
@@ -68,13 +63,7 @@ pub struct Rule {
     name: String,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
-
-    // TODO
-    // if default Kind is Creating,
-    // might as well just make this an optional
-    // pattern?
-    // kind: Option<Arc<Box<Pattern + Sync + Send>>>
-    kind: Arc<Kind>,
+    pattern: Option<Arc<Box<Pattern + Sync + Send>>>,
 }
 
 impl Rule {
@@ -87,8 +76,8 @@ impl Rule {
         self.handler.clone()
     }
 
-    pub fn kind(&self) -> Arc<Kind> {
-        self.kind.clone()
+    pub fn pattern(&self) -> Option<Arc<Box<Pattern + Sync + Send>>> {
+        self.pattern.clone()
     }
 
     pub fn name(&self) -> &str {

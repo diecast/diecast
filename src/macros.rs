@@ -4,7 +4,7 @@ macro_rules! rule {
      pattern: $pattern:expr,
      handler: $handler:expr) => {
         $crate::rule::Rule::named($name)
-            .matching($pattern)
+            .pattern($pattern)
             .handler($handler)
             .build()
     };
@@ -31,7 +31,7 @@ macro_rules! rule {
      handler: $handler:expr) => {
         $crate::rule::Rule::named($name)
             $(.depends_on($dependency))+
-            .matching($pattern)
+            .pattern($pattern)
             .handler($handler)
             .build()
     }
