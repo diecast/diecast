@@ -118,5 +118,6 @@ pub static UPDATING: &'static str = "  Updating";
 pub static FINISHED: &'static str = "  Finished";
 pub static MODIFIED: &'static str = "  Modified";
 
-pub type Result = ::std::result::Result<(), Box<::std::error::Error + Sync + Send>>;
+pub type Error = Box<::std::error::Error + Sync + Send>;
+pub type Result = ::std::result::Result<(), Error>;
 

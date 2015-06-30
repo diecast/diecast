@@ -89,20 +89,6 @@ pub fn write(item: &mut Item) -> ::Result {
     Ok(())
 }
 
-// TODO can't depend on Metadata or "draft"
-// pub fn is_draft(item: &Item) -> bool {
-//     item.extensions.get::<Metadata>()
-//         .map_or(false, |meta| {
-//             meta.lookup("draft")
-//                 .and_then(::toml::Value::as_bool)
-//                 .unwrap_or(false)
-//         })
-// }
-
-// pub fn publishable(item: &Item) -> bool {
-//     !(is_draft(item) && !item.bind().configuration.is_preview)
-// }
-
 pub struct Conditional<C, H>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
       H: Handle<Item> + Sync + Send + 'static {
