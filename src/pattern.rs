@@ -61,6 +61,21 @@ where P: Pattern {
     }
 }
 
+// TODO
+// can create an And and Or that are not type parameterized
+// they would store trait objects in a vec
+//
+// And's implementation would be self.objs.iter().all(|p| p.matches(p))
+// Or's implementation would be self.objs.iter().any(|p| p.matches(p))
+//
+// Would be (with appropriate macro):
+//
+// Or::new().add(pat1).add(pat2)
+//
+// Or just introduce or! etc. macro which expands to
+//
+// Or::from(vec![Box::new(pat1) as Box<Pattern>, Box::new(pat2) as Box<Pattern>])
+
 /// This conjunction of two patterns.
 pub struct And<A, B>
 where A: Pattern, B: Pattern {
