@@ -1,16 +1,33 @@
 use std::sync::Arc;
-use std::collections::HashMap;
 use std::any::Any;
 use std::path::PathBuf;
 
 use typemap;
 
 use job::evaluator::Pool;
-use item::{Item, Route};
+use item::Item;
 use bind::Bind;
 use handle::Handle;
 
 use super::{Chain, Extender};
+
+impl Handle<Bind> for Chain<Bind> {
+    fn handle(&self, bind: &mut Bind) -> ::Result {
+        for handler in &self.handlers {
+            try!(handler.handle(bind));
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> Handle<Bind> for Extender<T>
+where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
+    fn handle(&self, bind: &mut Bind) -> ::Result {
+        bind.extensions.write().unwrap().insert::<T>(self.payload.clone());
+        Ok(())
+    }
+}
 
 pub struct Create {
     path: PathBuf,
@@ -18,14 +35,7 @@ pub struct Create {
 
 impl Handle<Bind> for Create {
     fn handle(&self, bind: &mut Bind) -> ::Result {
-        let item = bind.spawn(Route::Write(self.path.clone()));
-        bind.items_mut().push(item);
-
-        // TODO: bind.spawn(Route::Write(self.path.clone()))
-        // let data = bind.data();
-
-        // bind.items_mut()
-        //     .push(Item::new(Route::Write(self.path.clone()), data));
+        bind.attach(Item::writing(self.path.clone()));
 
         Ok(())
     }
@@ -51,6 +61,23 @@ where H: Handle<Item> {
     handler: H,
 }
 
+impl<H> Handle<Bind> for Each<H>
+where H: Handle<Item> {
+    fn handle(&self, bind: &mut Bind) -> ::Result {
+        for item in bind.iter_mut() {
+            match self.handler.handle(item) {
+                Ok(()) => (),
+                Err(e) => {
+                    println!("\nthe following item encountered an error:\n {:?}\n\n{}\n", item, e);
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 pub struct Retain<C>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
     condition: C,
@@ -69,35 +96,6 @@ pub fn retain<C>(condition: C) -> Retain<C>
 where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
     Retain {
         condition: condition,
-    }
-}
-
-impl<H> Handle<Bind> for Each<H>
-where H: Handle<Item> {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
-        for item in bind.iter_mut() {
-            try!(self.handler.handle(item));
-        }
-
-        Ok(())
-    }
-}
-
-impl Handle<Bind> for Chain<Bind> {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
-        for handler in &self.handlers {
-            try!(handler.handle(bind));
-        }
-
-        Ok(())
-    }
-}
-
-impl<T> Handle<Bind> for Extender<T>
-where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
-        bind.extensions.write().unwrap().insert::<T>(self.payload.clone());
-        Ok(())
     }
 }
 
@@ -262,43 +260,6 @@ pub fn adjacent(bind: &mut Bind) -> ::Result {
             next: next,
         });
     }
-
-    Ok(())
-}
-
-pub struct Tags;
-
-impl typemap::Key for Tags {
-    type Value = HashMap<String, Arc<Vec<Arc<Item>>>>;
-}
-
-pub fn tags(bind: &mut Bind) -> ::Result {
-    let mut tag_map = ::std::collections::HashMap::new();
-
-    for item in bind.iter() {
-        let toml =
-            item.extensions.get::<super::item::Metadata>()
-            .and_then(|m| m.lookup("tags"))
-            .and_then(::toml::Value::as_slice);
-
-        let arc = Arc::new(item.clone());
-
-        if let Some(tags) = toml {
-            for tag in tags {
-                tag_map.entry(String::from(tag.as_str().unwrap()))
-                    .or_insert(vec![])
-                    .push(arc.clone());
-            }
-        }
-    }
-
-    let mut arc_map = HashMap::new();
-
-    for (k, v) in tag_map {
-        arc_map.insert(k, Arc::new(v));
-    }
-
-    bind.extensions.write().unwrap().insert::<Tags>(arc_map);
 
     Ok(())
 }

@@ -4,7 +4,6 @@ use std::io::Write;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
-use std::fs;
 
 use typemap::TypeMap;
 
@@ -23,6 +22,10 @@ pub enum Route {
     ReadWrite(PathBuf, PathBuf),
 }
 
+// TODO
+// rename writing/reading methods
+// to avoid confusion with Item constructors
+// change to from/to?
 impl Route {
     /// Whether or not the route is reading from a file.
     pub fn is_reading(&self) -> bool {
@@ -115,7 +118,7 @@ pub struct Item {
     /// Arbitrary additional data
     pub extensions: TypeMap<::typemap::CloneAny + Sync + Send>,
 
-    bind: Arc<bind::Data>,
+    bind: Option<Arc<bind::Data>>,
 
     route: Route,
 
@@ -127,25 +130,38 @@ pub fn set_stale(item: &mut Item, stale: bool) {
     item.is_stale = stale;
 }
 
+// TODO
+// have Item::read/Item.read that gets delegated
+// to by the read/write handlers?
 impl Item {
-    pub fn new(route: Route, bind: Arc<bind::Data>) -> Item {
-        if let Some(path) = route.reading() {
-            let is_file =
-                fs::metadata(bind.configuration.input.join(path))
-                .map(|m| m.is_file())
-                .unwrap_or(false);
-
-            assert!(is_file, "{:?} is not a file", path)
-        }
-
+    pub fn new(route: Route) -> Item {
         Item {
-            bind: bind,
+            bind: None,
             route: route,
             is_stale: false,
 
             body: String::new(),
             extensions: TypeMap::custom(),
         }
+    }
+
+    pub fn reading<P>(from: P) -> Item
+    where P: Into<PathBuf> {
+        Item::new(Route::Read(from.into()))
+    }
+
+    pub fn writing<P>(to: P) -> Item
+    where P: Into<PathBuf> {
+        Item::new(Route::Write(to.into()))
+    }
+
+    pub fn read_write<R, W>(from: R, to: W) -> Item
+    where R: Into<PathBuf>, W: Into<PathBuf> {
+        Item::new(Route::ReadWrite(from.into(), to.into()))
+    }
+
+    pub fn attach_to(&mut self, bind: Arc<bind::Data>) {
+        self.bind = Some(bind);
     }
 
     /// Access the item's route.
@@ -167,20 +183,28 @@ impl Item {
     /// The path to the underlying file being read.
     pub fn source(&self) -> Option<PathBuf> {
         self.route.reading().map(|from| {
-            self.bind.configuration.input.join(from)
+            self.bind.as_ref().map_or_else(
+                || from.to_path_buf(),
+                |b| b.configuration.input.join(from))
         })
     }
 
     /// The path to the underlying file being written to.
     pub fn target(&self) -> Option<PathBuf> {
         self.route.writing().map(|to| {
-            self.bind.configuration.output.join(to)
+            self.bind.as_ref().map_or_else(
+                || to.to_path_buf(),
+                |b| b.configuration.output.join(to))
         })
     }
 
     /// Access the bind's data
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `Item` isn't attached to any `Bind`
     pub fn bind(&self) -> &bind::Data {
-        &self.bind
+        self.bind.as_ref().unwrap()
     }
 }
 

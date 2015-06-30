@@ -6,7 +6,7 @@ use std::ops::Deref;
 
 use typemap::TypeMap;
 
-use item::{self, Item, Route};
+use item::{self, Item};
 use configuration::Configuration;
 
 /// Bind data.
@@ -63,10 +63,6 @@ pub fn set_stale(bind: &mut Bind, is_stale: bool) {
     bind.is_stale = is_stale;
 }
 
-pub fn get_data(bind: &Bind) -> &Data {
-    &bind.data
-}
-
 impl Bind {
     pub fn new(data: Data) -> Bind {
         Bind {
@@ -76,12 +72,11 @@ impl Bind {
         }
     }
 
-    pub fn spawn(&self, route: Route) -> Item {
-        Item::new(route, self.data.clone())
+    pub fn attach(&mut self, mut item: Item) {
+        item.attach_to(self.data.clone());
+        self.items.push(item);
     }
 
-    // TODO audit
-    // TODO I would much rather not expose this
     /// Access the bind data as an `Arc`
     pub fn data(&self) -> &Data {
         &self.data

@@ -1,12 +1,5 @@
-use std::sync::Arc;
-use std::path::PathBuf;
-use std::ops::Range;
 use std::any::Any;
-use std::collections::HashMap;
 
-use regex::Regex;
-use toml;
-use chrono;
 use typemap;
 
 use handle::Handle;
@@ -96,139 +89,28 @@ pub fn write(item: &mut Item) -> ::Result {
     Ok(())
 }
 
-pub struct Metadata;
+// TODO can't depend on Metadata or "draft"
+// pub fn is_draft(item: &Item) -> bool {
+//     item.extensions.get::<Metadata>()
+//         .map_or(false, |meta| {
+//             meta.lookup("draft")
+//                 .and_then(::toml::Value::as_bool)
+//                 .unwrap_or(false)
+//         })
+// }
 
-impl typemap::Key for Metadata {
-    type Value = toml::Value;
-}
+// pub fn publishable(item: &Item) -> bool {
+//     !(is_draft(item) && !item.bind().configuration.is_preview)
+// }
 
-pub fn parse_metadata(item: &mut Item) -> ::Result {
-    // TODO:
-    // should probably allow arbitrary amount of
-    // newlines after metadata block?
-    let re =
-        Regex::new(
-            concat!(
-                "(?ms)",
-                r"\A---\s*\n",
-                r"(?P<metadata>.*?\n?)",
-                r"^---\s*$",
-                r"\n*",
-                r"(?P<body>.*)"))
-            .unwrap();
-
-    let body = if let Some(captures) = re.captures(&item.body) {
-        if let Some(metadata) = captures.name("metadata") {
-            if let Ok(parsed) = metadata.parse() {
-                item.extensions.insert::<Metadata>(parsed);
-            }
-        }
-
-        captures.name("body").map(String::from)
-    } else { None };
-
-    if let Some(body) = body {
-        item.body = body;
-    }
-
-    Ok(())
-}
-
-pub fn is_draft(item: &Item) -> bool {
-    item.extensions.get::<Metadata>()
-        .map_or(false, |meta| {
-            meta.lookup("draft")
-                .and_then(::toml::Value::as_bool)
-                .unwrap_or(false)
-        })
-}
-
-pub fn publishable(item: &Item) -> bool {
-    !(is_draft(item) && !item.bind().configuration.is_preview)
-}
-
-// TODO: should this just contain the items itself instead of the range?
-#[derive(Clone)]
-pub struct Page {
-    pub first: (usize, Arc<PathBuf>),
-    pub next: Option<(usize, Arc<PathBuf>)>,
-    pub curr: (usize, Arc<PathBuf>),
-    pub prev: Option<(usize, Arc<PathBuf>)>,
-    pub last: (usize, Arc<PathBuf>),
-
-    pub range: Range<usize>,
-
-    pub page_count: usize,
-    pub post_count: usize,
-    pub posts_per_page: usize,
-}
-
-impl typemap::Key for Page {
-    type Value = Page;
-}
-
-// TODO: audit; perhaps have Item::versions
-pub struct Versions;
-
-impl typemap::Key for Versions {
-    type Value = HashMap<String, String>;
-}
-
-pub struct SaveVersion {
-    name: String,
-}
-
-impl Handle<Item> for SaveVersion {
-    fn handle(&self, item: &mut Item) -> ::Result {
-        item.extensions.entry::<Versions>()
-            .or_insert_with(|| HashMap::new())
-            .insert(self.name.clone(), item.body.clone());
-
-        Ok(())
-    }
-}
-
-pub fn save_version<S: Into<String>>(name: S) -> SaveVersion {
-    SaveVersion {
-        name: name.into()
-    }
-}
-
-pub struct Date;
-
-impl typemap::Key for Date {
-    type Value = chrono::NaiveDate;
-}
-
-// TODO
-// * make time type generic
-// * customizable format
-pub fn date(item: &mut Item) -> ::Result {
-    let date = {
-        if let Some(meta) = item.extensions.get::<Metadata>() {
-            let date = meta.lookup("published").and_then(toml::Value::as_str).unwrap();
-
-            Some(chrono::NaiveDate::parse_from_str(date, "%B %e, %Y").unwrap())
-        } else {
-            None
-        }
-    };
-
-    if let Some(date) = date {
-        item.extensions.insert::<Date>(date);
-    }
-
-    Ok(())
-}
-
-pub struct HandleIf<C, H>
+pub struct Conditional<C, H>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
       H: Handle<Item> + Sync + Send + 'static {
     condition: C,
     handler: H,
 }
 
-impl<C, H> Handle<Item> for HandleIf<C, H>
+impl<C, H> Handle<Item> for Conditional<C, H>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
       H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, item: &mut Item) -> ::Result {
@@ -241,10 +123,10 @@ where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
 }
 
 #[inline]
-pub fn handle_if<C, H>(condition: C, handler: H) -> HandleIf<C, H>
+pub fn conditional<C, H>(condition: C, handler: H) -> Conditional<C, H>
 where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static,
       H: Handle<Item> + Sync + Send + 'static {
-    HandleIf {
+    Conditional {
         condition: condition,
         handler: handler,
     }

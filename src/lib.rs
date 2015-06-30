@@ -9,7 +9,6 @@ extern crate glob;
 extern crate regex;
 extern crate toml;
 extern crate threadpool;
-extern crate chrono;
 extern crate typemap;
 extern crate walker;
 
@@ -30,7 +29,6 @@ pub use configuration::Configuration;
 pub use item::Item;
 pub use bind::Bind;
 pub use handle::Handle;
-pub use source::Source;
 // TODO command hooks
 pub use command::{Command, Plugin};
 pub use deploy::Deploy;
@@ -38,7 +36,6 @@ pub use deploy::Deploy;
 mod handle;
 mod job;
 mod dependency;
-mod source;
 
 #[macro_use]
 pub mod macros;

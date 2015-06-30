@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::fmt;
 
 use bind::{self, Bind};
+use item::Item;
 use handle::Handle;
 use pattern::Pattern;
 
@@ -49,7 +50,6 @@ impl Job {
 
     // TODO: feels weird to have this here
     fn populate(&self, bind: &mut Bind) {
-        use item::Route;
         use support;
 
         // TODO:
@@ -65,8 +65,7 @@ impl Job {
                 // TODO: JOIN STANDARDS
                 // should insert path.clone()
                 if pattern.matches(&relative) {
-                    let item = bind.spawn(Route::Read(relative));
-                    bind.items_mut().push(item);
+                    bind.attach(Item::reading(relative));
                 }
             }
         }

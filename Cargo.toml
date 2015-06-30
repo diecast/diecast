@@ -19,7 +19,9 @@ log = "*"
 docopt = "*"
 walker = "*"
 
+# for Diecast.toml
 toml = "*"
+
 time = "*"
 threadpool = "*"
 tempdir = "*"
@@ -27,9 +29,6 @@ num_cpus = "*"
 
 typemap = "*"
 rustc-serialize = "*"
-
-# for date
-chrono = "*"
 
 # future deps
 ansi_term = "*"

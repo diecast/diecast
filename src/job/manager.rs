@@ -295,7 +295,7 @@ where E: Evaluator {
             // perhaps: Bind.to_job(&rule)
             let mut job = Job::new(
                 // TODO this might differ from binds bind?
-                bind::get_data(&bind).clone(),
+                bind.data().clone(),
                 rule.pattern(),
                 rule.handler(),
                 self.paths.clone());
