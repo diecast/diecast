@@ -2,7 +2,7 @@
 
 use std::any::Any;
 
-use handle::Handle;
+use handler::Handle;
 
 use typemap;
 

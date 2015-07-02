@@ -4,7 +4,7 @@ use std::convert::Into;
 
 use bind::Bind;
 use util;
-use handle::Handle;
+use handler::Handle;
 use pattern::Pattern;
 
 #[must_use]

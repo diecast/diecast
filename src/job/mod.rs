@@ -4,7 +4,7 @@ use std::fmt;
 
 use bind::{self, Bind};
 use item::Item;
-use handle::Handle;
+use handler::Handle;
 use pattern::Pattern;
 
 pub mod evaluator;
@@ -71,7 +71,7 @@ impl Job {
         }
     }
 
-    pub fn process(&mut self) -> ::Result {
+    pub fn process(&mut self) -> ::Result<()> {
         use ansi_term::Colour::Green;
         use ansi_term::Style;
 

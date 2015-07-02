@@ -7,12 +7,12 @@ use typemap;
 use job::evaluator::Pool;
 use item::Item;
 use bind::Bind;
-use handle::Handle;
+use handler::Handle;
 
 use super::{Chain, Extender};
 
 impl Handle<Bind> for Chain<Bind> {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         for handler in &self.handlers {
             try!(handler.handle(bind));
         }
@@ -23,7 +23,7 @@ impl Handle<Bind> for Chain<Bind> {
 
 impl<T> Handle<Bind> for Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         bind.extensions.write().unwrap().insert::<T>(self.payload.clone());
         Ok(())
     }
@@ -34,7 +34,7 @@ pub struct Create {
 }
 
 impl Handle<Bind> for Create {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         bind.attach(Item::writing(self.path.clone()));
 
         Ok(())
@@ -63,7 +63,7 @@ where H: Handle<Item> {
 
 impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         for item in bind.iter_mut() {
             match self.handler.handle(item) {
                 Ok(()) => (),
@@ -85,7 +85,7 @@ where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
 
 impl<C> Handle<Bind> for Retain<C>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         bind.items_mut().retain(&self.condition);
         Ok(())
     }
@@ -128,7 +128,7 @@ where H: Handle<Item> + Sync + Send + 'static {
 
 impl<H> Handle<Bind> for ParallelEach<H>
 where H: Handle<Item> + Sync + Send + 'static {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         let pool: Pool<Vec<Item>> = Pool::new(bind.configuration.threads);
         let total = bind.items().len();
 
@@ -213,7 +213,7 @@ where H: Handle<Item> + Sync + Send + 'static {
     }
 }
 
-pub fn missing(bind: &mut Bind) -> ::Result {
+pub fn missing(bind: &mut Bind) -> ::Result<()> {
     println!("missing handler for {}", bind);
     Ok(())
 }
@@ -228,7 +228,7 @@ impl typemap::Key for Adjacent {
     type Value = Adjacent;
 }
 
-pub fn adjacent(bind: &mut Bind) -> ::Result {
+pub fn adjacent(bind: &mut Bind) -> ::Result<()> {
     let count = bind.items().len();
 
     let last_num = if count == 0 {
@@ -281,7 +281,7 @@ where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
 impl<F> Handle<Bind> for SortBy<F>
 where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
       F: Sync + Send + 'static {
-    fn handle(&self, bind: &mut Bind) -> ::Result {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         bind.items_mut().sort_by(|a, b| -> ::std::cmp::Ordering {
             (self.compare)(a, b)
         });

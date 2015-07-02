@@ -172,7 +172,7 @@ where E: Evaluator {
         assert!(job_map.is_empty(), "not all jobs were sorted!");
     }
 
-    pub fn build(&mut self) -> ::Result {
+    pub fn build(&mut self) -> ::Result<()> {
         if self.waiting.is_empty() {
             println!("there is nothing to do");
             return Ok(());
@@ -204,7 +204,7 @@ where E: Evaluator {
     }
 
     // TODO paths ref
-    pub fn update(&mut self, paths: HashSet<PathBuf>) -> ::Result {
+    pub fn update(&mut self, paths: HashSet<PathBuf>) -> ::Result<()> {
         if self.waiting.is_empty() {
             println!("there is nothing to do");
             return Ok(());

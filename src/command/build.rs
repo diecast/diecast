@@ -63,7 +63,7 @@ impl Build {
 }
 
 impl Command for Build {
-    fn run(&mut self) -> ::Result {
+    fn run(&mut self) -> ::Result<()> {
         // TODO: build return Result?
         self.site.build()
     }

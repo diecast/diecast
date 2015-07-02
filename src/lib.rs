@@ -28,12 +28,12 @@ pub use rule::Rule;
 pub use configuration::Configuration;
 pub use item::Item;
 pub use bind::Bind;
-pub use handle::Handle;
+pub use handler::Handle;
 // TODO command hooks
 pub use command::{Command, Plugin};
 pub use deploy::Deploy;
 
-mod handle;
+mod handler;
 mod job;
 mod dependency;
 
@@ -119,5 +119,5 @@ pub static FINISHED: &'static str = "  Finished";
 pub static MODIFIED: &'static str = "  Modified";
 
 pub type Error = Box<::std::error::Error + Sync + Send>;
-pub type Result = ::std::result::Result<(), Error>;
+pub type Result<T> = ::std::result::Result<T, Error>;
 

@@ -2,14 +2,14 @@ use std::any::Any;
 
 use typemap;
 
-use handle::Handle;
+use handler::Handle;
 use item::Item;
 use support;
 
 use super::{Chain, Extender};
 
 impl Handle<Item> for Chain<Item> {
-    fn handle(&self, item: &mut Item) -> ::Result {
+    fn handle(&self, item: &mut Item) -> ::Result<()> {
         for handler in &self.handlers {
             try!(handler.handle(item));
         }
@@ -20,13 +20,13 @@ impl Handle<Item> for Chain<Item> {
 
 impl<T> Handle<Item> for Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
-    fn handle(&self, item: &mut Item) -> ::Result {
+    fn handle(&self, item: &mut Item) -> ::Result<()> {
         item.extensions.insert::<T>(self.payload.clone());
         Ok(())
     }
 }
 
-pub fn copy(item: &mut Item) -> ::Result {
+pub fn copy(item: &mut Item) -> ::Result<()> {
     use std::fs;
 
     if let Some(from) = item.source() {
@@ -47,7 +47,7 @@ pub fn copy(item: &mut Item) -> ::Result {
 }
 
 /// Handle<Item> that reads the `Item`'s body.
-pub fn read(item: &mut Item) -> ::Result {
+pub fn read(item: &mut Item) -> ::Result<()> {
     use std::fs::File;
     use std::io::Read;
 
@@ -67,7 +67,7 @@ pub fn read(item: &mut Item) -> ::Result {
 }
 
 /// Handle<Item> that writes the `Item`'s body.
-pub fn write(item: &mut Item) -> ::Result {
+pub fn write(item: &mut Item) -> ::Result<()> {
     use std::fs::File;
     use std::io::Write;
 
@@ -99,7 +99,7 @@ where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
 impl<C, H> Handle<Item> for Conditional<C, H>
 where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
       H: Handle<Item> + Sync + Send + 'static {
-    fn handle(&self, item: &mut Item) -> ::Result {
+    fn handle(&self, item: &mut Item) -> ::Result<()> {
         if (self.condition)(item) {
             (self.handler.handle(item))
         } else {

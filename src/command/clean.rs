@@ -58,7 +58,7 @@ impl Clean {
 }
 
 impl Command for Clean {
-    fn run(&mut self) -> ::Result {
+    fn run(&mut self) -> ::Result<()> {
         let target = &self.site.configuration().output;
 
         if support::file_exists(target) {

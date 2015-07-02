@@ -73,14 +73,14 @@ impl Site {
         support::mkdir_p(&self.configuration.output).unwrap();
     }
 
-    pub fn build(&mut self) -> ::Result {
+    pub fn build(&mut self) -> ::Result<()> {
         try!(self.clean());
 
         self.prepare();
         self.manager.build()
     }
 
-    pub fn update(&mut self, paths: HashSet<PathBuf>) -> ::Result {
+    pub fn update(&mut self, paths: HashSet<PathBuf>) -> ::Result<()> {
         self.prepare();
         self.manager.update(paths)
     }
@@ -89,7 +89,7 @@ impl Site {
         self.configuration.clone()
     }
 
-    pub fn clean(&self) -> ::Result {
+    pub fn clean(&self) -> ::Result<()> {
         use std::fs::{
             read_dir,
             remove_dir_all,

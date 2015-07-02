@@ -1,5 +1,5 @@
 use item::Item;
-use handle::Handle;
+use handler::Handle;
 use std::path::{PathBuf, Path};
 
 use regex;
@@ -12,7 +12,7 @@ use regex;
 
 /// file.txt -> file.txt
 /// gen.route(Identity)
-pub fn identity(item: &mut Item) -> ::Result {
+pub fn identity(item: &mut Item) -> ::Result<()> {
     item.route_with(|path: &Path| -> PathBuf {
         path.to_path_buf()
     });
@@ -20,7 +20,7 @@ pub fn identity(item: &mut Item) -> ::Result {
     Ok(())
 }
 
-pub fn pretty(item: &mut Item) -> ::Result {
+pub fn pretty(item: &mut Item) -> ::Result<()> {
     item.route_with(|path: &Path| -> PathBuf {
         let mut result = path.with_extension("");
         result.push("index.html");
@@ -32,7 +32,7 @@ pub fn pretty(item: &mut Item) -> ::Result {
 
 // TODO fallback semantics
 // currently if there is no file_name, then keeps same path?
-pub fn pretty_page(item: &mut Item) -> ::Result {
+pub fn pretty_page(item: &mut Item) -> ::Result<()> {
     item.route_with(|path: &Path| -> PathBuf {
         let without = path.with_extension("");
 
@@ -63,7 +63,7 @@ pub struct SetExtension {
 }
 
 impl Handle<Item> for SetExtension {
-    fn handle(&self, item: &mut Item) -> ::Result {
+    fn handle(&self, item: &mut Item) -> ::Result<()> {
         item.route_with(|path: &Path| -> PathBuf {
             path.with_extension(self.extension)
         });
@@ -97,7 +97,7 @@ impl Regex {
 }
 
 impl Handle<Item> for Regex {
-    fn handle(&self, item: &mut Item) -> ::Result {
+    fn handle(&self, item: &mut Item) -> ::Result<()> {
         item.route_with(|path: &Path| -> PathBuf {
             let caps = self.regex.captures(path.to_str().unwrap()).unwrap();
             PathBuf::from(&caps.expand(self.template))
