@@ -39,7 +39,7 @@ Here's a rule called `"posts"` which will match any file in the input directory 
 
 Each of the above are just types that implement the `Handle` trait. `chain!` is a helper macro for the `Chain` handler that simply chains multiple handlers together in a sequence. Common combinations of handlers could be condensed into a single handler for ease of use.
 
-Notice that it depends on the templates rule, so that it must be processed only after the templates have been processed.
+Notice that it depends on the templates rule, which guarantees that it will be processed only after the templates have been processed.
 
 ``` rust
 let posts =
