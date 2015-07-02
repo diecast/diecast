@@ -94,6 +94,8 @@ fn render_index(item: &mut Item) -> diecast::Result<()> {
   for post in item.bind().dependencies["posts"].iter() {
     // do something for each post
   }
+  
+  Ok(())
 }
 ```
 
