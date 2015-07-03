@@ -53,8 +53,7 @@ let posts =
             helpers::set_date,
             markdown::markdown(),
             versions::save("rendered"),
-            route::pretty]),
-        bind::each(chain![
+            route::pretty,
             handlebars::render(&templates, "post", view::post_template),
             handlebars::render(&templates, "layout", view::layout_template),
             item::write]),
