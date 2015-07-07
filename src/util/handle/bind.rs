@@ -9,17 +9,7 @@ use item::Item;
 use bind::Bind;
 use handler::Handle;
 
-use super::{Chain, Extender};
-
-impl Handle<Bind> for Chain<Bind> {
-    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
-        for handler in &self.handlers {
-            try!(handler.handle(bind));
-        }
-
-        Ok(())
-    }
-}
+use super::Extender;
 
 impl<T> Handle<Bind> for Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {

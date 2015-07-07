@@ -27,6 +27,16 @@ impl<T> Chain<T> {
     }
 }
 
+impl<T> Handle<T> for Chain<T> {
+    fn handle(&self, t: &mut T) -> ::Result<()> {
+        for handler in &self.handlers {
+            try!(handler.handle(t));
+        }
+
+        Ok(())
+    }
+}
+
 pub fn extend<T>(payload: T::Value) -> Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
     Extender {

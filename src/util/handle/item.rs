@@ -6,17 +6,7 @@ use handler::Handle;
 use item::Item;
 use support;
 
-use super::{Chain, Extender};
-
-impl Handle<Item> for Chain<Item> {
-    fn handle(&self, item: &mut Item) -> ::Result<()> {
-        for handler in &self.handlers {
-            try!(handler.handle(item));
-        }
-
-        Ok(())
-    }
-}
+use super::Extender;
 
 impl<T> Handle<Item> for Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
