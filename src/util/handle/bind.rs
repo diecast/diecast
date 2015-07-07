@@ -208,52 +208,6 @@ pub fn missing(bind: &mut Bind) -> ::Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Debug)]
-pub struct Adjacent {
-    previous: Option<Arc<Item>>,
-    next: Option<Arc<Item>>,
-}
-
-impl typemap::Key for Adjacent {
-    type Value = Adjacent;
-}
-
-pub fn adjacent(bind: &mut Bind) -> ::Result<()> {
-    let count = bind.items().len();
-
-    let last_num = if count == 0 {
-        0
-    } else {
-        count - 1
-    };
-
-    // TODO: yet another reason to have Arc<Item>?
-    // FIXME
-    // the problem with this is that unlike Paginate,
-    // it'll contain copies of the item Should probably
-    // instead insert an index?
-    let cloned =
-        bind.items().iter()
-        .map(|i| Arc::new(i.clone()))
-        .collect::<Vec<Arc<Item>>>();
-
-    for (idx, item) in bind.items_mut().iter_mut().enumerate() {
-        let prev =
-            if idx == 0 { None }
-            else { let num = idx - 1; Some(cloned[num].clone()) };
-        let next =
-            if idx == last_num { None }
-            else { let num = idx + 1; Some(cloned[num].clone()) };
-
-        item.extensions.insert::<Adjacent>(Adjacent {
-            previous: prev,
-            next: next,
-        });
-    }
-
-    Ok(())
-}
-
 pub struct SortBy<F>
 where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
       F: Sync + Send + 'static {
