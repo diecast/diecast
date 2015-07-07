@@ -79,32 +79,3 @@ pub fn write(item: &mut Item) -> ::Result<()> {
     Ok(())
 }
 
-pub struct Conditional<C, H>
-where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
-      H: Handle<Item> + Sync + Send + 'static {
-    condition: C,
-    handler: H,
-}
-
-impl<C, H> Handle<Item> for Conditional<C, H>
-where C: Fn(&Item) -> bool, C: Sync + Send + 'static,
-      H: Handle<Item> + Sync + Send + 'static {
-    fn handle(&self, item: &mut Item) -> ::Result<()> {
-        if (self.condition)(item) {
-            (self.handler.handle(item))
-        } else {
-            Ok(())
-        }
-    }
-}
-
-#[inline]
-pub fn conditional<C, H>(condition: C, handler: H) -> Conditional<C, H>
-where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static,
-      H: Handle<Item> + Sync + Send + 'static {
-    Conditional {
-        condition: condition,
-        handler: handler,
-    }
-}
-

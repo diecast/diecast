@@ -1,6 +1,7 @@
 //! item::Handle behavior.
 
 use std::any::Any;
+use std::marker::PhantomData;
 
 use handler::Handle;
 
@@ -47,5 +48,36 @@ where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
 pub struct Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
     payload: T::Value,
+}
+
+pub struct HandleIf<C, T, H>
+where C: Fn(&T) -> bool, C: Sync + Send + 'static,
+      H: Handle<T> + Sync + Send + 'static {
+    condition: C,
+    handler: H,
+    _type: PhantomData<T>,
+}
+
+impl<C, T, H> Handle<T> for HandleIf<C, T, H>
+where C: Fn(&T) -> bool, C: Sync + Send + 'static,
+      H: Handle<T> + Sync + Send + 'static {
+    fn handle(&self, t: &mut T) -> ::Result<()> {
+        if (self.condition)(t) {
+            (self.handler.handle(t))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[inline]
+pub fn handle_if<C, T, H>(condition: C, handler: H) -> HandleIf<C, T, H>
+where C: Fn(&T) -> bool, C: Sync + Send + 'static,
+      H: Handle<T> + Sync + Send + 'static {
+    HandleIf {
+        condition: condition,
+        handler: handler,
+        _type: PhantomData,
+    }
 }
 
