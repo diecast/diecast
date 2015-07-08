@@ -22,9 +22,7 @@ walker = "*"
 # for Diecast.toml
 toml = "*"
 
-time = "*"
 threadpool = "*"
-tempdir = "*"
 num_cpus = "*"
 
 typemap = "*"

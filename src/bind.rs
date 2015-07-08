@@ -253,7 +253,8 @@ impl fmt::Display for Bind {
 // TODO update for Stale(items)
 impl fmt::Debug for Bind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:?}", self.name, self.items)
+        try!(write!(f, "{}: ", self.name));
+        self.items.fmt(f)
     }
 }
 

@@ -17,8 +17,6 @@ extern crate log;
 
 extern crate rustc_serialize;
 extern crate docopt;
-extern crate time;
-extern crate tempdir;
 extern crate num_cpus;
 extern crate ansi_term;
 
