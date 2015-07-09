@@ -2,6 +2,8 @@ use std::sync::Arc;
 use std::path::PathBuf;
 use std::fmt;
 
+use time::PreciseTime;
+
 use bind::{self, Bind};
 use item::Item;
 use handler::Handle;
@@ -91,17 +93,24 @@ impl Job {
             }
         }
 
+        // TODO needs major refactor
+
         if let Some(ref mut bind) = self.bind {
             println!("{} {}",
                 Green.bold().paint(action(&bind)),
                 bind);
 
+            let start = PreciseTime::now();
             let res = self.handler.handle(bind);
+            let end = PreciseTime::now();
 
-            println!("{} {} ({} items)",
+            let duration = start.to(end);
+
+            println!("{} {} [{}] {}",
                 Style::default().bold().paint(::FINISHED),
                 bind,
-                item_count(&bind));
+                item_count(&bind),
+                duration);
 
             res
         } else {
@@ -118,12 +127,17 @@ impl Job {
                 bind);
 
             // TODO: rust-pad patch to take Deref<Target=str> or AsRef<str>?
+            let start = PreciseTime::now();
             let res = self.handler.handle(&mut bind);
+            let end = PreciseTime::now();
 
-            println!("{} {} [{}]",
+            let duration = start.to(end);
+
+            println!("{} {} [{}] {}",
                 Style::default().bold().paint(::FINISHED),
                 bind,
-                item_count(&bind));
+                item_count(&bind),
+                duration);
 
             self.bind = Some(bind);
 

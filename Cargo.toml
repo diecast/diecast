@@ -19,6 +19,8 @@ log = "*"
 docopt = "*"
 walker = "*"
 
+time = "*"
+
 # for Diecast.toml
 toml = "*"
 

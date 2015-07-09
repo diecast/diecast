@@ -11,6 +11,7 @@ extern crate toml;
 extern crate threadpool;
 extern crate typemap;
 extern crate walker;
+extern crate time;
 
 #[macro_use]
 extern crate log;

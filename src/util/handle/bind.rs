@@ -69,7 +69,7 @@ where H: Handle<Item> + Sync + Send + 'static {
     Each {
         chunk: 1,
         handler: Arc::new(handler),
-        threads: 4,
+        threads: 1,
     }
 }
 
@@ -99,7 +99,6 @@ impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         if self.threads == 1 {
-            println!("USING SINGLE THREAD FOR EACH");
             for item in bind.iter_mut() {
                 match self.handler.handle(item) {
                     Ok(()) => (),
