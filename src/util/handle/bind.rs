@@ -98,6 +98,15 @@ where H: Handle<Item> + Sync + Send + 'static {
 impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> ::Result<()> {
+        use syncbox::ThreadPool;
+        use eventual::{
+            Future,
+            Async,
+            AsyncError,
+            join,
+            defer
+        };
+
         if self.threads == 1 {
             for item in bind.iter_mut() {
                 match self.handler.handle(item) {
@@ -115,33 +124,39 @@ where H: Handle<Item> + Sync + Send + 'static {
             return Ok(());
         }
 
-        let pool: Pool<Item> = Pool::new(self.threads);
-        let total = bind.items().len();
+        let pool = ThreadPool::fixed_size(self.threads as u32);
 
         let items = ::std::mem::replace(bind.items_mut(), vec![]);
+        let futures: Vec<Future<Item, ::Error>> =
+            items.into_iter()
+            .map(|mut item| {
+                let handler = self.handler.clone();
 
-        for mut item in items {
-            let handler = self.handler.clone();
-
-            pool.enqueue(move || {
-                match <Handle<Item>>::handle(&handler, &mut item) {
-                    Ok(()) => Some(item),
-                    Err(e) => {
-                        println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
-                                 item,
-                                 e);
-                        return None;
+                let future = Future::<Item, ::Error>::lazy(move || {
+                    match handler.handle(&mut item) {
+                        Ok(()) => {
+                            println!("[EACH] handled");
+                            Ok(item)
+                        },
+                        Err(e) => {
+                            println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
+                                     item,
+                                     e);
+                            Err(e)
+                        }
                     }
-                }
-            });
-        }
+                });
 
-        for _ in 0 .. total {
-            // TODO: this completely defeats the purpose of hiding the items field
-            bind.items_mut().push(pool.dequeue().unwrap());
-        }
+                defer(pool.clone(), future)
+            }).collect();
 
-        assert_eq!(total, bind.items().len());
+        let items: Vec<Item> = match join(futures).await() {
+            Ok(items) => items,
+            Err(AsyncError::Failed(e)) => return Err(e),
+            Err(AsyncError::Aborted) => return Err(From::from("Future aborted")),
+        };
+
+        *bind.items_mut() = items;
 
         Ok(())
     }

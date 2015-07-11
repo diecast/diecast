@@ -20,6 +20,8 @@ extern crate rustc_serialize;
 extern crate docopt;
 extern crate num_cpus;
 extern crate ansi_term;
+extern crate syncbox;
+extern crate eventual;
 
 pub use pattern::Pattern;
 pub use site::Site;
