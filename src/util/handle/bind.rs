@@ -3,8 +3,16 @@ use std::any::Any;
 use std::path::PathBuf;
 
 use typemap;
+use syncbox::{ThreadPool, TaskBox};
+use eventual::{
+    Future,
+    Async,
+    AsyncError,
+    join,
+    defer
+};
 
-use job::evaluator::Pool;
+
 use item::Item;
 use bind::Bind;
 use handler::Handle;
@@ -60,37 +68,45 @@ where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
     }
 }
 
-// TODO
-// should this probably be a separate crate?
-// store mutex<threadpool> in extensions,
-// then this handler would use it?
+pub struct PooledEach {
+    pool: Option<ThreadPool<Box<TaskBox>>>,
+}
+
+impl PooledEach {
+    pub fn new(pool: ThreadPool<Box<TaskBox>>) -> PooledEach {
+        PooledEach {
+            pool: Some(pool),
+        }
+    }
+
+    pub fn each<H>(&self, handler: H) -> Each<H>
+    where H: Handle<Item> + Sync + Send + 'static {
+        Each {
+            pool: self.pool.clone(),
+            handler: Arc::new(handler),
+        }
+    }
+}
+
 pub fn each<H>(handler: H) -> Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     Each {
-        chunk: 1,
         handler: Arc::new(handler),
-        threads: 1,
+        pool: None,
     }
 }
 
 // TODO: should the chunk be in configuration or a parameter?
 pub struct Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
-    // TODO remove chunk
-    chunk: usize,
     handler: Arc<H>,
-    threads: usize,
+    pool: Option<ThreadPool<Box<TaskBox>>>
 }
 
 impl<H> Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
-    pub fn chunk(mut self, size: usize) -> Each<H> {
-        self.chunk = size;
-        self
-    }
-
-    pub fn threads(mut self, threads: usize) -> Each<H> {
-        self.threads = threads;
+    pub fn threads(mut self, pool: ThreadPool<Box<TaskBox>>) -> Each<H> {
+        self.pool = Some(pool);
         self
     }
 }
@@ -98,16 +114,38 @@ where H: Handle<Item> + Sync + Send + 'static {
 impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> ::Result<()> {
-        use syncbox::ThreadPool;
-        use eventual::{
-            Future,
-            Async,
-            AsyncError,
-            join,
-            defer
-        };
+        if let Some(ref pool) = self.pool {
+            let items = ::std::mem::replace(bind.items_mut(), vec![]);
+            let futures: Vec<Future<Item, ::Error>> =
+                items.into_iter()
+                .map(|mut item| {
+                    let handler = self.handler.clone();
 
-        if self.threads == 1 {
+                    let future = Future::<Item, ::Error>::lazy(move || {
+                        match handler.handle(&mut item) {
+                            Ok(()) => {
+                                Ok(item)
+                            },
+                            Err(e) => {
+                                println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
+                                         item,
+                                         e);
+                                Err(e)
+                            }
+                        }
+                    });
+
+                    defer(pool.clone(), future)
+                }).collect();
+
+            let items: Vec<Item> = match join(futures).await() {
+                Ok(items) => items,
+                Err(AsyncError::Failed(e)) => return Err(e),
+                Err(AsyncError::Aborted) => return Err(From::from("Future aborted")),
+            };
+
+            *bind.items_mut() = items;
+        } else {
             for item in bind.iter_mut() {
                 match self.handler.handle(item) {
                     Ok(()) => (),
@@ -123,40 +161,6 @@ where H: Handle<Item> + Sync + Send + 'static {
 
             return Ok(());
         }
-
-        let pool = ThreadPool::fixed_size(self.threads as u32);
-
-        let items = ::std::mem::replace(bind.items_mut(), vec![]);
-        let futures: Vec<Future<Item, ::Error>> =
-            items.into_iter()
-            .map(|mut item| {
-                let handler = self.handler.clone();
-
-                let future = Future::<Item, ::Error>::lazy(move || {
-                    match handler.handle(&mut item) {
-                        Ok(()) => {
-                            println!("[EACH] handled");
-                            Ok(item)
-                        },
-                        Err(e) => {
-                            println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
-                                     item,
-                                     e);
-                            Err(e)
-                        }
-                    }
-                });
-
-                defer(pool.clone(), future)
-            }).collect();
-
-        let items: Vec<Item> = match join(futures).await() {
-            Ok(items) => items,
-            Err(AsyncError::Failed(e)) => return Err(e),
-            Err(AsyncError::Aborted) => return Err(From::from("Future aborted")),
-        };
-
-        *bind.items_mut() = items;
 
         Ok(())
     }
