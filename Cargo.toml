@@ -35,6 +35,4 @@ ansi_term = "*"
 # rustbox = "*"
 # ncurses = "*"
 syncbox = "*"
-
-[dependencies.eventual]
-path = "../../eventual"
+eventual = "*"
