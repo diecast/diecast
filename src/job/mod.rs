@@ -15,6 +15,10 @@ mod manager;
 pub use self::evaluator::Evaluator;
 pub use self::manager::Manager;
 
+pub static STARTING: &'static str = "  Starting";
+pub static UPDATING: &'static str = "  Updating";
+pub static FINISHED: &'static str = "  Finished";
+
 pub struct Job {
     pub bind_data: bind::Data,
     pub pattern: Option<Arc<Box<Pattern + Sync + Send>>>,
@@ -79,9 +83,9 @@ impl Job {
 
         fn action(bind: &Bind) -> &'static str {
             if bind.is_stale() {
-                ::UPDATING
+                UPDATING
             } else {
-                ::STARTING
+                STARTING
             }
         }
 
@@ -107,7 +111,7 @@ impl Job {
             let duration = start.to(end);
 
             println!("{} {} [{}] {}",
-                Style::default().bold().paint(::FINISHED),
+                Style::default().bold().paint(FINISHED),
                 bind,
                 item_count(&bind),
                 duration);
@@ -134,7 +138,7 @@ impl Job {
             let duration = start.to(end);
 
             println!("{} {} [{}] {}",
-                Style::default().bold().paint(::FINISHED),
+                Style::default().bold().paint(FINISHED),
                 bind,
                 item_count(&bind),
                 duration);
@@ -145,4 +149,3 @@ impl Job {
         }
     }
 }
-
