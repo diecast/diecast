@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
-use std::collections::{BTreeMap, BTreeSet, VecDeque, HashMap, HashSet};
+use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
 
 use configuration::Configuration;
@@ -203,147 +203,6 @@ where E: Evaluator {
         Ok(())
     }
 
-    // TODO paths ref
-    pub fn update(&mut self, paths: HashSet<PathBuf>) -> ::Result<()> {
-        if self.waiting.is_empty() {
-            println!("there is nothing to do");
-            return Ok(());
-        }
-
-        let mut matched: Vec<String> = vec![];
-        let mut didnt: BTreeSet<String> = BTreeSet::new();
-
-        // TODO handle deletes and new files
-        // * deletes: full build
-        // * new files: add Item
-
-        let mut binds: HashMap<String, Bind> = HashMap::new();
-
-        // find the binds that contain the paths
-
-        for bind in self.finished.values() {
-            use item;
-
-            let name = bind.name.clone();
-            let rule = &self.rules[&name];
-
-            let pattern =
-                if let Some(pattern) = rule.pattern() {
-                    pattern
-                } else {
-                    continue
-                };
-
-            // Borrow<Path> for &PathBuf
-            // impl<'a, T, R> Borrow<T> for &'a R where R: Borrow<T>;
-
-            let mut affected =
-                paths.iter()
-                .filter(|p| pattern.matches(p))
-                .cloned()
-                .collect::<HashSet<PathBuf>>();
-
-            let is_match = affected.len() > 0;
-
-            // TODO
-            // preferably don't clone, instead just modify it in place
-            let mut modified: Bind = (**bind).clone();
-
-            for item in modified.items_mut() {
-                // FIXME rust 1.0
-                // https://github.com/rust-lang/rust/pull/25060
-                if item.route().reading()
-                   .map_or(false, |p| affected.remove(&p.to_path_buf())) {
-                    item::set_stale(item, true);
-                }
-            }
-
-            // paths that were added
-            // if affected.len() > 0 {
-            //     for path in affected {
-            //         bind.push(path);
-            //     }
-            // }
-
-            bind::set_stale(&mut modified, true);
-
-            if is_match {
-                binds.insert(name.clone(), modified);
-                matched.push(name);
-            } else {
-                didnt.insert(name);
-            }
-        }
-
-        // no binds matched the path; nothing to update
-        if matched.is_empty() {
-            println!("no matches");
-            return Ok(());
-        }
-
-        self.waiting.clear();
-
-        // the name of each bind
-        let order = try!(self.graph.resolve(matched));
-
-        // create a job for each bind in the order
-        for name in &order {
-            let bind = &self.finished[name];
-            let rule = &self.rules[&bind.name];
-
-            // TODO: need a way to get the existing bind's Arc<Data>
-            // perhaps: Bind.to_job(&rule)
-            let mut job = Job::new(
-                // TODO this might differ from binds bind?
-                bind.data().clone(),
-                rule.pattern(),
-                rule.handler(),
-                self.paths.clone());
-
-            job.bind = binds.remove(name);
-
-            self.waiting.push(job);
-        }
-
-        let order_names = order.iter().cloned().collect::<BTreeSet<_>>();
-
-        let didnt = didnt.difference(&order_names).cloned().collect::<BTreeSet<_>>();
-
-        self.sort_jobs(order);
-
-        // binds that aren't in the returned order should be assumed
-        // to have already been satisfied
-        for name in &order_names {
-            if let Some(deps) = self.graph.dependencies_of(name) {
-                let affected = deps.intersection(&didnt).count();
-                *self.dependencies.get_mut(name).unwrap() -= affected;
-            }
-        }
-
-        let count = self.waiting.len();
-
-        self.enqueue_ready();
-
-        // TODO: should have some sort of timeout here
-        // FIXME
-        // can't do while waiting.is_empty() becuase it could
-        // be momentarily empty before the rest get added
-        for _ in (0 .. count) {
-            match self.evaluator.dequeue() {
-                Some(job) => {
-                    self.handle_done(job);
-                },
-                None => {
-                    return Err(From::from("a job panicked. stopping everything"));
-                }
-            }
-        }
-
-        self.reset();
-
-        Ok(())
-    }
-
     // TODO: audit
     fn reset(&mut self) {
         self.graph = Graph::new();
@@ -355,9 +214,7 @@ where E: Evaluator {
 
         // if they're done, move from staging to finished
         self.finished.insert(bind.clone(), Arc::new({
-            let mut bind = current.into_bind();
-            bind::set_stale(&mut bind, false);
-            bind
+            current.into_bind()
         }));
 
         self.satisfy(&bind);

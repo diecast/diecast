@@ -16,7 +16,6 @@ pub use self::evaluator::Evaluator;
 pub use self::manager::Manager;
 
 pub static STARTING: &'static str = "  Starting";
-pub static UPDATING: &'static str = "  Updating";
 pub static FINISHED: &'static str = "  Finished";
 
 pub struct Job {
@@ -81,27 +80,15 @@ impl Job {
         use ansi_term::Colour::Green;
         use ansi_term::Style;
 
-        fn action(bind: &Bind) -> &'static str {
-            if bind.is_stale() {
-                UPDATING
-            } else {
-                STARTING
-            }
-        }
-
         fn item_count(bind: &Bind) -> usize {
-            if bind.is_stale() {
-                bind.iter().count()
-            } else {
-                bind.items().len()
-            }
+            bind.items().len()
         }
 
         // TODO needs major refactor
 
         if let Some(ref mut bind) = self.bind {
             println!("{} {}",
-                Green.bold().paint(action(&bind)),
+                Green.bold().paint(STARTING),
                 bind);
 
             let start = PreciseTime::now();
@@ -127,7 +114,7 @@ impl Job {
             self.populate(&mut bind);
 
             println!("{} {}",
-                Green.bold().paint(action(&bind)),
+                Green.bold().paint(STARTING),
                 bind);
 
             // TODO: rust-pad patch to take Deref<Target=str> or AsRef<str>?

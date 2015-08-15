@@ -121,13 +121,6 @@ pub struct Item {
     bind: Option<Arc<bind::Data>>,
 
     route: Route,
-
-    is_stale: bool,
-}
-
-// TODO this should be private
-pub fn set_stale(item: &mut Item, stale: bool) {
-    item.is_stale = stale;
 }
 
 // TODO
@@ -138,7 +131,6 @@ impl Item {
         Item {
             bind: None,
             route: route,
-            is_stale: false,
 
             body: String::new(),
             extensions: TypeMap::custom(),
@@ -173,11 +165,6 @@ impl Item {
     pub fn route_with<R>(&mut self, router: R)
     where R: Fn(&Path) -> PathBuf {
         self.route.route_with(router)
-    }
-
-    /// Whether the item is out-dated.
-    pub fn is_stale(&self) -> bool {
-        self.is_stale
     }
 
     /// The path to the underlying file being read.

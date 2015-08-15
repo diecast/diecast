@@ -12,7 +12,6 @@ use eventual::{
     defer
 };
 
-
 use item::Item;
 use bind::Bind;
 use handler::Handle;

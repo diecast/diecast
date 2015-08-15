@@ -1,7 +1,6 @@
 //! Site generation.
 
 use std::sync::Arc;
-use std::path::PathBuf;
 use std::collections::HashSet;
 
 use job::{self, Job};
@@ -78,11 +77,6 @@ impl Site {
 
         self.prepare();
         self.manager.build()
-    }
-
-    pub fn update(&mut self, paths: HashSet<PathBuf>) -> ::Result<()> {
-        self.prepare();
-        self.manager.update(paths)
     }
 
     pub fn configuration(&self) -> Arc<Configuration> {
