@@ -39,12 +39,15 @@ pub struct Configuration {
     ///
     /// the following are from hakyll
     /// e.g.
-    /// config.ignore = not!(regex!("^\.|^#|~$|\.swp$"))
+    /// config.ignore = regex!("^\.|^#|~$|\.swp$")
     pub ignore: Option<Box<Pattern + Sync + Send>>,
 
     /// Whether we're in preview mode
     pub is_preview: bool,
 
+    // TODO
+    // should this just be implicit in the ignore field?
+    // e.g. ^\.
     /// Whether to ignore hidden files and directories at the
     /// top level of the output directory when cleaning it out
     pub ignore_hidden: bool,
