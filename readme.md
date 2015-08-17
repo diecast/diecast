@@ -110,3 +110,32 @@ let command =
 
 cmd.run();
 ```
+
+## Middleware
+
+Thanks to its extensible middleware nature, there are already a couple of packages that extend Diecast:
+
+### Previewing
+
+* [live](https://github.com/diecast/live): watches input directory for file changes and rebuilds site accordingly
+* [websocket](https://github.com/diecast/websocket): item updating for previews via websockets
+
+### Templating
+
+* [handlebars](https://github.com/diecast/handlebars): handlebars templating
+* [liquid](https://github.com/diecast/liquid): liquid templating
+
+### Document Processing
+
+* [hoedown](https://github.com/diecast/hoedown): markdown processing via the [hoedown](https://github.com/hoedown/hoedown) C library
+* [commonmark](https://github.com/diecast/commonmark): markdown processing via the [pulldown-cmark](https://github.com/google/pulldown-cmark) Rust library
+* [metadata](https://github.com/diecast/metadata): document frontmatter/metadata parsing, including TOML and JSON (YAML forthcoming)
+* [tags](https://github.com/diecast/tags): tag collections
+* [scss](https://github.com/diecast/scss): scss compilation
+* [feed](https://feedhub.com/diecast/feed): feed generation (RSS and Atom)
+
+### Miscellaneous
+
+* [adjacent](https://github.com/diecast/adjacent): next/previous article references
+* [versions](https://github.com/diecast/versions): saving and loading different versions of items. e.g. a feed-friendly version, before other processors are applied
+* [git](https://github.com/diecast/git): git information for items, e.g. last commit SHA and message that affected the given item
