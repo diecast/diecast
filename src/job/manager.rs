@@ -3,15 +3,23 @@ use std::path::{PathBuf, Path};
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
 
+use syncbox::{ThreadPool, TaskBox};
+use eventual::{
+    Future,
+    Async,
+    AsyncError,
+    join,
+    background,
+    defer
+};
+
 use configuration::Configuration;
 use dependency::Graph;
 use rule::Rule;
 use bind::{self, Bind};
-use super::evaluator::Evaluator;
 use super::Job;
 
-pub struct Manager<E>
-where E: Evaluator {
+pub struct Manager {
     configuration: Arc<Configuration>,
 
     rules: HashMap<String, Arc<Rule>>,
@@ -27,19 +35,17 @@ where E: Evaluator {
     /// Finished dependencies
     finished: BTreeMap<String, Arc<Bind>>,
 
-    /// Thread pool to process jobs
-    evaluator: E,
-
     // TODO
     // feels weird to have this here, but it's in-line with making
     // matching Patterns first-class
     /// Paths being considered
     paths: Arc<Vec<PathBuf>>,
+
+    futures: VecDeque<Future<Bind, ::Error>>,
 }
 
-impl<E> Manager<E>
-where E: Evaluator {
-    pub fn new(evaluator: E, configuration: Arc<Configuration>) -> Manager<E> {
+impl Manager {
+    pub fn new(configuration: Arc<Configuration>) -> Manager {
         Manager {
             configuration: configuration,
             rules: HashMap::new(),
@@ -47,8 +53,8 @@ where E: Evaluator {
             dependencies: BTreeMap::new(),
             waiting: Vec::new(),
             finished: BTreeMap::new(),
-            evaluator: evaluator,
             paths: Arc::new(Vec::new()),
+            futures: VecDeque::new(),
         }
     }
 
@@ -188,24 +194,42 @@ where E: Evaluator {
             job.bind.extensions.write().unwrap().insert::<InputPaths>(self.paths.clone());
         }
 
-        let count = self.waiting.len();
-
         let order = try!(self.graph.resolve_all());
 
         self.sort_jobs(order);
 
         self.enqueue_ready();
 
-        // TODO: should have some sort of timeout here
-        for _ in (0 .. count) {
-            match self.evaluator.dequeue() {
-                Some(bind) => self.handle_done(bind),
-                None => {
-                    return Err(From::from("a job panicked. stopping everything"));
-                }
+        // TODO
+        // remember one key thing:
+        // the 'queue' can be empty temporarily when say the last
+        // job on the queue finishes, but then its completion
+        // will most likely place more jobs on the queue
+
+        // TODO
+        // perhaps instead of using a queue, this is where Streams
+        // would be appropriate?
+
+        let pool: ThreadPool<Box<TaskBox>> = ThreadPool::fixed_size(2);
+
+        // TODO
+        // try to get rid of the global dep count updating logic,
+        // try to process all binds sequentially yet parallel
+
+        // TODO
+        // it seems pretty stupid to wait on a single defer at a time
+        // preferably they'll all be being processed and we'd respond
+        // as soon as they're finished, hopefully stream faciliates this
+
+        while let Some(future) = self.futures.pop_front() {
+            match defer(pool.clone(), future).await() {
+                Ok(bind) => self.handle_done(bind),
+                Err(e) => return Err(From::from(format!("a job panicked. stopping everything:\n{}", e))),
             }
         }
 
+        // TODO
+        // no longer necessary post-partial update purge?
         self.reset();
 
         Ok(())
@@ -244,7 +268,19 @@ where E: Evaluator {
                 }
             }
 
-            self.evaluator.enqueue(job);
+            // TODO
+            // this should push onto a queue of futures?
+            self.futures.push_back(Future::<Bind, ::Error>::lazy(move || {
+                // TODO
+                // just use map_err
+                match job.process() {
+                    Ok(bind) => Ok(bind),
+                    Err(e) => {
+                        println!("{}", e);
+                        Err(e)
+                    }
+                }
+            }));
         }
     }
 }

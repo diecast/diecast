@@ -6,10 +6,8 @@ use time::PreciseTime;
 use bind::{self, Bind};
 use handler::Handle;
 
-pub mod evaluator;
 mod manager;
 
-pub use self::evaluator::Evaluator;
 pub use self::manager::Manager;
 
 pub static STARTING: &'static str = "  Starting";
