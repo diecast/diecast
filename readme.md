@@ -11,15 +11,17 @@ Here's a rule that matches static assets and simply copies them to the output di
 ``` rust
 let statics =
     Rule::named("statics")
-    .pattern(or!(
-        glob!("images/**/*"),
-        glob!("images/**/*"),
-        glob!("static/**/*"),
-        glob!("js/**/*"),
-        "favicon.png",
-        "CNAME"
-    ))
-    .handler(bind::each(chain![route::identity, item::copy]))
+    .handler(chain![
+        bind::select(or!(
+            glob!("images/**/*"),
+            glob!("images/**/*"),
+            glob!("static/**/*"),
+            glob!("js/**/*"),
+            "favicon.png",
+            "CNAME"
+        )),
+        bind::each(chain![route::identity, item::copy]),
+    ])
     .build();
 ```
 
@@ -45,8 +47,8 @@ Notice that it depends on the templates rule, which guarantees that it will be p
 let posts =
     Rule::named("posts")
     .depends_on(&templates)
-    .pattern(glob!("posts/*.markdown"))
     .handler(chain![
+        bind::select(glob!("posts/*.markdown"))
         bind::each(chain![item::read, metadata::toml::parse]),
         bind::retain(helpers::publishable),
         bind::each(chain![
@@ -93,7 +95,7 @@ fn render_index(item: &mut Item) -> diecast::Result<()> {
   for post in item.bind().dependencies["posts"].iter() {
     // do something for each post
   }
-  
+
   Ok(())
 }
 ```
@@ -108,4 +110,3 @@ let command =
 
 cmd.run();
 ```
-
