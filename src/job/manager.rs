@@ -52,6 +52,12 @@ where E: Evaluator {
         }
     }
 
+    // TODO
+    // it's probably beneficial to keep this stuff here
+    // that way the files are only enumerated once and each handler
+    // sees the same set of files, makes things slightly more
+    // deterministic?
+
     /// Re-enumerate the paths in the input directory
     pub fn update_paths(&mut self) {
         use walker::Walker;
@@ -93,9 +99,7 @@ where E: Evaluator {
         self.waiting.push(
             Job::new(
                 data,
-                rule.pattern(),
-                rule.handler(),
-                self.paths.clone()));
+                rule.handler()));
 
         self.graph.add_node(name.clone());
 
@@ -131,7 +135,7 @@ where E: Evaluator {
 
         let (ready, waiting): (Vec<Job>, Vec<Job>) =
             waiting.into_iter()
-               .partition(|job| self.dependencies[&job.bind_data.name] == 0);
+               .partition(|job| self.dependencies[&job.bind.name] == 0);
 
         self.waiting = waiting;
 
@@ -145,7 +149,7 @@ where E: Evaluator {
             mem::replace(&mut self.waiting, Vec::new())
             .into_iter()
             .map(|job| {
-                let name = job.bind_data.name.clone();
+                let name = job.bind.name.clone();
                 (name, job)
             })
             .collect::<HashMap<String, Job>>();
@@ -157,7 +161,7 @@ where E: Evaluator {
                 let job = job_map.remove(&name).unwrap();
 
                 // set dep counts
-                let name = job.bind_data.name.clone();
+                let name = job.bind.name.clone();
 
                 let count = self.graph.dependency_count(&name);
 
@@ -173,9 +177,15 @@ where E: Evaluator {
     }
 
     pub fn build(&mut self) -> ::Result<()> {
+        use util::handle::bind::InputPaths;
+
         if self.waiting.is_empty() {
             println!("there is nothing to do");
             return Ok(());
+        }
+
+        for job in &mut self.waiting {
+            job.bind.extensions.write().unwrap().insert::<InputPaths>(self.paths.clone());
         }
 
         let count = self.waiting.len();
@@ -189,9 +199,7 @@ where E: Evaluator {
         // TODO: should have some sort of timeout here
         for _ in (0 .. count) {
             match self.evaluator.dequeue() {
-                Some(job) => {
-                    self.handle_done(job);
-                },
+                Some(bind) => self.handle_done(bind),
                 None => {
                     return Err(From::from("a job panicked. stopping everything"));
                 }
@@ -209,26 +217,30 @@ where E: Evaluator {
         self.waiting.clear();
     }
 
-    fn handle_done(&mut self, current: Job) {
-        let bind = current.bind_data.name.clone();
+    fn handle_done(&mut self, current: Bind) {
+        let bind_name = current.name.clone();
 
         // if they're done, move from staging to finished
-        self.finished.insert(bind.clone(), Arc::new({
-            current.into_bind()
+        self.finished.insert(bind_name.clone(), Arc::new({
+            current
         }));
 
-        self.satisfy(&bind);
+        self.satisfy(&bind_name);
         self.enqueue_ready();
     }
 
     fn enqueue_ready(&mut self) {
         for mut job in self.ready() {
-            let name = job.bind_data.name.clone();
+            let name = job.bind.name.clone();
 
             if let Some(deps) = self.graph.dependencies_of(&name) {
                 // insert each dependency
                 for dep in deps {
-                    job.bind_data.dependencies.insert(dep.clone(), self.finished[dep].clone());
+                    // mutation of the bind dependencies is what necessitates
+                    // Job using a bind::Data and only building the
+                    // actual Bind on-the-fly, instead of only dealing with
+                    // a Bind
+                    job.bind.dependencies.insert(dep.clone(), self.finished[dep].clone());
                 }
             }
 
@@ -236,4 +248,3 @@ where E: Evaluator {
         }
     }
 }
-

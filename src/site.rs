@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::collections::HashSet;
 
-use job::{self, Job};
+use job;
 use configuration::Configuration;
 use rule::Rule;
 use support;
@@ -15,7 +15,7 @@ use support;
 pub struct Site {
     configuration: Arc<Configuration>,
     rules: Vec<Arc<Rule>>,
-    manager: job::Manager<job::evaluator::Pool<Job>>,
+    manager: job::Manager<job::evaluator::Pool>,
 }
 
 impl Site {

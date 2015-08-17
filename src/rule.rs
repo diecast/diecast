@@ -5,14 +5,12 @@ use std::convert::Into;
 use bind::Bind;
 use util;
 use handler::Handle;
-use pattern::Pattern;
 
 #[must_use]
 pub struct Builder {
     name: String,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
-    pattern: Option<Box<Pattern + Sync + Send>>,
 }
 
 impl Builder {
@@ -20,15 +18,8 @@ impl Builder {
         Builder {
             name: name,
             handler: Arc::new(Box::new(util::handle::bind::missing)),
-            pattern: None,
             dependencies: HashSet::new(),
         }
-    }
-
-    pub fn pattern<P>(mut self, pattern: P) -> Builder
-    where P: Pattern + Sync + Send + 'static {
-        self.pattern = Some(Box::new(pattern));
-        self
     }
 
     /// Associate a handler with this rule.
@@ -50,7 +41,6 @@ impl Builder {
             name: self.name,
             handler: self.handler,
             dependencies: self.dependencies,
-            pattern: self.pattern.map(|p| Arc::new(p)),
         }
     }
 }
@@ -63,7 +53,6 @@ pub struct Rule {
     name: String,
     handler: Arc<Box<Handle<Bind> + Sync + Send>>,
     dependencies: HashSet<String>,
-    pattern: Option<Arc<Box<Pattern + Sync + Send>>>,
 }
 
 impl Rule {
@@ -74,10 +63,6 @@ impl Rule {
 
     pub fn handler(&self) -> Arc<Box<Handle<Bind> + Sync + Send>> {
         self.handler.clone()
-    }
-
-    pub fn pattern(&self) -> Option<Arc<Box<Pattern + Sync + Send>>> {
-        self.pattern.clone()
     }
 
     pub fn name(&self) -> &str {
@@ -94,4 +79,3 @@ impl<'a> Into<String> for &'a Rule {
         self.name.clone()
     }
 }
-

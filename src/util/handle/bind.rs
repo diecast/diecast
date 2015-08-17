@@ -15,8 +15,15 @@ use eventual::{
 use item::Item;
 use bind::Bind;
 use handler::Handle;
+use pattern::Pattern;
 
 use super::Extender;
+
+pub struct InputPaths;
+
+impl typemap::Key for InputPaths {
+    type Value = Arc<Vec<PathBuf>>;
+}
 
 impl<T> Handle<Bind> for Extender<T>
 where T: typemap::Key, T::Value: Any + Sync + Send + Clone {
@@ -35,6 +42,45 @@ impl Handle<Bind> for Create {
         bind.attach(Item::writing(self.path.clone()));
 
         Ok(())
+    }
+}
+
+pub struct Select<P>
+where P: Pattern + Sync + Send + 'static {
+    pattern: P,
+}
+
+impl<P> Handle<Bind> for Select<P>
+where P: Pattern + Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
+        use support;
+
+        let paths = bind.extensions.read().unwrap().get::<InputPaths>().unwrap().clone();
+
+        for path in paths.iter() {
+            let relative =
+                support::path_relative_from(path, &bind.configuration.input).unwrap()
+                .to_path_buf();
+
+            // TODO
+            // decide how to handle pattern matching consistently
+            // for example, Configuration::ignore matches on the file_name,
+            // but this pattern seems to be matching on the whole pattern rooted
+            // at the input directory
+            if self.pattern.matches(&relative) {
+                bind.attach(Item::reading(relative));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[inline]
+pub fn select<P>(pattern: P) -> Select<P>
+where P: Pattern + Sync + Send + 'static {
+    Select {
+        pattern: pattern,
     }
 }
 

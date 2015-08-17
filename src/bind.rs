@@ -77,6 +77,10 @@ impl Bind {
         &self.items
     }
 
+    // TODO
+    // is this necessary?
+    // just have items/items_mut and re-use their iter/iter_mut?
+
     /// Iterate over the items in the bind.
     pub fn iter<'a>(&'a self) -> Iter<'a> {
         Iter {

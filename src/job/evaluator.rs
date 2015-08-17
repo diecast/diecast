@@ -1,4 +1,5 @@
 use super::Job;
+use bind::Bind;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::collections::VecDeque;
 
@@ -6,7 +7,7 @@ use threadpool::ThreadPool;
 
 pub trait Evaluator {
     fn enqueue(&mut self, job: Job);
-    fn dequeue(&mut self) -> Option<Job>;
+    fn dequeue(&mut self) -> Option<Bind>;
 }
 
 struct Canary<T>
@@ -38,20 +39,18 @@ where T: Send {
     }
 }
 
-pub struct Pool<T>
-where T: Send {
-    result_tx: Sender<Option<T>>,
-    result_rx: Receiver<Option<T>>,
+pub struct Pool {
+    result_tx: Sender<Option<Bind>>,
+    result_rx: Receiver<Option<Bind>>,
 
     pool: ThreadPool,
 }
 
-impl<T> Pool<T>
-where T: Send {
-    pub fn new(threads: usize) -> Pool<T> {
+impl Pool {
+    pub fn new(threads: usize) -> Pool {
         assert!(threads >= 1);
 
-        let (result_tx, result_rx) = channel::<Option<T>>();
+        let (result_tx, result_rx) = channel::<Option<Bind>>();
 
         let pool = ThreadPool::new(threads);
 
@@ -63,9 +62,10 @@ where T: Send {
         }
     }
 
+    // TODO
+    // Option<Bind> retval is a hack
     pub fn enqueue<F>(&self, work: F)
-    where T: 'static,
-          F: FnOnce() -> Option<T>, F: Send + 'static {
+    where F: FnOnce() -> Option<Bind>, F: Send + 'static {
         let tx = self.result_tx.clone();
 
         self.pool.execute(move || {
@@ -77,28 +77,26 @@ where T: Send {
         });
     }
 
-    pub fn dequeue(&self) -> Option<T> {
+    pub fn dequeue(&self) -> Option<Bind> {
         self.result_rx.recv().unwrap()
     }
 }
 
-impl Evaluator for Pool<Job> {
+impl Evaluator for Pool {
     fn enqueue(&mut self, job: Job) {
-        <Pool<Job>>::enqueue(self, move || {
-            let mut job = job;
-
+        Pool::enqueue(self, move || {
             match job.process() {
-                Ok(()) => Some(job),
+                Ok(bind) => Some(bind),
                 Err(e) => {
-                    println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", job, e);
+                    println!("{}", e);
                     None
                 },
             }
         });
     }
 
-    fn dequeue(&mut self) -> Option<Job> {
-        <Pool<Job>>::dequeue(self)
+    fn dequeue(&mut self) -> Option<Bind> {
+        Pool::dequeue(self)
     }
 }
 
@@ -106,16 +104,15 @@ impl Evaluator for VecDeque<Job> {
     fn enqueue(&mut self, job: Job) {
         self.push_back(job);
     }
-    fn dequeue(&mut self) -> Option<Job> {
-        self.pop_front().and_then(|mut job| {
+    fn dequeue(&mut self) -> Option<Bind> {
+        self.pop_front().and_then(|job| {
             match job.process() {
-                Ok(()) => Some(job),
+                Ok(bind) => Some(bind),
                 Err(e) => {
-                    println!("\nthe following job encountered an error:\n  {:?}\n\n{}\n", job, e);
+                    println!("{}", e);
                     None
                 },
             }
         })
     }
 }
-
