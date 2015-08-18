@@ -3,15 +3,22 @@ use std::path::{PathBuf, Path};
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
 
+use syncbox::{ThreadPool, TaskBox};
+use eventual::{
+    Stream,
+    Future,
+    Async,
+    defer,
+    sequence,
+};
+
 use configuration::Configuration;
 use dependency::Graph;
 use rule::Rule;
 use bind::{self, Bind};
-use super::evaluator::Evaluator;
 use super::Job;
 
-pub struct Manager<E>
-where E: Evaluator {
+pub struct Manager {
     configuration: Arc<Configuration>,
 
     rules: HashMap<String, Arc<Rule>>,
@@ -27,19 +34,17 @@ where E: Evaluator {
     /// Finished dependencies
     finished: BTreeMap<String, Arc<Bind>>,
 
-    /// Thread pool to process jobs
-    evaluator: E,
-
     // TODO
     // feels weird to have this here, but it's in-line with making
     // matching Patterns first-class
     /// Paths being considered
     paths: Arc<Vec<PathBuf>>,
+
+    jobs: VecDeque<Job>,
 }
 
-impl<E> Manager<E>
-where E: Evaluator {
-    pub fn new(evaluator: E, configuration: Arc<Configuration>) -> Manager<E> {
+impl Manager {
+    pub fn new(configuration: Arc<Configuration>) -> Manager {
         Manager {
             configuration: configuration,
             rules: HashMap::new(),
@@ -47,8 +52,8 @@ where E: Evaluator {
             dependencies: BTreeMap::new(),
             waiting: Vec::new(),
             finished: BTreeMap::new(),
-            evaluator: evaluator,
             paths: Arc::new(Vec::new()),
+            jobs: VecDeque::new(),
         }
     }
 
@@ -176,6 +181,17 @@ where E: Evaluator {
         assert!(job_map.is_empty(), "not all jobs were sorted!");
     }
 
+    fn sequence_jobs(&mut self, pool: ThreadPool<Box<TaskBox>>) -> (bool, Stream<Bind, ::Error>) {
+        let is_empty = self.jobs.is_empty();
+        let jobs = mem::replace(&mut self.jobs, VecDeque::new());
+
+        let seq = sequence(
+            jobs.into_iter().map(move |job|
+                defer(pool.clone(), Future::lazy(move || job.process()))));
+
+        (is_empty, seq)
+    }
+
     pub fn build(&mut self) -> ::Result<()> {
         use util::handle::bind::InputPaths;
 
@@ -188,24 +204,60 @@ where E: Evaluator {
             job.bind.extensions.write().unwrap().insert::<InputPaths>(self.paths.clone());
         }
 
-        let count = self.waiting.len();
-
         let order = try!(self.graph.resolve_all());
 
         self.sort_jobs(order);
 
         self.enqueue_ready();
 
-        // TODO: should have some sort of timeout here
-        for _ in (0 .. count) {
-            match self.evaluator.dequeue() {
-                Some(bind) => self.handle_done(bind),
-                None => {
-                    return Err(From::from("a job panicked. stopping everything"));
+        // TODO
+        // remember one key thing:
+        // the 'queue' can be empty temporarily when say the last
+        // job on the queue finishes, but then its completion
+        // will most likely place more jobs on the queue
+
+        // TODO
+        // perhaps instead of using a queue, this is where Streams
+        // would be appropriate?
+
+        let pool: ThreadPool<Box<TaskBox>> = ThreadPool::fixed_size(2);
+
+        // TODO
+        // try to get rid of the global dep count updating logic,
+        // try to process all binds sequentially yet parallel
+
+        let (mut is_empty, mut seq) = self.sequence_jobs(pool.clone());
+
+        // TODO
+        // it is highly preferable that jobs start running as soon as they are enqueued,
+        // instead of until the entire iteration is finished
+
+        while !is_empty {
+            match seq.await() {
+                Ok(Some((bind, rest))) => {
+                    self.handle_done(bind);
+
+                    seq = rest;
+                },
+                Ok(None) => {
+                    // sequence next set of jobs
+                    let (e, s) = self.sequence_jobs(pool.clone());
+
+                    is_empty = e;
+                    seq = s;
+
+                    if is_empty {
+                        break;
+                    }
+                },
+                Err(e) => {
+                    return Err(From::from(format!("a job panicked. stopping everything:\n{}", e)));
                 }
             }
         }
 
+        // TODO
+        // no longer necessary post-partial update purge?
         self.reset();
 
         Ok(())
@@ -244,7 +296,7 @@ where E: Evaluator {
                 }
             }
 
-            self.evaluator.enqueue(job);
+            self.jobs.push_back(job);
         }
     }
 }

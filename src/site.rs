@@ -15,15 +15,13 @@ use support;
 pub struct Site {
     configuration: Arc<Configuration>,
     rules: Vec<Arc<Rule>>,
-    manager: job::Manager<job::evaluator::Pool>,
+    manager: job::Manager,
 }
 
 impl Site {
     pub fn new(rules: Vec<Rule>, configuration: Configuration) -> Site {
-        let queue = job::evaluator::Pool::new(4);
-
         let configuration = Arc::new(configuration);
-        let manager = job::Manager::new(queue, configuration.clone());
+        let manager = job::Manager::new(configuration.clone());
 
         let mut site_rules = vec![];
 
