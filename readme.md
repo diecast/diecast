@@ -2,9 +2,15 @@ Work in Progress
 
 Diecast is a parallel, modular, and middleware-oriented static site generator infrastructure for Rust which enables the creation of custom static site generators.
 
-Markdown processing is enabled through the use of [idiomatic Hoedown bindings](https://github.com/blaenk/hoedown) that I wrote.
-
 Documentation and examples are forthcoming, but here's a taste of what it's like. For a full working example see [my setup](https://github.com/blaenk/site).
+
+## Primitives
+
+The core Diecast primitives consist of `Rule`s to associate rules with behavior that should apply to all relevant files. `Rule`s get _bound_ to a set of matching files. This set is represented using the `Bind` type, which consists of one `Item` for every file in the input directory that matched the `Rule`'s patterns and rules. `Item`s are representations of the input files and their artifacts.
+
+`Rule`s also define how `Binds` should be processed by associating them with handlers, which are types that implement the `Handle` trait. There can be `Bind`-level and `Item`-level handlers, corresponding to traits `Handle<Bind>` and `Handle<Item>` respectively, meaning that they operate either on an entire `Bind` at a time or a single `Item` at a time.
+
+## Example
 
 Here's a rule that matches static assets and simply copies them to the output directory:
 
@@ -20,12 +26,30 @@ let statics =
             "favicon.png",
             "CNAME"
         )),
-        bind::each(chain![route::identity, item::copy]),
+        bind::each(chain![
+            route::identity,
+            item::copy]),
     ])
     .build();
 ```
 
-Here's a rule called `"posts"` which will match any file in the input directory that matches the glob pattern `posts/*.md`. The rule then does the following:
+The example above defines a rule called `"statics"` and associates with a `Bind`-level handler. This handler is called `Chain` and it's simply a handler that chains together multiple handlers into one. Note that `chain!` is simply a helper macro for defining handlers of type `Chain`. In this case, it chains together the `bind::select` and `bind::each` handlers, both of which are `Bind`-level handlers.
+
+`bind::select` is a handler that takes a path pattern and creates an `Item` in the `Bind` for each matching file in the input directory. This handler is useful because it helps to populate a `Bind` with `Item`s.
+
+`bind::each` is a handler that takes an `Item`-level handler and applies it to each `Item` in the `Bind`. In this case, the handler being applied to each `Item` is itself a chain of `Item`-level handlers: `route::identity` and `item::copy`. The first simply routes the input path to an output path, while the second performs a file-system copy of the file.
+
+In plain English, the above rule essentially means:
+
+1. define a rule named "statics"
+2. find all files in the input directory matching the specified pattern and add a corresponding `Item` for each one into this rule's `Bind`
+3. for each `Item` in the `Bind`:
+   1. route the file from the input directory directly to the output directory. e.g `input/a/b/c.txt` would route to `output/a/b/c.txt`
+   2. copy the file represented by the `Item` from the input directory to the output directory
+
+### In Depth
+
+The example below defines a rule called `"posts"` which will match any file in the input directory that matches the glob pattern `posts/*.md`. The rule then does the following:
 
 1. reads each match
 2. parses its metadata
@@ -39,8 +63,6 @@ Here's a rule called `"posts"` which will match any file in the input directory 
 10. writes the result to the target file
 11. sorts each post by date (useful for things like the post index that follows)
 
-Each of the above are just types that implement the `Handle` trait. `chain!` is a helper macro for the `Chain` handler that simply chains multiple handlers together in a sequence. Common combinations of handlers could be condensed into a single handler for ease of use.
-
 Notice that it depends on the templates rule, which guarantees that it will be processed only after the templates have been processed.
 
 ``` rust
@@ -53,7 +75,7 @@ let posts =
         bind::retain(helpers::publishable),
         bind::each(chain![
             helpers::set_date,
-            markdown::markdown(),
+            markdown::markdown,
             versions::save("rendered"),
             route::pretty,
             handlebars::render(&templates, "post", view::post_template),
@@ -68,7 +90,7 @@ let posts =
     .build();
 ```
 
-Here's a `"post index"` rule which will create an index of the posts:
+Here's a `"post index"` rule which will create an index of the posts. Note that we're no longer using `bind::select`. Here we're using `bind::create` instead, which creates an `Item` in the bind that represents the creation of a file without reading from one first.
 
 ``` rust
 let posts_index =
@@ -78,18 +100,18 @@ let posts_index =
     .handler(chain![
         bind::create("index.html"),
         bind::each(chain![
-            handlebars::render(&templates, "index", view::posts_index_template),
+            handlebars::render(&templates, "index", render_index),
             handlebars::render(&templates, "layout", view::layout_template),
             item::write])])
     .build();
 ```
 
-A custom handler which would render the post index:
+The `render_index` function above could look something like this:
 
 ``` rust
 fn render_index(item: &mut Item) -> diecast::Result<()> {
   // notice "post index" depends on "posts",
-  // so it has access to the "posts" dependency within its handlers
+  // so it has access to the "posts" dependency within its handlers.
   // useful for enumerating the posts in the index we're creating
 
   for post in item.bind().dependencies["posts"].iter() {
@@ -100,7 +122,7 @@ fn render_index(item: &mut Item) -> diecast::Result<()> {
 }
 ```
 
-Define a base configuration, register the rules, and run the user-provided command:
+This can then be wired up to the Diecast command-line interface:
 
 ``` rust
 let command =
