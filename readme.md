@@ -129,13 +129,13 @@ Thanks to its extensible middleware nature, there are already a couple of packag
 
 * [hoedown](https://github.com/diecast/hoedown): markdown processing via the [hoedown](https://github.com/hoedown/hoedown) C library
 * [commonmark](https://github.com/diecast/commonmark): markdown processing via the [pulldown-cmark](https://github.com/google/pulldown-cmark) Rust library
-* [metadata](https://github.com/diecast/metadata): document frontmatter/metadata parsing, including TOML and JSON (YAML forthcoming)
+* [metadata](https://github.com/diecast/metadata): document frontmatter/metadata parsing (TOML, JSON, YAML)
 * [tags](https://github.com/diecast/tags): tag collections
 * [scss](https://github.com/diecast/scss): scss compilation
 * [feed](https://feedhub.com/diecast/feed): feed generation (RSS and Atom)
 
 ### Miscellaneous
 
-* [adjacent](https://github.com/diecast/adjacent): next/previous article references
-* [versions](https://github.com/diecast/versions): saving and loading different versions of items. e.g. a feed-friendly version, before other processors are applied
 * [git](https://github.com/diecast/git): git information for items, e.g. last commit SHA and message that affected the given item
+* [versions](https://github.com/diecast/versions): saving and loading different versions of items. e.g. a feed-friendly version, before other processors are applied
+* [adjacent](https://github.com/diecast/adjacent): next/previous article references
