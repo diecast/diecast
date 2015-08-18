@@ -52,7 +52,7 @@ impl Site {
     }
 
     fn prepare(&mut self) {
-        println!("building from {:?}", self.configuration.output);
+        println!("building from {:?}", self.configuration.input);
 
         if !support::file_exists(&self.configuration.input) {
             println!("the input directory `{:?}` does not exist!", self.configuration.input);
