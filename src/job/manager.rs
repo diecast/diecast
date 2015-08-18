@@ -5,12 +5,11 @@ use std::mem;
 
 use syncbox::{ThreadPool, TaskBox};
 use eventual::{
+    Stream,
     Future,
     Async,
-    AsyncError,
-    join,
-    background,
-    defer
+    defer,
+    sequence,
 };
 
 use configuration::Configuration;
@@ -41,7 +40,7 @@ pub struct Manager {
     /// Paths being considered
     paths: Arc<Vec<PathBuf>>,
 
-    futures: VecDeque<Future<Bind, ::Error>>,
+    jobs: VecDeque<Job>,
 }
 
 impl Manager {
@@ -54,7 +53,7 @@ impl Manager {
             waiting: Vec::new(),
             finished: BTreeMap::new(),
             paths: Arc::new(Vec::new()),
-            futures: VecDeque::new(),
+            jobs: VecDeque::new(),
         }
     }
 
@@ -182,6 +181,17 @@ impl Manager {
         assert!(job_map.is_empty(), "not all jobs were sorted!");
     }
 
+    fn sequence_jobs(&mut self, pool: ThreadPool<Box<TaskBox>>) -> (bool, Stream<Bind, ::Error>) {
+        let is_empty = self.jobs.is_empty();
+        let jobs = mem::replace(&mut self.jobs, VecDeque::new());
+
+        let seq = sequence(
+            jobs.into_iter().map(move |job|
+                defer(pool.clone(), Future::lazy(move || job.process()))));
+
+        (is_empty, seq)
+    }
+
     pub fn build(&mut self) -> ::Result<()> {
         use util::handle::bind::InputPaths;
 
@@ -216,15 +226,33 @@ impl Manager {
         // try to get rid of the global dep count updating logic,
         // try to process all binds sequentially yet parallel
 
-        // TODO
-        // it seems pretty stupid to wait on a single defer at a time
-        // preferably they'll all be being processed and we'd respond
-        // as soon as they're finished, hopefully stream faciliates this
+        let (mut is_empty, mut seq) = self.sequence_jobs(pool.clone());
 
-        while let Some(future) = self.futures.pop_front() {
-            match defer(pool.clone(), future).await() {
-                Ok(bind) => self.handle_done(bind),
-                Err(e) => return Err(From::from(format!("a job panicked. stopping everything:\n{}", e))),
+        // TODO
+        // it is highly preferable that jobs start running as soon as they are enqueued,
+        // instead of until the entire iteration is finished
+
+        while !is_empty {
+            match seq.await() {
+                Ok(Some((bind, rest))) => {
+                    self.handle_done(bind);
+
+                    seq = rest;
+                },
+                Ok(None) => {
+                    // sequence next set of jobs
+                    let (e, s) = self.sequence_jobs(pool.clone());
+
+                    is_empty = e;
+                    seq = s;
+
+                    if is_empty {
+                        break;
+                    }
+                },
+                Err(e) => {
+                    return Err(From::from(format!("a job panicked. stopping everything:\n{}", e)));
+                }
             }
         }
 
@@ -268,19 +296,7 @@ impl Manager {
                 }
             }
 
-            // TODO
-            // this should push onto a queue of futures?
-            self.futures.push_back(Future::<Bind, ::Error>::lazy(move || {
-                // TODO
-                // just use map_err
-                match job.process() {
-                    Ok(bind) => Ok(bind),
-                    Err(e) => {
-                        println!("{}", e);
-                        Err(e)
-                    }
-                }
-            }));
+            self.jobs.push_back(job);
         }
     }
 }
