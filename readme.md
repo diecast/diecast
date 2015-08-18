@@ -6,9 +6,9 @@ Documentation and examples are forthcoming, but here's a taste of what it's like
 
 ## Primitives
 
-The core Diecast primitives consist of `Rule`s to associate rules with behavior that should apply to all relevant files. `Rule`s get _bound_ to a set of matching files. This set is represented using the `Bind` type, which consists of one `Item` for every file in the input directory that matched the `Rule`'s patterns and rules. `Item`s are representations of the input files and their artifacts.
+The set of core Diecast primitives starts with `Rule`, which is used to associated behavior with particular input files. Each `Rule` is essentially _bound_ to a set of matching files. This set is represented using the `Bind` type, which consists of one `Item` for every file in the input directory that is matched by the `Rule` in some way, e.g. a glob pattern. An `Item` is a representation of an input file and/or its artifacts.
 
-`Rule`s also define how `Binds` should be processed by associating them with handlers, which are types that implement the `Handle` trait. There can be `Bind`-level and `Item`-level handlers, corresponding to traits `Handle<Bind>` and `Handle<Item>` respectively, meaning that they operate either on an entire `Bind` at a time or a single `Item` at a time.
+A `Rule` defines how its corresponding `Bind` should be processed by associating it with a handler, which is any type that implements the `Handle` trait. There can be `Bind`-level and `Item`-level handlers, corresponding to traits `Handle<Bind>` and `Handle<Item>` respectively, meaning that they operate either on an entire `Bind` at a time or a single `Item` at a time.
 
 ## Example
 
