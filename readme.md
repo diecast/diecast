@@ -24,12 +24,10 @@ let statics =
             glob!("static/**/*"),
             glob!("js/**/*"),
             "favicon.png",
-            "CNAME"
-        )),
+            "CNAME")),
         bind::each(chain![
             route::identity,
-            item::copy]),
-    ])
+            item::copy])])
     .build();
 ```
 
