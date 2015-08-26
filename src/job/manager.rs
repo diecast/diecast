@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::sync::mpsc::{self, channel};
+use std::thread;
 use std::path::{PathBuf, Path};
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
@@ -6,10 +8,10 @@ use std::mem;
 use syncbox::{ThreadPool, TaskBox};
 use eventual::{
     Stream,
+    Sender,
     Future,
     Async,
     defer,
-    sequence,
 };
 
 use configuration::Configuration;
@@ -148,7 +150,8 @@ impl Manager {
     }
 
     pub fn sort_jobs(&mut self, order: VecDeque<String>) {
-        assert!(self.waiting.len() == order.len(), "`waiting` and `order` are not the same length");
+        assert!(self.waiting.len() == order.len(),
+                "`waiting` and `order` are not the same length");
 
         let mut job_map =
             mem::replace(&mut self.waiting, Vec::new())
@@ -181,17 +184,6 @@ impl Manager {
         assert!(job_map.is_empty(), "not all jobs were sorted!");
     }
 
-    fn sequence_jobs(&mut self, pool: ThreadPool<Box<TaskBox>>) -> (bool, Stream<Bind, ::Error>) {
-        let is_empty = self.jobs.is_empty();
-        let jobs = mem::replace(&mut self.jobs, VecDeque::new());
-
-        let seq = sequence(
-            jobs.into_iter().map(move |job|
-                defer(pool.clone(), Future::lazy(move || job.process()))));
-
-        (is_empty, seq)
-    }
-
     pub fn build(&mut self) -> ::Result<()> {
         use util::handle::bind::InputPaths;
 
@@ -204,54 +196,36 @@ impl Manager {
             job.bind.extensions.write().unwrap().insert::<InputPaths>(self.paths.clone());
         }
 
-        let order = try!(self.graph.resolve_all());
-
-        self.sort_jobs(order);
-
-        self.enqueue_ready();
-
-        // TODO
-        // remember one key thing:
-        // the 'queue' can be empty temporarily when say the last
-        // job on the queue finishes, but then its completion
-        // will most likely place more jobs on the queue
-
-        // TODO
-        // perhaps instead of using a queue, this is where Streams
-        // would be appropriate?
-
         let pool: ThreadPool<Box<TaskBox>> = ThreadPool::fixed_size(2);
 
-        // TODO
-        // try to get rid of the global dep count updating logic,
-        // try to process all binds sequentially yet parallel
+        let (job_tx, job_rx) = mpsc::channel::<Job>();
+        let (mut tx, rx) = Stream::pair();
 
-        let (mut is_empty, mut seq) = self.sequence_jobs(pool.clone());
+        thread::spawn(move || {
+            for job in job_rx.iter() {
+                tx = tx.send(job).await().unwrap();
+            }
+        });
 
-        // TODO
-        // it is highly preferable that jobs start running as soon as they are enqueued,
-        // instead of until the entire iteration is finished
+        let order = try!(self.graph.resolve_all());
+        self.sort_jobs(order);
+        self.enqueue_ready(job_tx.clone());
 
-        while !is_empty {
-            match seq.await() {
+        let mut stream = rx.process(4,
+          move |job: Job| defer(pool.clone(), Future::lazy(move || job.process())));
+
+        for _ in 0 .. self.rules.len() {
+            match stream.await() {
                 Ok(Some((bind, rest))) => {
-                    self.handle_done(bind);
+                    self.handle_done(bind, job_tx.clone());
 
-                    seq = rest;
+                    stream = rest;
                 },
-                Ok(None) => {
-                    // sequence next set of jobs
-                    let (e, s) = self.sequence_jobs(pool.clone());
-
-                    is_empty = e;
-                    seq = s;
-
-                    if is_empty {
-                        break;
-                    }
-                },
+                Ok(None) => break,
                 Err(e) => {
-                    return Err(From::from(format!("a job panicked. stopping everything:\n{}", e)));
+                    return Err(
+                        From::from(
+                            format!("a job panicked. stopping everything:\n{}", e)));
                 }
             }
         }
@@ -269,7 +243,11 @@ impl Manager {
         self.waiting.clear();
     }
 
-    fn handle_done(&mut self, current: Bind) {
+    // TODO
+    // should send the finished bind to a result channel
+    // this will enable decoupling of cli status messages
+    // from the core library
+    fn handle_done(&mut self, current: Bind, tx: mpsc::Sender<Job>) {
         let bind_name = current.name.clone();
 
         // if they're done, move from staging to finished
@@ -278,10 +256,10 @@ impl Manager {
         }));
 
         self.satisfy(&bind_name);
-        self.enqueue_ready();
+        self.enqueue_ready(tx);
     }
 
-    fn enqueue_ready(&mut self) {
+    fn enqueue_ready(&mut self, tx: mpsc::Sender<Job>) {
         for mut job in self.ready() {
             let name = job.bind.name.clone();
 
@@ -296,7 +274,7 @@ impl Manager {
                 }
             }
 
-            self.jobs.push_back(job);
+            tx.send(job).unwrap();
         }
     }
 }
