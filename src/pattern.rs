@@ -132,11 +132,7 @@ impl Pattern for Regex {
     }
 }
 
-/// Treat string slices as globs.
-///
-/// This simply converts the string to glob::Pattern.
-/// It's much more efficient to just use the glob::Pattern
-/// to begin with.
+/// Treat string slices as literal patterns.
 impl Pattern for str {
     fn matches(&self, p: &Path) -> bool {
         p.to_str().map_or(false, |s| self == s)
