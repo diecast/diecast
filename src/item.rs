@@ -5,7 +5,7 @@ use std::fmt::{self, Debug};
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
 
-use typemap::TypeMap;
+use typemap::{CloneAny, TypeMap};
 
 use bind;
 
@@ -116,7 +116,7 @@ pub struct Item {
     pub body: String,
 
     /// Arbitrary additional data
-    pub extensions: TypeMap<::typemap::CloneAny + Sync + Send>,
+    pub extensions: TypeMap<CloneAny + Sync + Send>,
 
     bind: Option<Arc<bind::Data>>,
 
