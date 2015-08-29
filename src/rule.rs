@@ -9,7 +9,7 @@ use handler::Handle;
 #[must_use]
 pub struct Builder {
     name: String,
-    handler: Arc<Box<Handle<Bind> + Sync + Send>>,
+    handler: Arc<Handle<Bind> + Sync + Send>,
     dependencies: HashSet<String>,
 }
 
@@ -17,7 +17,7 @@ impl Builder {
     fn new(name: String) -> Builder {
         Builder {
             name: name,
-            handler: Arc::new(Box::new(util::handle::bind::missing)),
+            handler: Arc::new(util::handle::bind::missing),
             dependencies: HashSet::new(),
         }
     }
@@ -25,7 +25,7 @@ impl Builder {
     /// Associate a handler with this rule.
     pub fn handler<H>(mut self, handler: H) -> Builder
     where H: Handle<Bind> + Sync + Send + 'static {
-        self.handler = Arc::new(Box::new(handler));
+        self.handler = Arc::new(handler);
         self
     }
 
@@ -51,7 +51,7 @@ impl Builder {
 /// it may have.
 pub struct Rule {
     name: String,
-    handler: Arc<Box<Handle<Bind> + Sync + Send>>,
+    handler: Arc<Handle<Bind> + Sync + Send>,
     dependencies: HashSet<String>,
 }
 
@@ -61,7 +61,7 @@ impl Rule {
         Builder::new(name.into())
     }
 
-    pub fn handler(&self) -> Arc<Box<Handle<Bind> + Sync + Send>> {
+    pub fn handler(&self) -> Arc<Handle<Bind> + Sync + Send> {
         self.handler.clone()
     }
 

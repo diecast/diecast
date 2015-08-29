@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
+use std::sync::Arc;
 
 use num_cpus;
 use toml;
@@ -13,6 +14,7 @@ use pattern::Pattern;
 
 /// The configuration of the build
 /// an Arc of this is given to each Item
+#[derive(Clone)]
 pub struct Configuration {
     toml: toml::Value,
 
@@ -40,7 +42,7 @@ pub struct Configuration {
     /// the following are from hakyll
     /// e.g.
     /// config.ignore = regex!("^\.|^#|~$|\.swp$")
-    pub ignore: Option<Box<Pattern + Sync + Send>>,
+    pub ignore: Option<Arc<Pattern + Sync + Send>>,
 
     /// Whether we're in preview mode
     pub is_preview: bool,
@@ -78,7 +80,7 @@ impl Configuration {
             .and_then(toml::Value::as_str)
             .and_then(|s| {
                 match Regex::new(s) {
-                    Ok(r) => Some(Box::new(r) as Box<Pattern + Send + Sync>),
+                    Ok(r) => Some(Arc::new(r) as Arc<Pattern + Send + Sync>),
                     Err(e) => {
                         panic!("could not parse regex: {}", e);
                     },
@@ -140,7 +142,7 @@ impl Configuration {
 
     pub fn ignore<P>(mut self, pattern: P) -> Configuration
     where P: Pattern + Sync + Send + 'static {
-        self.ignore = Some(Box::new(pattern));
+        self.ignore = Some(Arc::new(pattern));
         self
     }
 

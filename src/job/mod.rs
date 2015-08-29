@@ -14,7 +14,7 @@ pub static STARTING: &'static str = "  Starting";
 pub static FINISHED: &'static str = "  Finished";
 
 pub struct Job {
-    pub handler: Arc<Box<Handle<Bind> + Sync + Send>>,
+    pub handler: Arc<Handle<Bind> + Sync + Send>,
     pub bind: bind::Data,
 }
 
@@ -27,7 +27,7 @@ impl fmt::Debug for Job {
 impl Job {
     pub fn new(
         bind: bind::Data,
-        handler: Arc<Box<Handle<Bind> + Sync + Send>>)
+        handler: Arc<Handle<Bind> + Sync + Send>)
     -> Job {
         Job {
             handler: handler,
