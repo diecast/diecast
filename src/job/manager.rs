@@ -103,10 +103,7 @@ impl Manager {
 
         // construct job from bind-data, rule kind, rule handler, and paths
         // push it to waiting queue
-        self.waiting.push(
-            Job::new(
-                data,
-                rule.handler()));
+        self.waiting.push(Job::new(data, rule.handler()));
 
         self.graph.add_node(name.clone());
 

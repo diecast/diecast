@@ -5,6 +5,7 @@ use docopt::{self, Docopt};
 use configuration::Configuration;
 use rustc_serialize::{Decodable, Decoder};
 
+use site::Site;
 use rule::Rule;
 
 pub mod build;
@@ -13,14 +14,14 @@ pub mod clean;
 pub struct Plugin {
     name: String,
     description: String,
-    constructor: fn(Vec<Rule>, Configuration) -> Box<Command>,
+    constructor: fn(Site) -> Box<Command>,
 }
 
 impl Plugin {
     pub fn new<N, D>(
         name: N,
         description: D,
-        constructor: fn(Vec<Rule>, Configuration) -> Box<Command>
+        constructor: fn(Site) -> Box<Command>
     ) -> Plugin
     where N: Into<String>, D: Into<String> {
         Plugin {
@@ -72,13 +73,12 @@ pub fn version() -> String {
 }
 
 pub struct Builder {
-    rules: Vec<Rule>,
-    configuration: Configuration,
+    site: Site,
     plugins: HashMap<String, Plugin>,
 }
 
 impl Builder {
-    pub fn new() -> Builder {
+    pub fn new(site: Site) -> Builder {
         let mut plugins = HashMap::new();
 
         let build = build::plugin();
@@ -88,24 +88,13 @@ impl Builder {
         plugins.insert(clean.name.clone(), clean);
 
         Builder {
-            rules: vec![],
+            site: site,
             plugins: plugins,
-            configuration: Configuration::new(),
         }
     }
 
     pub fn plugin(mut self, plugin: Plugin) -> Builder {
         self.plugins.insert(plugin.name.clone(), plugin);
-        self
-    }
-
-    pub fn configure(mut self, configuration: Configuration) -> Builder {
-        self.configuration = configuration;
-        self
-    }
-
-    pub fn rules(mut self, rules: Vec<Rule>) -> Builder {
-        self.rules = rules;
         self
     }
 
@@ -145,7 +134,7 @@ impl Builder {
             };
 
         let cmd = options.arg_command.unwrap();
-        self.configuration.command = cmd.clone();
+        self.site.configuration_mut().command = cmd.clone();
 
         let err =
             Err(From::from(docopt::Error::WithProgramUsage(
@@ -156,7 +145,7 @@ impl Builder {
             "" | "help" => return err,
             cmd => {
                 if let Some(plugin) = self.plugins.get(cmd) {
-                    (plugin.constructor)(self.rules, self.configuration)
+                    (plugin.constructor)(self.site)
                 } else {
                     // here look in PATH to find program named diecast-$cmd
                     // if not found, then output this message:
@@ -169,4 +158,3 @@ impl Builder {
         Ok(command)
     }
 }
-

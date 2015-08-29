@@ -35,7 +35,7 @@ pub struct Clean {
 }
 
 impl Clean {
-    pub fn new(rules: Vec<Rule>, mut configuration: Configuration) -> Clean {
+    pub fn new(mut site: Site) -> Clean {
         let docopt =
             Docopt::new(USAGE)
                 .unwrap_or_else(|e| e.exit())
@@ -45,15 +45,15 @@ impl Clean {
             e.exit();
         });
 
-        configuration.ignore_hidden = options.flag_ignore_hidden;
+        site.configuration_mut().ignore_hidden = options.flag_ignore_hidden;
 
         Clean {
-            site: Site::new(rules, configuration),
+            site: site,
         }
     }
 
-    pub fn plugin(rules: Vec<Rule>, configuration: Configuration) -> Box<Command> {
-        Box::new(Clean::new(rules, configuration))
+    pub fn plugin(site: Site) -> Box<Command> {
+        Box::new(Clean::new(site))
     }
 }
 

@@ -13,16 +13,12 @@ use support;
 /// takes each of those files and passes it through
 /// the compiler chain.
 pub struct Site {
-    configuration: Arc<Configuration>,
+    configuration: Configuration,
     rules: Vec<Arc<Rule>>,
-    manager: job::Manager,
 }
 
 impl Site {
-    pub fn new(rules: Vec<Rule>, configuration: Configuration) -> Site {
-        let configuration = Arc::new(configuration);
-        let manager = job::Manager::new(configuration.clone());
-
+    pub fn new(rules: Vec<Rule>) -> Site {
         let mut site_rules = vec![];
 
         let names =
@@ -45,13 +41,16 @@ impl Site {
         }
 
         Site {
-            configuration: configuration,
+            configuration: Configuration::new(),
             rules: site_rules,
-            manager: manager,
         }
     }
 
-    fn prepare(&mut self) {
+    pub fn build(&mut self) -> ::Result<()> {
+        try!(self.clean());
+
+        let mut manager = job::Manager::new(Arc::new(self.configuration.clone()));
+
         println!("building from {:?}", self.configuration.input);
 
         if !support::file_exists(&self.configuration.input) {
@@ -59,26 +58,25 @@ impl Site {
             ::std::process::exit(1);
         }
 
-        self.manager.update_paths();
+        manager.update_paths();
 
         for rule in &self.rules {
            // FIXME: this just seems weird re: strings
-           self.manager.add(rule.clone());
+           manager.add(rule.clone());
         }
 
         // create the output directory
         support::mkdir_p(&self.configuration.output).unwrap();
+
+        manager.build()
     }
 
-    pub fn build(&mut self) -> ::Result<()> {
-        try!(self.clean());
-
-        self.prepare();
-        self.manager.build()
+    pub fn configuration(&self) -> &Configuration {
+        &self.configuration
     }
 
-    pub fn configuration(&self) -> Arc<Configuration> {
-        self.configuration.clone()
+    pub fn configuration_mut(&mut self) -> &mut Configuration {
+        &mut self.configuration
     }
 
     pub fn clean(&self) -> ::Result<()> {
@@ -119,4 +117,3 @@ impl Site {
         Ok(())
     }
 }
-

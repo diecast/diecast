@@ -32,7 +32,7 @@ pub struct Build {
 }
 
 impl Build {
-    pub fn new(rules: Vec<Rule>, mut configuration: Configuration) -> Build {
+    pub fn new(mut site: Site) -> Build {
         // 1. merge options into configuration; options overrides config
         // 2. construct site from configuration
         // 3. build site
@@ -47,18 +47,18 @@ impl Build {
         });
 
         if let Some(jobs) = options.flag_jobs {
-            configuration.threads = jobs;
+            site.configuration_mut().threads = jobs;
         }
 
-        configuration.is_verbose = options.flag_verbose;
+        site.configuration_mut().is_verbose = options.flag_verbose;
 
         Build {
-            site: Site::new(rules, configuration),
+            site: site,
         }
     }
 
-    pub fn plugin(rules: Vec<Rule>, configuration: Configuration) -> Box<Command> {
-        Box::new(Build::new(rules, configuration))
+    pub fn plugin(site: Site) -> Box<Command> {
+        Box::new(Build::new(site))
     }
 }
 
