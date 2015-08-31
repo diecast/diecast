@@ -4,15 +4,12 @@
 // https://github.com/rust-lang/rust/issues/22655
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-
 use std::collections::btree_map::Keys;
 use std::collections::btree_map::Entry::Vacant;
-
-use std::hash::Hash;
-
-use std::fmt;
-
 use std::borrow::Borrow;
+use std::hash::Hash;
+use std::any::Any;
+use std::fmt;
 
 // TODO: just make Graph use usize? or String?
 
@@ -94,14 +91,16 @@ where T: Ord + Clone + Hash {
         self.reverse.get(node).map_or(0usize, |s| s.len())
     }
 
+    /// Topological ordering from a specific set of source nodes.
+    #[allow(dead_code)]
     pub fn resolve(&self, nodes: Vec<T>) -> Result<Order<T>, CycleError<T>>
-    where T: fmt::Debug + fmt::Display + ::std::any::Any {
+    where T: fmt::Debug + fmt::Display + Any {
         Topological::new(self).from(nodes)
     }
 
     /// Topological ordering of the entire graph.
     pub fn resolve_all(&self) -> Result<Order<T>, CycleError<T>>
-    where T: fmt::Debug + fmt::Display + ::std::any::Any {
+    where T: fmt::Debug + fmt::Display + Any {
         Topological::new(self).all()
     }
 }
@@ -118,12 +117,12 @@ pub type Order<T> = VecDeque<T>;
 
 #[derive(Debug)]
 pub struct CycleError<T>
-where T: fmt::Debug + fmt::Display + ::std::any::Any {
+where T: fmt::Debug + fmt::Display + Any {
     cycle: VecDeque<T>,
 }
 
 impl<T> fmt::Display for CycleError<T>
-where T: fmt::Debug + fmt::Display + ::std::any::Any {
+where T: fmt::Debug + fmt::Display + Any {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(writeln!(f, "dependency cycle detected:"));
 
@@ -136,7 +135,7 @@ where T: fmt::Debug + fmt::Display + ::std::any::Any {
 }
 
 impl<T> ::std::error::Error for CycleError<T>
-where T: fmt::Debug + fmt::Display + ::std::any::Any {
+where T: fmt::Debug + fmt::Display + Any {
     fn description(&self) -> &str {
         "dependency cycle detected"
     }
@@ -179,7 +178,7 @@ where T: Ord + Clone + Hash {
     /// This uses a recursive depth-first search, as it facilitates
     /// keeping track of a cycle, if any is present.
     fn dfs(&mut self, node: T, out: &mut VecDeque<T>) -> Result<(), CycleError<T>>
-    where T: fmt::Debug + fmt::Display + ::std::any::Any {
+    where T: fmt::Debug + fmt::Display + Any {
         self.on_stack.insert(node.clone());
         self.visited.insert(node.clone());
 
@@ -217,8 +216,10 @@ where T: Ord + Clone + Hash {
         Ok(())
     }
 
+    /// ordering from select nodes
+    #[allow(dead_code)]
     pub fn from(mut self, nodes: Vec<T>) -> Result<Order<T>, CycleError<T>>
-    where T: fmt::Display + fmt::Debug + ::std::any::Any {
+    where T: fmt::Display + fmt::Debug + Any {
         let mut order = VecDeque::new();
 
         for node in nodes {
@@ -233,7 +234,7 @@ where T: Ord + Clone + Hash {
     /// the typical resolution algorithm, returns a topological ordering
     /// of the nodes which honors the dependencies
     pub fn all(mut self) -> Result<Order<T>, CycleError<T>>
-    where T: fmt::Display + fmt::Debug + ::std::any::Any {
+    where T: fmt::Display + fmt::Debug + Any {
         let mut order = VecDeque::new();
 
         for node in self.graph.nodes() {
