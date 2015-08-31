@@ -3,9 +3,7 @@ use std::error::Error;
 use docopt::Docopt;
 
 use site::Site;
-use configuration::Configuration;
 use command::{Command, Plugin};
-use rule::Rule;
 
 #[derive(RustcDecodable, Debug)]
 struct Options {

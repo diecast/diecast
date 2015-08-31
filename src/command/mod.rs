@@ -2,11 +2,9 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use docopt::{self, Docopt};
-use configuration::Configuration;
 use rustc_serialize::{Decodable, Decoder};
 
 use site::Site;
-use rule::Rule;
 
 pub mod build;
 pub mod clean;

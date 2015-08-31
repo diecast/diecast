@@ -1,11 +1,9 @@
 use std::error::Error;
 
 use docopt::Docopt;
-use configuration::Configuration;
 
 use command::{Command, Plugin};
 use site::Site;
-use rule::Rule;
 use support;
 
 #[derive(RustcDecodable, Debug)]
