@@ -31,8 +31,7 @@ pub use item::Item;
 pub use bind::Bind;
 pub use handler::Handle;
 // TODO command hooks
-pub use command::{Command, Plugin};
-pub use deploy::Deploy;
+pub use command::Command;
 
 mod handler;
 mod job;
@@ -48,7 +47,6 @@ pub mod site;
 pub mod command;
 pub mod configuration;
 pub mod util;
-pub mod deploy;
 pub mod support;
 
 pub type Error = Box<::std::error::Error + Sync + Send>;

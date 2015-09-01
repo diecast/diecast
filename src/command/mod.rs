@@ -8,36 +8,24 @@ use site::Site;
 
 pub mod build;
 pub mod clean;
-
-pub struct Plugin {
-    name: String,
-    description: String,
-    constructor: fn(Site) -> Box<Command>,
-}
-
-impl Plugin {
-    pub fn new<N, D>(
-        name: N,
-        description: D,
-        constructor: fn(Site) -> Box<Command>
-    ) -> Plugin
-    where N: Into<String>, D: Into<String> {
-        Plugin {
-            name: name.into(),
-            description: description.into(),
-            constructor: constructor,
-        }
-    }
-}
+pub mod deploy;
 
 pub trait Command {
-    fn run(&mut self) -> ::Result<()>;
+    // TODO
+    // not sure that it should have a description method
+    // this should probably be provided separately?
+    fn description(&self) -> &'static str;
+    fn run(&mut self, site: &mut Site) -> ::Result<()>;
 }
 
 impl<C> Command for Box<C>
 where C: Command {
-    fn run(&mut self) -> ::Result<()> {
-        (**self).run()
+    fn description(&self) -> &'static str {
+        (**self).description()
+    }
+
+    fn run(&mut self, site: &mut Site) -> ::Result<()> {
+        (**self).run(site)
     }
 }
 
@@ -63,61 +51,58 @@ pub fn version() -> String {
     format!("diecast {}", match option_env!("CFG_VERSION") {
         Some(s) => String::from(s),
         Option::None => format!("{}.{}.{}{}",
-                        env!("CARGO_PKG_VERSION_MAJOR"),
-                        env!("CARGO_PKG_VERSION_MINOR"),
-                        env!("CARGO_PKG_VERSION_PATCH"),
-                        option_env!("CARGO_PKG_VERSION_PRE").unwrap_or(""))
+                                env!("CARGO_PKG_VERSION_MAJOR"),
+                                env!("CARGO_PKG_VERSION_MINOR"),
+                                env!("CARGO_PKG_VERSION_PATCH"),
+                                option_env!("CARGO_PKG_VERSION_PRE").unwrap_or(""))
     })
 }
 
 pub struct Builder {
-    site: Site,
-    plugins: HashMap<String, Plugin>,
+    commands: HashMap<String, Box<Command>>,
 }
 
 impl Builder {
-    pub fn new(site: Site) -> Builder {
-        let mut plugins = HashMap::new();
+    pub fn new() -> Builder {
+        let builder = Builder {
+            commands: HashMap::new(),
+        };
 
-        let build = build::plugin();
-        let clean = clean::plugin();
-
-        plugins.insert(build.name.clone(), build);
-        plugins.insert(clean.name.clone(), clean);
-
-        Builder {
-            site: site,
-            plugins: plugins,
-        }
+        builder
+            .command("build", build::Build)
+            .command("clean", clean::Clean)
     }
 
-    pub fn plugin(mut self, plugin: Plugin) -> Builder {
-        self.plugins.insert(plugin.name.clone(), plugin);
+    pub fn command<S, C>(mut self, name: S, command: C) -> Builder
+    where S: Into<String>, C: Command + 'static {
+        self.commands.insert(name.into(), Box::new(command));
         self
     }
 
     pub fn build(mut self) -> Result<Box<Command>, Box<Error>> {
         let mut usage = String::from(USAGE);
 
-        let mut plugs =
-            self.plugins.iter()
-            .collect::<Vec<(&String, &Plugin)>>();
+        {
+            let mut cmds =
+                self.commands.iter()
+                .collect::<Vec<(&String, &Box<Command>)>>();
 
-        plugs.sort_by(|a, b| a.0.cmp(b.0));
+            cmds.sort_by(|a, b| a.0.cmp(b.0));
 
-        for &(k, v) in &plugs {
-            usage.push_str("    ");
-            usage.push_str(&k);
+            for &(k, v) in &cmds {
+                usage.push_str("    ");
+                usage.push_str(&k);
 
-            // TODO: proper padding
-            if k.len() > 11 {
-                panic!("the command name should be less than 12 characters");
+                // TODO: proper padding
+                if k.len() > 11 {
+                    panic!("the command name should be less than 12 characters");
+                }
+
+                let pad = 12 - k.len();
+                usage.push_str(&::std::iter::repeat(' ').take(pad).collect::<String>());
+                usage.push_str(&v.description());
+                usage.push('\n');
             }
-
-            let pad = 12 - k.len();
-            usage.push_str(&::std::iter::repeat(' ').take(pad).collect::<String>());
-            usage.push_str(&v.description);
-            usage.push('\n');
         }
 
         let options: Options =
@@ -132,7 +117,6 @@ impl Builder {
             };
 
         let cmd = options.arg_command.unwrap();
-        self.site.configuration_mut().command = cmd.clone();
 
         let err =
             Err(From::from(docopt::Error::WithProgramUsage(
@@ -142,8 +126,8 @@ impl Builder {
         let command: Box<Command> = match &cmd[..] {
             "" | "help" => return err,
             cmd => {
-                if let Some(plugin) = self.plugins.get(cmd) {
-                    (plugin.constructor)(self.site)
+                if let Some(command) = self.commands.remove(cmd) {
+                    command
                 } else {
                     // here look in PATH to find program named diecast-$cmd
                     // if not found, then output this message:

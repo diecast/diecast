@@ -14,7 +14,7 @@ struct Options {
 
 static USAGE: &'static str = "
 Usage:
-    diecast build [options]
+    diecast deploy [options]
 
 Options:
     -h, --help          Print this message
@@ -22,9 +22,19 @@ Options:
     -v, --verbose       Use verbose output
 ";
 
-pub struct Build;
+pub struct Deploy<P>
+where P: Fn(&Site) -> ::Result<()> {
+    procedure: P
+}
 
-impl Build {
+impl<P> Deploy<P>
+where P: Fn(&Site) -> ::Result<()> {
+    pub fn new(procedure: P) -> Deploy<P> {
+        Deploy {
+            procedure: procedure,
+        }
+    }
+
     pub fn configure(&mut self, configuration: &mut Configuration) {
         // 1. merge options into configuration; options overrides config
         // 2. construct site from configuration
@@ -47,13 +57,14 @@ impl Build {
     }
 }
 
-impl Command for Build {
+impl<P> Command for Deploy<P>
+where P: Fn(&Site) -> ::Result<()> {
     fn description(&self) -> &'static str {
-        "Build the site"
+        "Deploy the site"
     }
 
     fn run(&mut self, site: &mut Site) -> ::Result<()> {
         self.configure(site.configuration_mut());
-        site.build()
+        (self.procedure)(site)
     }
 }

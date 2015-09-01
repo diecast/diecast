@@ -41,8 +41,6 @@ pub struct Manager {
     // matching Patterns first-class
     /// Paths being considered
     paths: Arc<Vec<PathBuf>>,
-
-    jobs: VecDeque<Job>,
 }
 
 impl Manager {
@@ -55,7 +53,6 @@ impl Manager {
             waiting: Vec::new(),
             finished: BTreeMap::new(),
             paths: Arc::new(Vec::new()),
-            jobs: VecDeque::new(),
         }
     }
 

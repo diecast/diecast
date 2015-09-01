@@ -2,7 +2,8 @@ use std::error::Error;
 
 use docopt::Docopt;
 
-use command::{Command, Plugin};
+use command::Command;
+use configuration::Configuration;
 use site::Site;
 use support;
 
@@ -24,16 +25,10 @@ Options:
 This removes the output directory.
 ";
 
-pub fn plugin() -> Plugin {
-    Plugin::new("clean", "Remove output directory", Clean::plugin)
-}
-
-pub struct Clean {
-    site: Site,
-}
+pub struct Clean;
 
 impl Clean {
-    pub fn new(mut site: Site) -> Clean {
+    pub fn configure(&mut self, configuration: &mut Configuration) {
         let docopt =
             Docopt::new(USAGE)
                 .unwrap_or_else(|e| e.exit())
@@ -43,21 +38,17 @@ impl Clean {
             e.exit();
         });
 
-        site.configuration_mut().ignore_hidden = options.flag_ignore_hidden;
-
-        Clean {
-            site: site,
-        }
-    }
-
-    pub fn plugin(site: Site) -> Box<Command> {
-        Box::new(Clean::new(site))
+        configuration.ignore_hidden = options.flag_ignore_hidden;
     }
 }
 
 impl Command for Clean {
-    fn run(&mut self) -> ::Result<()> {
-        let target = &self.site.configuration().output;
+    fn description(&self) -> &'static str {
+        "Remove output directory"
+    }
+
+    fn run(&mut self, site: &mut Site) -> ::Result<()> {
+        let target = &site.configuration().output;
 
         if support::file_exists(target) {
             println!("removing {:?}", target);
@@ -66,6 +57,6 @@ impl Command for Clean {
         }
 
         // TODO: clean return Result?
-        self.site.clean()
+        site.clean()
     }
 }
