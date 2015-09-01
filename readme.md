@@ -123,12 +123,13 @@ fn render_index(item: &mut Item) -> diecast::Result<()> {
 This can then be wired up to the Diecast command-line interface:
 
 ``` rust
-let command =
-    command::Builder::new()
-    .rules(vec![statics, posts, index])
-    .build();
+let mut site = Site::new(vec![statics, posts, index]);
 
-cmd.run();
+// selects appropriate command based on
+// process arguments. can also attach new commands
+let command = command::Builder::new().build();
+
+cmd.run(&mut site);
 ```
 
 ## Middleware
