@@ -1,4 +1,4 @@
-use std::fs::{self, PathExt};
+use std::fs;
 use std::path::Path;
 use std::io;
 
