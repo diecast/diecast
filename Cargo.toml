@@ -13,6 +13,8 @@ rpath = true
 # debug-assertions = false
 
 [dependencies]
+clippy = {version = "*", optional = true}
+
 glob = "*"
 regex = "*"
 log = "*"
@@ -36,3 +38,6 @@ ansi_term = "*"
 # ncurses = "*"
 syncbox = "*"
 eventual = "*"
+
+[features]
+default = []

@@ -1,3 +1,6 @@
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
+
 //! This crate facilitates the creation of static site generators.
 
 // TODO: when ready, this prevents it from building
