@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use docopt::Docopt;
 
 use command::Command;

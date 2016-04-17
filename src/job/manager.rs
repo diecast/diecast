@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::mpsc::{self, channel};
+use std::sync::mpsc;
 use std::thread;
 use std::path::{PathBuf, Path};
 use std::collections::{BTreeMap, VecDeque, HashMap};
@@ -8,7 +8,6 @@ use std::mem;
 use syncbox::{ThreadPool, TaskBox};
 use eventual::{
     Stream,
-    Sender,
     Future,
     Async,
     defer,
