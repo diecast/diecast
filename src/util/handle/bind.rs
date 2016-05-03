@@ -1,21 +1,17 @@
 use std::sync::Arc;
 use std::any::Any;
 use std::path::PathBuf;
+use std::{cmp, mem};
 
 use typemap;
-use syncbox::{ThreadPool, TaskBox};
-use eventual::{
-    Future,
-    Async,
-    AsyncError,
-    join,
-    defer
-};
+use syncbox::{ThreadPool, TaskBox, Run};
 
 use item::Item;
 use bind::Bind;
 use handler::Handle;
 use pattern::Pattern;
+
+use crossbeam::sync::MsQueue;
 
 use super::Extender;
 
@@ -141,7 +137,6 @@ where H: Handle<Item> + Sync + Send + 'static {
     }
 }
 
-// TODO: should the chunk be in configuration or a parameter?
 pub struct Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     handler: Arc<H>,
@@ -160,37 +155,43 @@ impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         if let Some(ref pool) = self.pool {
-            let items = ::std::mem::replace(bind.items_mut(), vec![]);
-            let futures: Vec<Future<Item, ::Error>> =
-                items.into_iter()
-                .map(|mut item| {
-                    let handler = self.handler.clone();
+            let items = mem::replace(bind.items_mut(), vec![]);
+            let mut len = items.len();
 
-                    let future = Future::<Item, ::Error>::lazy(move || {
-                        match handler.handle(&mut item) {
-                            Ok(()) => {
-                                Ok(item)
-                            },
-                            Err(e) => {
-                                println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
-                                         item,
-                                         e);
-                                Err(e)
-                            }
-                        }
-                    });
+            let results = Arc::new(MsQueue::<Result<Item, (::Error, Item)>>::new());
 
-                    defer(pool.clone(), future)
-                }).collect();
+            for mut item in items {
+                let handler = self.handler.clone();
+                let results = results.clone();
 
-            let items: Vec<Item> = match join(futures).await() {
-                Ok(items) => items,
-                Err(AsyncError::Failed(e)) => return Err(e),
-                Err(AsyncError::Aborted) => return Err(From::from("Future aborted")),
-            };
+                pool.run(Box::new(move || {
+                    match handler.handle(&mut item) {
+                        Ok(()) => results.push(Ok(item)),
+                        Err(e) => results.push(Err((e, item))),
+                    }
+                }));
+            }
 
-            *bind.items_mut() = items;
-        } else {
+            while len != 0 {
+                let result = results.pop();
+
+                match result {
+                    Ok(item) => {
+                        bind.items_mut().push(item);
+                        len -= 1;
+                    },
+                    Err((e, item)) => {
+                        println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
+                                 item,
+                                 e);
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        // no threadpool supplied, so handle this sequentially
+        else {
             for item in bind.iter_mut() {
                 match self.handler.handle(item) {
                     Ok(()) => (),
@@ -217,13 +218,13 @@ pub fn missing(bind: &mut Bind) -> ::Result<()> {
 }
 
 pub struct SortBy<F>
-where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
+where F: Fn(&Item, &Item) -> cmp::Ordering,
       F: Sync + Send + 'static {
     compare: F,
 }
 
 pub fn sort_by<F>(compare: F) -> SortBy<F>
-where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
+where F: Fn(&Item, &Item) -> cmp::Ordering,
       F: Sync + Send + 'static {
     SortBy {
         compare: compare,
@@ -231,10 +232,10 @@ where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
 }
 
 impl<F> Handle<Bind> for SortBy<F>
-where F: Fn(&Item, &Item) -> ::std::cmp::Ordering,
+where F: Fn(&Item, &Item) -> cmp::Ordering,
       F: Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> ::Result<()> {
-        bind.items_mut().sort_by(|a, b| -> ::std::cmp::Ordering {
+        bind.items_mut().sort_by(|a, b| -> cmp::Ordering {
             (self.compare)(a, b)
         });
 

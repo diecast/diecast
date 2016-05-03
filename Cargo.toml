@@ -29,6 +29,9 @@ toml = "*"
 threadpool = "*"
 num_cpus = "*"
 
+crossbeam = "0.2.5"
+scoped_threadpool = "0.1.7"
+
 typemap = "*"
 rustc-serialize = "*"
 

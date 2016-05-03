@@ -1,17 +1,10 @@
 use std::sync::Arc;
-use std::sync::mpsc;
-use std::thread;
 use std::path::{PathBuf, Path};
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
 
-use syncbox::{ThreadPool, TaskBox};
-use eventual::{
-    Stream,
-    Future,
-    Async,
-    defer,
-};
+use scoped_threadpool;
+use crossbeam::sync::{MsQueue};
 
 use configuration::Configuration;
 use dependency::Graph;
@@ -189,36 +182,37 @@ impl Manager {
             job.bind.extensions.write().unwrap().insert::<InputPaths>(self.paths.clone());
         }
 
-        let pool: ThreadPool<Box<TaskBox>> = ThreadPool::fixed_size(2);
+        let mut pool = scoped_threadpool::Pool::new(4);
 
-        let (job_tx, job_rx) = mpsc::channel::<Job>();
-        let (mut tx, rx) = Stream::pair();
-
-        thread::spawn(move || {
-            for job in job_rx.iter() {
-                tx = tx.send(job).await().unwrap();
-            }
-        });
+        let job_queue: MsQueue<Job> = MsQueue::new();
+        let result_queue: MsQueue<::Result<Bind>> = MsQueue::new();
 
         let order = try!(self.graph.resolve_all());
+
         self.sort_jobs(order);
-        self.enqueue_ready(job_tx.clone());
 
-        let mut stream = rx.process(4,
-          move |job: Job| defer(pool.clone(), Future::lazy(move || job.process())));
+        while !self.waiting.is_empty() {
+            self.enqueue_ready(&job_queue);
 
-        for _ in 0 .. self.rules.len() {
-            match stream.await() {
-                Ok(Some((bind, rest))) => {
-                    self.handle_done(bind, job_tx.clone());
+            pool.scoped(|scoped| {
+                while let Some(job) = job_queue.try_pop() {
+                    scoped.execute(|| {
+                        result_queue.push(job.process());
+                    });
+                }
+            });
 
-                    stream = rest;
-                },
-                Ok(None) => break,
-                Err(e) => {
-                    return Err(
-                        From::from(
-                            format!("a job panicked. stopping everything:\n{}", e)));
+            while let Some(result) = result_queue.try_pop() {
+                match result {
+                    Ok(bind) => {
+                        self.handle_done(bind);
+                    },
+
+                    Err(e) => {
+                        return Err(
+                            From::from(
+                                format!("a job panicked. stopping everything:\n{}", e)));
+                    }
                 }
             }
         }
@@ -240,7 +234,7 @@ impl Manager {
     // should send the finished bind to a result channel
     // this will enable decoupling of cli status messages
     // from the core library
-    fn handle_done(&mut self, current: Bind, tx: mpsc::Sender<Job>) {
+    fn handle_done(&mut self, current: Bind) {
         let bind_name = current.name.clone();
 
         // if they're done, move from staging to finished
@@ -249,10 +243,9 @@ impl Manager {
         }));
 
         self.satisfy(&bind_name);
-        self.enqueue_ready(tx);
     }
 
-    fn enqueue_ready(&mut self, tx: mpsc::Sender<Job>) {
+    fn enqueue_ready(&mut self, job_queue: &MsQueue<Job>) {
         for mut job in self.ready() {
             let name = job.bind.name.clone();
 
@@ -267,7 +260,7 @@ impl Manager {
                 }
             }
 
-            tx.send(job).unwrap();
+            job_queue.push(job);
         }
     }
 }
