@@ -1,4 +1,7 @@
-target/
-Cargo.lock
-.gdb_history
-.gdb_log
+/target/
+/Cargo.lock
+/.gdb_history
+/.gdb_log
+/src/GPATH
+/src/GRTAGS
+/src/GTAGS
