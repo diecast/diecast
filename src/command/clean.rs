@@ -3,7 +3,6 @@ use docopt::Docopt;
 use command::Command;
 use configuration::Configuration;
 use site::Site;
-use support;
 
 #[derive(RustcDecodable, Debug)]
 struct Options {
@@ -48,7 +47,7 @@ impl Command for Clean {
     fn run(&mut self, site: &mut Site) -> ::Result<()> {
         let target = &site.configuration().output;
 
-        if support::file_exists(target) {
+        if target.exists() {
             println!("removing {:?}", target);
         } else {
             println!("nothing to remove");

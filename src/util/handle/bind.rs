@@ -49,14 +49,10 @@ where P: Pattern + Sync + Send + 'static {
 impl<P> Handle<Bind> for Select<P>
 where P: Pattern + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> ::Result<()> {
-        use support;
-
         let paths = bind.extensions.read().unwrap().get::<InputPaths>().unwrap().clone();
 
         for path in paths.iter() {
-            let relative =
-                support::path_relative_from(path, &bind.configuration.input).unwrap()
-                .to_path_buf();
+            let relative = try!(path.strip_prefix(&bind.configuration.input)).to_path_buf();
 
             // TODO
             // decide how to handle pattern matching consistently

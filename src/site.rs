@@ -54,8 +54,9 @@ impl Site {
 
         println!("building from {:?}", self.configuration.input);
 
-        if !support::file_exists(&self.configuration.input) {
-            println!("the input directory `{:?}` does not exist!", self.configuration.input);
+        if !&self.configuration.input.exists() {
+            println!("the input directory `{:?}` does not exist!",
+                     self.configuration.input);
             ::std::process::exit(1);
         }
 
@@ -82,7 +83,7 @@ impl Site {
 
     pub fn clean(&self) -> ::Result<()> {
         // output directory doesn't even exist; nothing to clean
-        if !support::file_exists(&self.configuration.output) {
+        if !&self.configuration.output.exists() {
             return Ok(());
         }
 
