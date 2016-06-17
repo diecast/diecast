@@ -157,6 +157,7 @@ Thanks to its extensible middleware nature, there are already a couple of packag
 
 ### Miscellaneous
 
+* [github-pages](https://github.com/diecast/github-pages): deploy to GitHub Pages. Can specify to build from a particular revision such as `origin/master` so that the site isn't built from changes that haven't been pushed, or from the working tree.
 * [git](https://github.com/diecast/git): git information for items, e.g. last commit SHA and message that affected the given item
 * [versions](https://github.com/diecast/versions): saving and loading different versions of items. e.g. a feed-friendly version, before other processors are applied
 * [adjacent](https://github.com/diecast/adjacent): next/previous article references
