@@ -122,8 +122,30 @@ impl Builder {
                 Box::new(docopt::Error::Help),
                 String::from(usage))));
 
+        // TODO
+        // the way this was changed prevents any commands from being passed
+        // to the sub-command. what needs to happen is that the flags need to
+        // be passed onto the sub-command once it is chosen
+        //
+        // Use Docopt.argv() to explicitly pass the _full_ arguments including
+        // the binary name.
+        //
+        // construct these args here, same as cargo is doing here:
+        // https://github.com/rust-lang/cargo/blob/master/src/bin/cargo.rs#L141
+        //
+        // UPDATE
+        // false alarm? The command runs Docopt itself on env::args() so
+        // everything seems to be working fine, it's just that the command has
+        // to ensure that Docopt is run and its effects take place
+        //
+        // that said, perhaps it _is_ beneficial to explicitly pass the argv to
+        // the command, so that the root command can support `diecast help subcommand`,
+        // which ends up rewriting the argv to [diecast, subcommand, -h]
+        //
+        // that may also be necessary to support external diecast-cmd binaries
+        // in PATH?
         let command: Box<Command> = match &cmd[..] {
-            "" | "help" => return err,
+            "" | "help" if options.arg_args.is_empty() => return err,
             cmd => {
                 if let Some(command) = self.commands.remove(cmd) {
                     command
