@@ -26,10 +26,13 @@ time = "*"
 # for Diecast.toml
 toml = "*"
 
+futures = "*"
+futures-cpupool = "*"
+
 threadpool = "*"
 num_cpus = "*"
 
-crossbeam = "0.2.5"
+crossbeam = "0.2.10"
 scoped_threadpool = "0.1.7"
 
 typemap = "*"
