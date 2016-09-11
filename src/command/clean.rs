@@ -10,6 +10,13 @@ struct Options {
     flag_ignore_hidden: bool,
 }
 
+// TODO
+// the help message includes the wrong command
+// e.g. if someone did:
+//
+//     .command("mess", clean)
+//
+// the `diecast help mess` will still show the `clean` command
 static USAGE: &'static str = "
 Usage:
     diecast clean [options]
