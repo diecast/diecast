@@ -238,9 +238,7 @@ impl Manager {
         let bind_name = current.name.clone();
 
         // if they're done, move from staging to finished
-        self.finished.insert(bind_name.clone(), Arc::new({
-            current
-        }));
+        self.finished.insert(bind_name.clone(), Arc::new(current));
 
         self.satisfy(&bind_name);
     }
