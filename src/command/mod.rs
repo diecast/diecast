@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use docopt::{self, Docopt};
-use rustc_serialize::{Decodable, Decoder};
 
 use site::Site;
 

@@ -1,6 +1,5 @@
 //! Compilation unit for the `Generator`.
 
-use std::io::Write;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 use std::path::{PathBuf, Path};
