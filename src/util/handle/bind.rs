@@ -239,3 +239,28 @@ where F: Fn(&Item, &Item) -> cmp::Ordering,
     }
 }
 
+pub struct SortByKey<B, F>
+where B: Ord, F: Fn(&Item) -> B,
+      F: Sync + Send + 'static {
+    key: F,
+}
+
+impl<B, F> Handle<Bind> for SortByKey<B, F>
+where B: Ord, F: Fn(&Item) -> B,
+      F: Sync + Send + 'static {
+    fn handle(&self, bind: &mut Bind) -> ::Result<()> {
+        bind.items_mut().sort_by_key(|a| {
+            (self.key)(a)
+        });
+
+        Ok(())
+    }
+}
+
+pub fn sort_by_key<B, F>(key: F) -> SortByKey<B, F>
+where B: Ord, F: Fn(&Item) -> B,
+      F: Sync + Send + 'static {
+    SortByKey {
+        key: key,
+    }
+}
