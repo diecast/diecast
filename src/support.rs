@@ -2,6 +2,8 @@ use std::fs;
 use std::path::Path;
 use std::io;
 
+// TODO
+// remove this and use create_dir_all?
 pub fn mkdir_p<P: AsRef<Path>>(path: P) -> io::Result<()> {
     let path = path.as_ref();
     if path == Path::new("") || ::std::fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false) { return Ok(()) }
