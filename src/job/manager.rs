@@ -179,7 +179,8 @@ impl Manager {
         }
 
         for job in &mut self.waiting {
-            job.bind.extensions.write().unwrap().insert::<InputPaths>(self.paths.clone());
+            job.bind.extensions.write().unwrap()
+                .insert::<InputPaths>(self.paths.clone());
         }
 
         let mut pool = scoped_threadpool::Pool::new(4);
