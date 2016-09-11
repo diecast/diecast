@@ -11,7 +11,6 @@
 extern crate glob;
 extern crate regex;
 extern crate toml;
-extern crate threadpool;
 extern crate typemap;
 extern crate walker;
 extern crate time;
@@ -26,7 +25,8 @@ extern crate ansi_term;
 extern crate syncbox;
 
 extern crate crossbeam;
-extern crate scoped_threadpool;
+extern crate futures;
+extern crate futures_cpupool;
 
 pub use pattern::Pattern;
 pub use site::Site;

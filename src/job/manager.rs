@@ -3,8 +3,8 @@ use std::path::{PathBuf, Path};
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
 
-use scoped_threadpool;
-use crossbeam::sync::{MsQueue};
+use futures::{self, Future, BoxFuture};
+use futures_cpupool::CpuPool;
 
 use configuration::Configuration;
 use dependency::Graph;
@@ -22,8 +22,11 @@ pub struct Manager {
     /// Dependency count of each bind
     dependencies: BTreeMap<String, usize>,
 
-    /// Map of binds to the list of jobs that haven't been processed yet
+    /// List of jobs that haven't been processed yet
     waiting: Vec<Job>,
+
+    /// List of jobs currently being processed
+    pending: Vec<BoxFuture<Bind, ::Error>>,
 
     /// Finished dependencies
     finished: BTreeMap<String, Arc<Bind>>,
@@ -43,6 +46,7 @@ impl Manager {
             graph: Graph::new(),
             dependencies: BTreeMap::new(),
             waiting: Vec::new(),
+            pending: Vec::new(),
             finished: BTreeMap::new(),
             paths: Arc::new(Vec::new()),
         }
@@ -183,37 +187,47 @@ impl Manager {
                 .insert::<InputPaths>(self.paths.clone());
         }
 
-        let mut pool = scoped_threadpool::Pool::new(4);
+        let cpu_pool = CpuPool::new_num_cpus();
 
-        let job_queue: MsQueue<Job> = MsQueue::new();
-        let result_queue: MsQueue<::Result<Bind>> = MsQueue::new();
+        // NOTE
+        //
+        // using futures_cpupool
+        //
+        // * For each ready job, spawn it on the cpupool and add it to a vector
+        // of pending jobs.
+        //
+        // * In the main loop perform a select_all().wait() on the vector to
+        // wait for the first available job. select_all() returns a triple of:
+        //
+        //   1. resolved value
+        //   2. index of resolved future within pending list
+        //   3. original vector, with resolved future removed
+        //
+        // * When a future is resolve (i.e. job is ready), enqueue all ready
+        // other ready jobs
 
         let order = try!(self.graph.resolve_all());
 
         self.sort_jobs(order);
+        self.enqueue_ready(&cpu_pool);
 
-        while !self.waiting.is_empty() {
-            self.enqueue_ready(&job_queue);
+        while !self.pending.is_empty() {
+            let pending = mem::replace(&mut self.pending, Vec::new());
 
-            pool.scoped(|scoped| {
-                while let Some(job) = job_queue.try_pop() {
-                    scoped.execute(|| {
-                        result_queue.push(job.process());
-                    });
+            match futures::select_all(pending).wait() {
+                Ok((bind, _index, new_pending)) => {
+                    let mut new_pending_boxed =
+                        new_pending.into_iter().map(|f| f.boxed()).collect();
+
+                    mem::swap(&mut new_pending_boxed, &mut self.pending);
+
+                    self.handle_done(bind);
+                    self.enqueue_ready(&cpu_pool);
                 }
-            });
-
-            while let Some(result) = result_queue.try_pop() {
-                match result {
-                    Ok(bind) => {
-                        self.handle_done(bind);
-                    },
-
-                    Err(e) => {
-                        return Err(
-                            From::from(
-                                format!("a job panicked. stopping everything:\n{}", e)));
-                    }
+                Err((e, _index, _new_pending)) => {
+                    return Err(
+                        From::from(
+                            format!("a job panicked. stopping everything:\n{}", e)));
                 }
             }
         }
@@ -244,7 +258,7 @@ impl Manager {
         self.satisfy(&bind_name);
     }
 
-    fn enqueue_ready(&mut self, job_queue: &MsQueue<Job>) {
+    fn enqueue_ready(&mut self, cpu_pool: &CpuPool) {
         for mut job in self.ready() {
             let name = job.bind.name.clone();
 
@@ -259,7 +273,9 @@ impl Manager {
                 }
             }
 
-            job_queue.push(job);
+            let boxed_future = futures::lazy(move || job.process());
+            let spawned_future = cpu_pool.spawn(boxed_future).boxed();
+            self.pending.push(spawned_future);
         }
     }
 }
