@@ -45,6 +45,8 @@ impl Command for Clean {
     }
 
     fn run(&mut self, site: &mut Site) -> ::Result<()> {
+        self.configure(site.configuration_mut());
+
         let target = &site.configuration().output;
 
         if target.exists() {
