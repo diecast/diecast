@@ -12,7 +12,7 @@ extern crate glob;
 extern crate regex;
 extern crate toml;
 extern crate typemap;
-extern crate walker;
+extern crate walkdir;
 extern crate time;
 
 #[macro_use]

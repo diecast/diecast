@@ -19,7 +19,7 @@ glob = "*"
 regex = "*"
 log = "*"
 docopt = "*"
-walker = "*"
+walkdir = "*"
 
 time = "*"
 

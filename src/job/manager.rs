@@ -60,27 +60,37 @@ impl Manager {
 
     /// Re-enumerate the paths in the input directory
     pub fn update_paths(&mut self) {
-        use walker::Walker;
+        use walkdir::WalkDir;
+        use walkdir::WalkDirIterator;
 
-        self.paths = Arc::new({
-            Walker::new(&self.configuration.input).unwrap()
-            .filter_map(|p| {
-                let path = p.unwrap().path();
+        let walked_paths =
+            WalkDir::new(&self.configuration.input)
+                .into_iter()
+                .filter_entry(|entry| {
+                    if let Some(ref ignore) = self.configuration.ignore {
+                        let file_name = &Path::new(entry.path().file_name().unwrap());
 
-                if let Some(ref ignore) = self.configuration.ignore {
-                    if ignore.matches(&Path::new(path.file_name().unwrap())) {
-                        return None;
+                        if ignore.matches(file_name) {
+                            return false;
+                        }
                     }
-                }
 
-                ::std::fs::metadata(&path)
-                .map(|m|
-                     if m.is_file() { Some(path.to_path_buf()) }
-                     else { None }
-                 ).unwrap_or(None)
-            })
-            .collect()
-        });
+                    true
+                })
+                .filter_map(|entry| entry.ok())
+                .filter_map(|entry| {
+                    let res = entry.metadata()
+                        .map(|m| {
+                            if m.is_file() { Some(entry.path().to_path_buf()) }
+                            else { None }
+                        })
+                        .unwrap_or(None);
+
+                    res
+                })
+                .collect();
+
+        self.paths = Arc::new(walked_paths);
     }
 
     pub fn add(&mut self, rule: Arc<Rule>) {
