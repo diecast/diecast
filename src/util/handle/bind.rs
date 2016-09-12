@@ -4,14 +4,14 @@ use std::path::PathBuf;
 use std::{cmp, mem};
 
 use typemap;
-use syncbox::{ThreadPool, TaskBox, Run};
+
+use futures::{self, Future};
+use futures_cpupool::CpuPool;
 
 use item::Item;
 use bind::Bind;
 use handler::Handle;
 use pattern::Pattern;
-
-use crossbeam::sync::MsQueue;
 
 use super::Extender;
 
@@ -106,11 +106,11 @@ where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
 }
 
 pub struct PooledEach {
-    pool: Option<ThreadPool<Box<TaskBox>>>,
+    pool: Option<CpuPool>,
 }
 
 impl PooledEach {
-    pub fn new(pool: ThreadPool<Box<TaskBox>>) -> PooledEach {
+    pub fn new(pool: CpuPool) -> PooledEach {
         PooledEach {
             pool: Some(pool),
         }
@@ -136,12 +136,12 @@ where H: Handle<Item> + Sync + Send + 'static {
 pub struct Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     handler: Arc<H>,
-    pool: Option<ThreadPool<Box<TaskBox>>>
+    pool: Option<CpuPool>
 }
 
 impl<H> Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
-    pub fn threads(mut self, pool: ThreadPool<Box<TaskBox>>) -> Each<H> {
+    pub fn threads(mut self, pool: CpuPool) -> Each<H> {
         self.pool = Some(pool);
         self
     }
@@ -152,36 +152,28 @@ where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> ::Result<()> {
         if let Some(ref pool) = self.pool {
             let items = mem::replace(bind.items_mut(), vec![]);
-            let mut len = items.len();
+            let futures: Vec<_> = items
+                .into_iter()
+                .map(|mut item| {
+                    let handler = self.handler.clone();
 
-            let results = Arc::new(MsQueue::<Result<Item, (::Error, Item)>>::new());
+                    let future = futures::lazy(move || {
+                        match handler.handle(&mut item) {
+                            Ok(()) => futures::finished(item).boxed(),
+                            Err(e) => futures::failed((e, item)).boxed(),
+                        }
+                    });
 
-            for mut item in items {
-                let handler = self.handler.clone();
-                let results = results.clone();
+                    pool.spawn(future)
+                })
+                .collect();
 
-                pool.run(Box::new(move || {
-                    match handler.handle(&mut item) {
-                        Ok(()) => results.push(Ok(item)),
-                        Err(e) => results.push(Err((e, item))),
-                    }
-                }));
-            }
-
-            while len != 0 {
-                let result = results.pop();
-
-                match result {
-                    Ok(item) => {
-                        bind.items_mut().push(item);
-                        len -= 1;
-                    },
-                    Err((e, item)) => {
-                        println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
-                                 item,
-                                 e);
-                        return Err(e);
-                    }
+            match futures::collect(futures).wait() {
+                Ok(mut results) => mem::swap(&mut results, bind.items_mut()),
+                Err((e, item)) => {
+                    println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
+                             item, e);
+                    return Err(e);
                 }
             }
         }
@@ -192,10 +184,8 @@ where H: Handle<Item> + Sync + Send + 'static {
                 match self.handler.handle(item) {
                     Ok(()) => (),
                     Err(e) => {
-                        println!(
-                            "\nthe following item encountered an error:\n {:?}\n\n{}\n",
-                            item,
-                            e);
+                        println!("\nthe following item encountered an error:\n {:?}\n\n{}\n",
+                                 item, e);
                         return Err(e);
                     }
                 }

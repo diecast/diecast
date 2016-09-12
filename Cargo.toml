@@ -31,8 +31,6 @@ futures-cpupool = "*"
 
 num_cpus = "*"
 
-crossbeam = "0.2.10"
-
 typemap = "*"
 rustc-serialize = "*"
 
@@ -40,7 +38,6 @@ rustc-serialize = "*"
 ansi_term = "*"
 # rustbox = "*"
 # ncurses = "*"
-syncbox = "*"
 
 [features]
 default = []

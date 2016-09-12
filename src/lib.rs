@@ -22,9 +22,7 @@ extern crate rustc_serialize;
 extern crate docopt;
 extern crate num_cpus;
 extern crate ansi_term;
-extern crate syncbox;
 
-extern crate crossbeam;
 extern crate futures;
 extern crate futures_cpupool;
 
