@@ -156,7 +156,7 @@ impl Scheduler {
         ready
     }
 
-    pub fn sort_jobs(&mut self, order: VecDeque<String>) {
+    fn sort_jobs(&mut self, order: VecDeque<String>) {
         assert!(self.waiting.len() == order.len(),
                 "`waiting` and `order` are not the same length");
 
