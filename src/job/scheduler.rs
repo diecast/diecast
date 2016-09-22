@@ -117,8 +117,17 @@ impl Scheduler {
     }
 
     // TODO: will need Borrow bound
-    fn satisfy(&mut self, bind: &str) {
-        if let Some(dependents) = self.graph.dependents_of(bind) {
+    // TODO
+    // should send the finished bind to a result channel
+    // this will enable decoupling of cli status messages
+    // from the core library
+    fn satisfy(&mut self, current: Bind) {
+        let bind_name = current.name.clone();
+
+        // if they're done, move from staging to finished
+        self.finished.insert(bind_name.clone(), Arc::new(current));
+
+        if let Some(dependents) = self.graph.dependents_of(&bind_name) {
             let names = self.dependencies.keys().cloned().collect::<Vec<String>>();
 
             for name in names {
@@ -229,8 +238,8 @@ impl Scheduler {
 
                     mem::swap(&mut new_pending_boxed, &mut self.pending);
 
-                    self.handle_done(bind);
                     self.enqueue_ready(&cpu_pool);
+                    self.satisfy(bind);
                 }
                 Err((e, _index, _new_pending)) => {
                     return Err(
@@ -251,19 +260,6 @@ impl Scheduler {
     fn reset(&mut self) {
         self.graph = Graph::new();
         self.waiting.clear();
-    }
-
-    // TODO
-    // should send the finished bind to a result channel
-    // this will enable decoupling of cli status messages
-    // from the core library
-    fn handle_done(&mut self, current: Bind) {
-        let bind_name = current.name.clone();
-
-        // if they're done, move from staging to finished
-        self.finished.insert(bind_name.clone(), Arc::new(current));
-
-        self.satisfy(&bind_name);
     }
 
     fn enqueue_ready(&mut self, cpu_pool: &CpuPool) {
