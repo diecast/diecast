@@ -226,7 +226,7 @@ impl Scheduler {
         let order = try!(self.graph.resolve_all());
 
         self.sort_jobs(order);
-        self.enqueue_ready(&cpu_pool);
+        self.schedule_ready(&cpu_pool);
 
         while !self.pending.is_empty() {
             let pending = mem::replace(&mut self.pending, Vec::new());
@@ -238,8 +238,8 @@ impl Scheduler {
 
                     mem::swap(&mut new_pending_boxed, &mut self.pending);
 
-                    self.enqueue_ready(&cpu_pool);
                     self.satisfy(bind);
+                    self.schedule_ready(&cpu_pool);
                 }
                 Err((e, _index, _new_pending)) => {
                     return Err(
@@ -262,7 +262,7 @@ impl Scheduler {
         self.waiting.clear();
     }
 
-    fn enqueue_ready(&mut self, cpu_pool: &CpuPool) {
+    fn schedule_ready(&mut self, cpu_pool: &CpuPool) {
         for mut job in self.ready() {
             let name = job.bind.name.clone();
 
