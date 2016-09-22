@@ -6,9 +6,9 @@ use time::PreciseTime;
 use bind::{self, Bind};
 use handler::Handle;
 
-mod manager;
+mod scheduler;
 
-pub use self::manager::Manager;
+pub use self::scheduler::Scheduler;
 
 pub static STARTING: &'static str = "  Starting";
 pub static FINISHED: &'static str = "  Finished";

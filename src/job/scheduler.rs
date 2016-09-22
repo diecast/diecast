@@ -12,7 +12,7 @@ use rule::Rule;
 use bind::{self, Bind};
 use super::Job;
 
-pub struct Manager {
+pub struct Scheduler {
     configuration: Arc<Configuration>,
 
     rules: HashMap<String, Arc<Rule>>,
@@ -38,9 +38,9 @@ pub struct Manager {
     paths: Arc<Vec<PathBuf>>,
 }
 
-impl Manager {
-    pub fn new(configuration: Arc<Configuration>) -> Manager {
-        Manager {
+impl Scheduler {
+    pub fn new(configuration: Arc<Configuration>) -> Scheduler {
+        Scheduler {
             configuration: configuration,
             rules: HashMap::new(),
             graph: Graph::new(),

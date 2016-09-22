@@ -50,7 +50,7 @@ impl Site {
     pub fn build(&mut self) -> ::Result<()> {
         try!(self.clean());
 
-        let mut manager = job::Manager::new(Arc::new(self.configuration.clone()));
+        let mut scheduler = job::Scheduler::new(Arc::new(self.configuration.clone()));
 
         println!("building from {:?}", self.configuration.input);
 
@@ -60,17 +60,17 @@ impl Site {
             ::std::process::exit(1);
         }
 
-        manager.update_paths();
+        scheduler.update_paths();
 
         for rule in &self.rules {
            // FIXME: this just seems weird re: strings
-           manager.add(rule.clone());
+           scheduler.add(rule.clone());
         }
 
         // create the output directory
         support::mkdir_p(&self.configuration.output).unwrap();
 
-        manager.build()
+        scheduler.build()
     }
 
     pub fn configuration(&self) -> &Configuration {
