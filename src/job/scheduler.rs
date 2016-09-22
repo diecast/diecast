@@ -79,14 +79,12 @@ impl Scheduler {
                 })
                 .filter_map(|entry| entry.ok())
                 .filter_map(|entry| {
-                    let res = entry.metadata()
+                    entry.metadata()
                         .map(|m| {
                             if m.is_file() { Some(entry.path().to_path_buf()) }
                             else { None }
                         })
-                        .unwrap_or(None);
-
-                    res
+                        .unwrap_or(None)
                 })
                 .collect();
 
