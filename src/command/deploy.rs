@@ -58,7 +58,7 @@ where P: Fn(&Site) -> ::Result<()> {
 
     fn run(&mut self, site: &mut Site) -> ::Result<()> {
         self.configure(site.configuration_mut());
-        try!(site.build());
+        site.build()?;
         (self.procedure)(site)
     }
 }

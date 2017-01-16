@@ -7,7 +7,7 @@ use std::io;
 pub fn mkdir_p<P: AsRef<Path>>(path: P) -> io::Result<()> {
     let path = path.as_ref();
     if path == Path::new("") || ::std::fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false) { return Ok(()) }
-    if let Some(p) = path.parent() { try!(mkdir_p(p)) }
+    if let Some(p) = path.parent() { mkdir_p(p)? }
     match fs::create_dir(path) {
         Ok(()) => {
             Ok(())

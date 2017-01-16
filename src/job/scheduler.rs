@@ -220,7 +220,7 @@ impl Scheduler {
         // * When a future is resolve (i.e. job is ready), enqueue all ready
         // other ready jobs
 
-        let order = try!(self.graph.resolve_all());
+        let order = self.graph.resolve_all()?;
 
         self.sort_jobs(order);
         self.schedule_ready();

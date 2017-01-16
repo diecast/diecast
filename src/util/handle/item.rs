@@ -29,7 +29,7 @@ pub fn copy(item: &mut Item) -> ::Result<()> {
                 support::mkdir_p(parent).unwrap();
             }
 
-            try!(fs::copy(from, to));
+            fs::copy(from, to)?;
         }
     }
 

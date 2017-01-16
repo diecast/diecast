@@ -48,7 +48,7 @@ impl Site {
     }
 
     pub fn build(&mut self) -> ::Result<()> {
-        try!(self.clean());
+        self.clean()?;
 
         let mut scheduler = job::Scheduler::new(Arc::new(self.configuration.clone()));
 

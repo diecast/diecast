@@ -96,10 +96,10 @@ impl Route {
 impl Debug for Route {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Route::Read(ref path) => try!(write!(f, "R {}", path.display())),
-            Route::Write(ref path) => try!(write!(f, "W {}", path.display())),
+            Route::Read(ref path) => write!(f, "R {}", path.display())?,
+            Route::Write(ref path) => write!(f, "W {}", path.display())?,
             Route::ReadWrite(ref from, ref to) => {
-                try!(write!(f, "R {} → W {}", from.display(), to.display()))
+                write!(f, "R {} → W {}", from.display(), to.display())?
             },
         }
 

@@ -108,7 +108,7 @@ where T: Ord + Clone + Hash {
 impl<T> fmt::Debug for Graph<T>
 where T: fmt::Debug + Ord + Clone + Hash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(self.edges.fmt(f));
+        self.edges.fmt(f)?;
         Ok(())
     }
 }
@@ -124,10 +124,10 @@ where T: fmt::Debug + fmt::Display + Any {
 impl<T> fmt::Display for CycleError<T>
 where T: fmt::Debug + fmt::Display + Any {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(writeln!(f, "dependency cycle detected:"));
+        writeln!(f, "dependency cycle detected:")?;
 
         for (idx, item) in self.cycle.iter().enumerate() {
-            try!(writeln!(f, "  {}. {}", idx + 1, item));
+            writeln!(f, "  {}. {}", idx + 1, item)?;
         }
 
         Ok(())
@@ -189,7 +189,7 @@ where T: Ord + Clone + Hash {
                 // backwards in case there's a cycle
                 if !self.visited.contains(neighbor) {
                     self.edge_to.insert(neighbor.clone(), node.clone());
-                    try!(self.dfs(neighbor.clone(), out));
+                    self.dfs(neighbor.clone(), out)?;
                 }
 
                 // cycle detected
@@ -224,7 +224,7 @@ where T: Ord + Clone + Hash {
 
         for node in nodes {
             if !self.visited.contains(&node) {
-                try!(self.dfs(node, &mut order));
+                self.dfs(node, &mut order)?;
             }
         }
 
@@ -239,7 +239,7 @@ where T: Ord + Clone + Hash {
 
         for node in self.graph.nodes() {
             if !self.visited.contains(&node) {
-                try!(self.dfs(node.clone(), &mut order));
+                self.dfs(node.clone(), &mut order)?;
             }
         }
 

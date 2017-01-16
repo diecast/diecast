@@ -106,12 +106,12 @@ impl Builder {
 
         let options: Options =
             Docopt::new(usage.clone())
-                .and_then(|d|
-                    d
-                    .options_first(true)
-                    .help(true)
-                    .version(Some(version()))
-                    .deserialize())?;
+                .and_then(|d| {
+                    d.options_first(true)
+                        .help(true)
+                        .version(Some(version()))
+                        .decode()
+                })?;
 
         let cmd = options.arg_command.unwrap();
 

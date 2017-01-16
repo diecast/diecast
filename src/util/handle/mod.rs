@@ -31,7 +31,7 @@ impl<T> Chain<T> {
 impl<T> Handle<T> for Chain<T> {
     fn handle(&self, t: &mut T) -> ::Result<()> {
         for handler in &self.handlers {
-            try!(handler.handle(t));
+            handler.handle(t)?;
         }
 
         Ok(())
