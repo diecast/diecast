@@ -100,12 +100,13 @@ impl Handle<Item> for Regex {
     fn handle(&self, item: &mut Item) -> ::Result<()> {
         item.route_with(|path: &Path| -> PathBuf {
             let caps = self.regex.captures(path.to_str().unwrap()).unwrap();
-            let mut dest = String::new();
-            caps.expand(self.template, &mut dest);
-            dest.into()
+            let mut expanded = String::new();
+
+            caps.expand(self.template, &mut expanded);
+
+            PathBuf::from(&expanded)
         });
 
         Ok(())
     }
 }
-
