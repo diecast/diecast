@@ -4,7 +4,7 @@ use site::Site;
 use command::Command;
 use configuration::Configuration;
 
-#[derive(RustcDecodable, Debug)]
+#[derive(Deserialize, Debug)]
 struct Options {
     flag_jobs: Option<usize>,
     flag_verbose: bool,
@@ -38,14 +38,9 @@ where P: Fn(&Site) -> ::Result<()> {
         // 2. construct site from configuration
         // 3. build site
 
-        let docopt =
-            Docopt::new(USAGE)
-                .unwrap_or_else(|e| e.exit())
-                .help(true);
-
-        let options: Options = docopt.decode().unwrap_or_else(|e| {
-            e.exit();
-        });
+        let options: Options = Docopt::new(USAGE)
+            .and_then(|d| d.help(true).deserialize())
+            .unwrap_or_else(|e| e.exit());
 
         if let Some(jobs) = options.flag_jobs {
             configuration.threads = jobs;

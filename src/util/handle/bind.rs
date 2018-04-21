@@ -5,8 +5,8 @@ use std::{cmp, mem};
 
 use typemap;
 
-use futures::{self, Future};
-use futures_cpupool::CpuPool;
+use futures::prelude::*;
+use futures::{self, future, Future};
 
 use item::Item;
 use bind::Bind;
@@ -105,21 +105,16 @@ where C: Fn(&Item) -> bool, C: Copy + Sync + Send + 'static {
     }
 }
 
-pub struct PooledEach {
-    pool: Option<CpuPool>,
-}
+pub struct PooledEach {}
 
 impl PooledEach {
-    pub fn new(pool: CpuPool) -> PooledEach {
-        PooledEach {
-            pool: Some(pool),
-        }
+    pub fn new() -> PooledEach {
+        PooledEach {}
     }
 
     pub fn each<H>(&self, handler: H) -> Each<H>
     where H: Handle<Item> + Sync + Send + 'static {
         Each {
-            pool: self.pool.clone(),
             handler: Arc::new(handler),
         }
     }
@@ -129,69 +124,41 @@ pub fn each<H>(handler: H) -> Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     Each {
         handler: Arc::new(handler),
-        pool: None,
     }
 }
 
 pub struct Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
-    handler: Arc<H>,
-    pool: Option<CpuPool>
-}
-
-impl<H> Each<H>
-where H: Handle<Item> + Sync + Send + 'static {
-    pub fn threads(mut self, pool: CpuPool) -> Each<H> {
-        self.pool = Some(pool);
-        self
-    }
+    handler: Arc<H>
 }
 
 impl<H> Handle<Bind> for Each<H>
 where H: Handle<Item> + Sync + Send + 'static {
     fn handle(&self, bind: &mut Bind) -> ::Result<()> {
-        if let Some(ref pool) = self.pool {
-            let items = mem::replace(bind.items_mut(), vec![]);
-            let futures: Vec<_> = items
-                .into_iter()
-                .map(|mut item| {
-                    let handler = self.handler.clone();
+        let items = mem::replace(bind.items_mut(), vec![]);
+        let futures: Vec<_> = items
+            .into_iter()
+            .map(|mut item| {
+                let handler = self.handler.clone();
 
-                    let future = futures::lazy(move || {
-                        match handler.handle(&mut item) {
-                            Ok(()) => futures::finished(item).boxed(),
-                            Err(e) => futures::failed((e, item)).boxed(),
-                        }
-                    });
-
-                    pool.spawn(future)
-                })
-                .collect();
-
-            match futures::collect(futures).wait() {
-                Ok(mut results) => mem::swap(&mut results, bind.items_mut()),
-                Err((e, item)) => {
-                    println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
-                             item, e);
-                    return Err(e);
-                }
-            }
-        }
-
-        // no threadpool supplied, so handle this sequentially
-        else {
-            for item in bind.iter_mut() {
-                match self.handler.handle(item) {
-                    Ok(()) => (),
-                    Err(e) => {
-                        println!("\nthe following item encountered an error:\n {:?}\n\n{}\n",
-                                 item, e);
-                        return Err(e);
+                let future = future::lazy(move |_| {
+                    match handler.handle(&mut item) {
+                        Ok(()) => Box::new(future::ok(item)),
+                        Err(e) => Box::new(future::err((e, item))),
                     }
-                }
-            }
+                });
 
-            return Ok(());
+                futures::executor::block_on(futures::executor::spawn_with_handle(future)).unwrap()
+            })
+            .collect();
+
+        match futures::executor::block_on(future::join_all(futures)) {
+            Ok(mut results) => mem::swap(&mut results, bind.items_mut()),
+            Err((e, item)) => {
+                println!("\nthe following item encountered an error:\n  {:?}\n\n{}\n",
+                            item, e);
+                return Err(e);
+            }
         }
 
         Ok(())

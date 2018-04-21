@@ -3,8 +3,8 @@ use std::path::{PathBuf, Path};
 use std::collections::{BTreeMap, VecDeque, HashMap};
 use std::mem;
 
-use futures::{self, Future, BoxFuture};
-use futures_cpupool::CpuPool;
+use futures::prelude::*;
+use futures::{self, future, Future};
 
 use configuration::Configuration;
 use dependency::Graph;
@@ -26,7 +26,7 @@ pub struct Scheduler {
     waiting: Vec<Job>,
 
     /// List of jobs currently being processed
-    pending: Vec<BoxFuture<Bind, ::Error>>,
+    pending: Vec<Box<Future<Item = Bind, Error = ::Error>>>,
 
     /// Finished dependencies
     finished: BTreeMap<String, Arc<Bind>>,
@@ -61,7 +61,6 @@ impl Scheduler {
     /// Re-enumerate the paths in the input directory
     pub fn update_paths(&mut self) {
         use walkdir::WalkDir;
-        use walkdir::WalkDirIterator;
 
         let walked_paths =
             WalkDir::new(&self.configuration.input)
@@ -204,8 +203,6 @@ impl Scheduler {
                 .insert::<InputPaths>(self.paths.clone());
         }
 
-        let cpu_pool = CpuPool::new_num_cpus();
-
         // NOTE
         //
         // using futures_cpupool
@@ -226,20 +223,17 @@ impl Scheduler {
         let order = try!(self.graph.resolve_all());
 
         self.sort_jobs(order);
-        self.schedule_ready(&cpu_pool);
+        self.schedule_ready();
 
         while !self.pending.is_empty() {
             let pending = mem::replace(&mut self.pending, Vec::new());
 
-            match futures::select_all(pending).wait() {
-                Ok((bind, _index, new_pending)) => {
-                    let mut new_pending_boxed =
-                        new_pending.into_iter().map(|f| f.boxed()).collect();
-
-                    mem::swap(&mut new_pending_boxed, &mut self.pending);
+            match futures::executor::block_on(future::select_all(pending)) {
+                Ok((bind, _index, mut new_pending)) => {
+                    mem::swap(&mut new_pending, &mut self.pending);
 
                     self.satisfy(bind);
-                    self.schedule_ready(&cpu_pool);
+                    self.schedule_ready();
                 }
                 Err((e, _index, _new_pending)) => {
                     return Err(
@@ -262,7 +256,7 @@ impl Scheduler {
         self.waiting.clear();
     }
 
-    fn schedule_ready(&mut self, cpu_pool: &CpuPool) {
+    fn schedule_ready(&mut self) {
         for mut job in self.ready() {
             let name = job.bind.name.clone();
 
@@ -277,9 +271,8 @@ impl Scheduler {
                 }
             }
 
-            let boxed_future = futures::lazy(move || job.process());
-            let spawned_future = cpu_pool.spawn(boxed_future).boxed();
-            self.pending.push(spawned_future);
+            let spawned = futures::executor::block_on(futures::executor::spawn_with_handle(future::lazy(move |_| job.process()))).unwrap();
+            self.pending.push(Box::new(spawned));
         }
     }
 }

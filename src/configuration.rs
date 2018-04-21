@@ -76,7 +76,7 @@ impl Configuration {
             .unwrap_or(toml::Value::Table(BTreeMap::new()));
 
         let ignore =
-            toml.lookup("diecast.ignore")
+            toml.get("diecast.ignore")
             .and_then(toml::Value::as_str)
             .and_then(|s| {
                 match Regex::new(s) {
@@ -88,12 +88,12 @@ impl Configuration {
             });
 
         let input =
-            toml.lookup("diecast.input")
+            toml.get("diecast.input")
             .and_then(toml::Value::as_str)
             .map_or_else(|| PathBuf::from("input"), PathBuf::from);
 
         let output =
-            toml.lookup("diecast.output")
+            toml.get("diecast.output")
             .and_then(toml::Value::as_str)
             .map_or_else(|| PathBuf::from("output"), PathBuf::from);
 
@@ -127,7 +127,7 @@ impl Configuration {
         &self.toml
     }
 
-    pub fn toml_mut(&mut self) -> &mut toml::Table {
+    pub fn toml_mut(&mut self) -> &mut toml::value::Table {
         if let toml::Value::Table(ref mut map) = self.toml {
             map
         } else {

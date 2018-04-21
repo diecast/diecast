@@ -28,7 +28,7 @@ where C: Command {
     }
 }
 
-#[derive(RustcDecodable, Debug)]
+#[derive(Deserialize, Debug)]
 struct Options {
     arg_command: Option<String>,
     arg_args: Vec<String>,
@@ -105,15 +105,13 @@ impl Builder {
         }
 
         let options: Options =
-            try! {
-                Docopt::new(usage.clone())
+            Docopt::new(usage.clone())
                 .and_then(|d|
                     d
                     .options_first(true)
                     .help(true)
                     .version(Some(version()))
-                    .decode())
-            };
+                    .deserialize())?;
 
         let cmd = options.arg_command.unwrap();
 

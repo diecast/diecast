@@ -15,6 +15,11 @@ extern crate typemap;
 extern crate walkdir;
 extern crate time;
 
+extern crate serde;
+
+#[macro_use]
+extern crate serde_derive;
+
 #[macro_use]
 extern crate log;
 
@@ -24,7 +29,6 @@ extern crate num_cpus;
 extern crate ansi_term;
 
 extern crate futures;
-extern crate futures_cpupool;
 
 pub use pattern::Pattern;
 pub use site::Site;
