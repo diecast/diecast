@@ -1,0 +1,18 @@
+[package]
+name = "diecast"
+version = "0.0.2"
+authors = ["Jorge Israel Peña <jorge.israel.p@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "Static Site Generator infrastructure for Rust."
+documentation = "https://docs.rs/diecast"
+homepage = "https://github.com/diecast/diecast"
+repository = "https://github.com/diecast/diecast"
+readme = "readme.md"
+keywords = ["static", "site", "generator", "blog", "markdown"]
+
+[badges]
+appveyor = { repository = "diecast/diecast", branch = "rewrite" }
+travis-ci = { repository = "diecast/diecast", branch = "rewrite" }
+
+[workspace]
+members = []
